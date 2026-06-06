@@ -1,0 +1,655 @@
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+
+import {
+  loadSavedSession,
+  loginAndSaveSession,
+  logoutSession,
+  registerAndSaveSession
+} from "../auth/authSession";
+import { API_CONFIG } from "../../config/apiConfig";
+
+const C = {
+  black: "#000000",
+  surface: "#101010",
+  surface2: "#181818",
+  line: "#252525",
+  white: "#FFFFFF",
+  muted: "#A7A7A7",
+  faint: "#666666",
+  gold: "#D8A634",
+  blue: "#092B57",
+  green: "#43B66F",
+  red: "#F13B3B"
+};
+
+export function AuthProfileScreen({ go }) {
+  const [mode, setMode] = useState("Login");
+  const [name, setName] = useState("Vincent Ariga");
+  const [email, setEmail] = useState("vincent@example.com");
+  const [password, setPassword] = useState("password123");
+  const [session, setSession] = useState({ token: null, user: null });
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const signedIn = Boolean(session.user && session.token);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function boot() {
+      try {
+        const saved = await loadSavedSession();
+
+        if (!mounted) return;
+
+        setSession(saved);
+      } catch {
+        if (!mounted) return;
+
+        setSession({ token: null, user: null });
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    boot();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const submitAuth = async () => {
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (mode === "Register" && cleanName.length < 2) {
+      Alert.alert("Check Form", "Full name is required.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      Alert.alert("Check Form", "Enter a valid email address.");
+      return;
+    }
+
+    if (password.length < 8) {
+      Alert.alert("Check Form", "Password must be at least 8 characters.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const result =
+        mode === "Register"
+          ? await registerAndSaveSession({ name: cleanName, email: cleanEmail, password })
+          : await loginAndSaveSession({ email: cleanEmail, password });
+
+      setSession(result);
+    } catch (error) {
+      Alert.alert("Auth Failed", error?.message || "Unable to authenticate.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const logout = async () => {
+    setSubmitting(true);
+
+    try {
+      await logoutSession();
+      setSession({ token: null, user: null });
+    } catch (error) {
+      Alert.alert("Logout Failed", error?.message || "Unable to logout.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={s.screen}>
+        <Top go={go} />
+        <View style={s.center}>
+          <ActivityIndicator color={C.gold} />
+          <Text style={s.muted}>Loading session...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={s.screen}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <Top go={go} />
+
+      <ScrollView
+        contentContainerStyle={s.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        <View style={s.apiCard}>
+          <Text style={s.apiLabel}>API</Text>
+          <Text style={s.apiText}>{API_CONFIG.baseUrl}</Text>
+        </View>
+
+        {signedIn ? (
+          <SignedInView
+            user={session.user}
+            go={go}
+            logout={logout}
+            submitting={submitting}
+          />
+        ) : (
+          <SignedOutView
+            mode={mode}
+            setMode={setMode}
+            name={name}
+            setName={setName}
+            email={email}
+            setEmail={setEmail}
+            password={password}
+            setPassword={setPassword}
+            submitAuth={submitAuth}
+            submitting={submitting}
+          />
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function Top({ go }) {
+  return (
+    <View style={s.topBar}>
+      <Pressable style={s.iconBtn} onPress={() => go("Home")}>
+        <Ionicons name="chevron-back-outline" size={24} color={C.white} />
+      </Pressable>
+
+      <View style={s.titleWrap}>
+        <Text style={s.title}>Profile</Text>
+        <Text style={s.subtitle}>Account and member access</Text>
+      </View>
+
+      <View style={s.iconSpacer} />
+    </View>
+  );
+}
+
+function SignedOutView({
+  mode,
+  setMode,
+  name,
+  setName,
+  email,
+  setEmail,
+  password,
+  setPassword,
+  submitAuth,
+  submitting
+}) {
+  return (
+    <>
+      <View style={s.hero}>
+        <View style={s.avatar}>
+          <Ionicons name="person-outline" size={36} color={C.gold} />
+        </View>
+
+        <Text style={s.heroTitle}>Welcome</Text>
+        <Text style={s.heroText}>
+          Sign in to access saved devotions, giving history, prayer requests, and member features.
+        </Text>
+      </View>
+
+      <View style={s.modeRow}>
+        {["Login", "Register"].map(item => (
+          <Pressable
+            key={item}
+            style={[s.modeBtn, mode === item && s.modeActive]}
+            onPress={() => setMode(item)}
+          >
+            <Text style={[s.modeText, mode === item && s.modeTextActive]}>
+              {item}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <View style={s.card}>
+        <Text style={s.sectionTitle}>{mode}</Text>
+
+        {mode === "Register" ? (
+          <>
+            <Text style={s.inputLabel}>Full Name</Text>
+            <TextInput
+              style={s.input}
+              placeholder="Vincent Ariga"
+              placeholderTextColor={C.faint}
+              value={name}
+              onChangeText={setName}
+            />
+          </>
+        ) : null}
+
+        <Text style={s.inputLabel}>Email</Text>
+        <TextInput
+          style={s.input}
+          placeholder="vincent@example.com"
+          placeholderTextColor={C.faint}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
+        />
+
+        <Text style={s.inputLabel}>Password</Text>
+        <TextInput
+          style={s.input}
+          placeholder="password123"
+          placeholderTextColor={C.faint}
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+
+        <Pressable style={s.primaryBtn} onPress={submitAuth} disabled={submitting}>
+          {submitting ? (
+            <ActivityIndicator color={C.black} />
+          ) : (
+            <Text style={s.primaryText}>{mode}</Text>
+          )}
+        </Pressable>
+      </View>
+
+      <View style={s.note}>
+        <Text style={s.noteText}>
+          Phase 2 auth is live against the Go API. Profile data is now backed by JWT login and PostgreSQL users.
+        </Text>
+      </View>
+    </>
+  );
+}
+
+function SignedInView({ user, go, logout, submitting }) {
+  return (
+    <>
+      <View style={s.profileCard}>
+        <View style={s.avatarLarge}>
+          <Text style={s.avatarText}>{user.name?.charAt(0)?.toUpperCase() || "U"}</Text>
+        </View>
+
+        <Text style={s.profileName}>{user.name}</Text>
+        <Text style={s.profileEmail}>{user.email}</Text>
+
+        <View style={s.rolePill}>
+          <Text style={s.roleText}>{user.role}</Text>
+        </View>
+      </View>
+
+      <View style={s.stats}>
+        <Stat label="Sermons" value="12" />
+        <Stat label="Devotions" value="8" />
+        <Stat label="Given" value="Hidden" />
+      </View>
+
+      <View style={s.card}>
+        <Text style={s.sectionTitle}>Account</Text>
+        <Info label="User ID" value={user.id} />
+        <Info label="Role" value={user.role} />
+        <Info label="Active" value={String(user.isActive)} />
+        <Info label="Created" value={user.createdAt} />
+      </View>
+
+      <View style={s.card}>
+        <Text style={s.sectionTitle}>Quick Access</Text>
+
+        <MenuRow label="My Downloads" onPress={() => go("Downloads")} />
+        <MenuRow label="Saved Devotions" onPress={() => go("Devotions")} />
+        <MenuRow label="Giving History" onPress={() => go("Giving")} />
+        <MenuRow label="My Prayer Requests" onPress={() => go("Prayer")} />
+        <MenuRow label="Notification Settings" onPress={() => go("Notifications")} />
+      </View>
+
+      <Pressable style={s.logoutBtn} onPress={logout} disabled={submitting}>
+        {submitting ? (
+          <ActivityIndicator color={C.red} />
+        ) : (
+          <Text style={s.logoutText}>Logout</Text>
+        )}
+      </Pressable>
+    </>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <View style={s.statBox}>
+      <Text style={s.statValue}>{value}</Text>
+      <Text style={s.muted}>{label}</Text>
+    </View>
+  );
+}
+
+function Info({ label, value }) {
+  return (
+    <View style={s.infoRow}>
+      <Text style={s.infoLabel}>{label}</Text>
+      <Text style={s.infoValue}>{value}</Text>
+    </View>
+  );
+}
+
+function MenuRow({ label, onPress }) {
+  return (
+    <Pressable style={s.menuRow} onPress={onPress}>
+      <Text style={s.menuText}>{label}</Text>
+      <Ionicons name="chevron-forward-outline" size={18} color={C.muted} />
+    </Pressable>
+  );
+}
+
+const s = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: C.black,
+    paddingBottom: 76
+  },
+  topBar: {
+    minHeight: 86,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.black
+  },
+  iconBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: C.surface2,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  iconSpacer: {
+    width: 48
+  },
+  titleWrap: {
+    flex: 1,
+    alignItems: "center"
+  },
+  title: {
+    color: C.white,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  subtitle: {
+    color: C.muted,
+    fontSize: 12,
+    marginTop: 4
+  },
+  content: {
+    padding: 16,
+    paddingBottom: 120
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10
+  },
+  apiCard: {
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: C.line
+  },
+  apiLabel: {
+    color: C.gold,
+    fontSize: 11,
+    fontWeight: "900",
+    marginBottom: 4
+  },
+  apiText: {
+    color: C.muted,
+    fontSize: 12
+  },
+  hero: {
+    backgroundColor: C.blue,
+    borderRadius: 16,
+    padding: 18,
+    alignItems: "center",
+    marginBottom: 16
+  },
+  avatar: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: C.black,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12
+  },
+  heroTitle: {
+    color: C.white,
+    fontSize: 24,
+    fontWeight: "900"
+  },
+  heroText: {
+    color: C.muted,
+    textAlign: "center",
+    lineHeight: 20,
+    marginTop: 8
+  },
+  modeRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 14
+  },
+  modeBtn: {
+    flex: 1,
+    backgroundColor: C.surface2,
+    borderRadius: 20,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: C.line
+  },
+  modeActive: {
+    backgroundColor: C.gold,
+    borderColor: C.gold
+  },
+  modeText: {
+    color: C.white,
+    fontWeight: "900"
+  },
+  modeTextActive: {
+    color: C.black
+  },
+  card: {
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: C.line,
+    marginBottom: 14
+  },
+  sectionTitle: {
+    color: C.white,
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 14
+  },
+  inputLabel: {
+    color: C.white,
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 7
+  },
+  input: {
+    backgroundColor: C.surface2,
+    color: C.white,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 48,
+    fontSize: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: C.line
+  },
+  primaryBtn: {
+    backgroundColor: C.gold,
+    borderRadius: 24,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 4
+  },
+  primaryText: {
+    color: C.black,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  note: {
+    backgroundColor: C.surface2,
+    borderRadius: 12,
+    padding: 14
+  },
+  noteText: {
+    color: C.muted,
+    fontSize: 13,
+    lineHeight: 19
+  },
+  profileCard: {
+    backgroundColor: C.surface,
+    borderRadius: 18,
+    padding: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: C.line,
+    marginBottom: 16
+  },
+  avatarLarge: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: C.blue,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14
+  },
+  avatarText: {
+    color: C.gold,
+    fontSize: 36,
+    fontWeight: "900"
+  },
+  profileName: {
+    color: C.white,
+    fontSize: 24,
+    fontWeight: "900"
+  },
+  profileEmail: {
+    color: C.muted,
+    marginTop: 5
+  },
+  rolePill: {
+    backgroundColor: C.gold,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    marginTop: 14
+  },
+  roleText: {
+    color: C.black,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    fontSize: 12
+  },
+  stats: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: C.line
+  },
+  statValue: {
+    color: C.white,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  muted: {
+    color: C.muted,
+    fontSize: 13,
+    lineHeight: 19
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line
+  },
+  infoLabel: {
+    color: C.muted,
+    fontSize: 13
+  },
+  infoValue: {
+    flex: 1,
+    color: C.white,
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "right"
+  },
+  menuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line
+  },
+  menuText: {
+    color: C.white,
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  logoutBtn: {
+    backgroundColor: "rgba(241,59,59,0.12)",
+    borderRadius: 24,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: C.red
+  },
+  logoutText: {
+    color: C.red,
+    fontWeight: "900"
+  }
+});

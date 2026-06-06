@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+phase1_app/node_modules/
+
+# Expo local state
+.expo/
+phase1_app/.expo/
+
+# Android/Gradle build outputs
+.gradle/
+android/.gradle/
+android/build/
+android/app/build/
+phase1_app/android/.gradle/
+phase1_app/android/build/
+phase1_app/android/app/build/
+
+# Backend local files
+.env
+backend/.env
+backend/bin/
+backend/tmp/
+*.db
+*.log
+
+# uploaded media
+uploads/

@@ -1,0 +1,303 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { openDatabaseAsync } from "expo-sqlite";
+import * as FileSystem from "expo-file-system/legacy";
+import { Asset } from "expo-asset";
+
+import { Screen } from "../components/Screen";
+import { TopBar } from "../components/TopBar";
+import { ActionButton } from "../components/ActionButton";
+import { s } from "../styles/appStyles";
+
+const DB_NAME = "bible.db";
+const DB_ASSET = require("../../assets/bible/bible.db");
+
+const ENGLISH = "eng_msb";
+const SWAHILI = "swh_neno";
+
+async function ensureBibleDb() {
+  const dir = `${FileSystem.documentDirectory}SQLite`;
+  const target = `${dir}/${DB_NAME}`;
+
+  await FileSystem.deleteAsync(target, { idempotent: true });
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+
+  const asset = Asset.fromModule(DB_ASSET);
+  await asset.downloadAsync();
+
+  await FileSystem.copyAsync({
+    from: asset.localUri || asset.uri,
+    to: target
+  });
+}
+
+async function openBibleDb() {
+  await ensureBibleDb();
+  return openDatabaseAsync(DB_NAME);
+}
+
+async function getBooks(db, versionCode) {
+  const books = await db.getAllAsync(
+    `
+    SELECT
+      b.id,
+      b.sort_order AS book_number,
+      bl.name
+    FROM book_labels bl
+    JOIN books b ON b.id = bl.book_id
+    WHERE bl.version_id = ?
+    ORDER BY b.sort_order ASC
+    `,
+    [versionCode]
+  );
+
+  console.log("BOOKS", versionCode, books.length);
+
+  return books;
+}
+
+async function getChapterVerses(db, versionCode, bookId, chapter) {
+  return db.getAllAsync(
+    `
+    SELECT v.verse, v.text
+    FROM verses v
+    WHERE v.version_id = ? AND v.book_id = ? AND v.chapter = ?
+    ORDER BY v.verse ASC
+    `,
+    [versionCode, bookId, chapter]
+  );
+}
+
+async function getChapterCount(db, versionCode, bookId) {
+  const row = await db.getFirstAsync(
+    `
+    SELECT MAX(v.chapter) AS total
+    FROM verses v
+    WHERE v.version_id = ? AND v.book_id = ?
+    `,
+    [versionCode, bookId]
+  );
+
+  return Number(row?.total || 1);
+}
+
+async function searchVerses(db, versionCode, query) {
+  const q = query.trim();
+  if (!q) return [];
+
+  return db.getAllAsync(
+    `
+    SELECT b.id AS book_id,
+           COALESCE(bl.name, b.osis) AS book,
+           v.chapter,
+           v.verse,
+           v.text
+    FROM verses v
+    JOIN books b ON b.id = v.book_id
+    LEFT JOIN book_labels bl ON bl.book_id = b.id AND bl.version_id = v.version_id
+    WHERE v.version_id = ? AND v.text LIKE ?
+    ORDER BY b.sort_order ASC, v.chapter ASC, v.verse ASC
+    LIMIT 30
+    `,
+    [versionCode, `%${q}%`]
+  );
+}
+
+export function BibleScreen({ go }) {
+  const [db, setDb] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [version, setVersion] = useState(ENGLISH);
+  const [books, setBooks] = useState([]);
+  const [book, setBook] = useState(null);
+  const [chapter, setChapter] = useState(1);
+  const [chapterCount, setChapterCount] = useState(1);
+  const [verses, setVerses] = useState([]);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+
+  const chapters = useMemo(
+    () => Array.from({ length: chapterCount }, (_, i) => i + 1),
+    [chapterCount]
+  );
+
+  useEffect(() => {
+    let alive = true;
+
+    openBibleDb()
+      .then(database => {
+        if (!alive) return;
+        setDb(database);
+      })
+      .finally(() => alive && setLoading(false));
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!db) return;
+
+    let alive = true;
+
+    getBooks(db, version).then(rows => {
+      if (!alive) return;
+      setBooks(rows);
+      setBook(rows[0] || null);
+      setChapter(1);
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [db, version]);
+
+  useEffect(() => {
+    if (!db || !book) return;
+
+    let alive = true;
+
+    Promise.all([
+      getChapterCount(db, version, book.id),
+      getChapterVerses(db, version, book.id, chapter)
+    ]).then(([total, rows]) => {
+      if (!alive) return;
+      setChapterCount(total);
+      setVerses(rows);
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [db, version, book, chapter]);
+
+  useEffect(() => {
+    if (!db || !query.trim()) {
+      setResults([]);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      searchVerses(db, version, query).then(setResults);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [db, version, query]);
+
+  function openResult(item) {
+    setBook({ id: item.book_id, name: item.book });
+    setChapter(item.chapter);
+    setQuery("");
+    setResults([]);
+  }
+
+  if (loading) {
+    return (
+      <Screen>
+        <TopBar title="Bible" go={go} back="Home" />
+        <View style={s.scrollPad}>
+          <Text style={s.detailBody}>Loading offline Bible...</Text>
+        </View>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen>
+      <TopBar title="Bible" go={go} back="Home" />
+
+      <ScrollView contentContainerStyle={s.scrollPad}>
+        <View style={s.tabsCompact}>
+          <Pressable onPress={() => setVersion(ENGLISH)}>
+            <Text style={s.compactChip}>English MSB</Text>
+          </Pressable>
+          <Pressable onPress={() => setVersion(SWAHILI)}>
+            <Text style={s.compactChip}>Kiswahili Neno</Text>
+          </Pressable>
+        </View>
+
+        <View style={s.plainCard}>
+          <Text style={s.goldSmall}>Loaded</Text>
+          <Text style={s.detailBody}>Books: {books.length} | Verses: {verses.length} | Current: {book?.name || "none"} {chapter}</Text>
+        </View>
+
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search Bible..."
+          placeholderTextColor="#8B806A"
+          style={s.searchInput}
+        />
+
+        {results.length > 0 && (
+          <View style={s.plainCard}>
+            <Text style={s.goldSmall}>Search Results</Text>
+            {results.map(item => (
+              <Pressable
+                key={`${item.book_id}-${item.chapter}-${item.verse}`}
+                style={s.searchResult}
+                onPress={() => openResult(item)}
+              >
+                <Text style={s.rowTitle}>
+                  {item.book} {item.chapter}:{item.verse}
+                </Text>
+                <Text style={s.detailBody}>{item.text}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={s.tabsCompact}>
+            {books.map(item => (
+              <Pressable
+                key={item.id}
+                onPress={() => {
+                  setBook(item);
+                  setChapter(1);
+                }}
+              >
+                <Text style={s.compactChip}>{item.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={s.tabsCompact}>
+            {chapters.map(item => (
+              <Pressable key={item} onPress={() => setChapter(item)}>
+                <Text style={s.compactChip}>{item}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+
+        <Text style={s.detailTitle}>
+          {book?.name} {chapter}
+        </Text>
+
+        <View style={s.rowTight}>
+          <ActionButton
+            icon="chevron-back-outline"
+            label="Previous"
+            onPress={() => setChapter(c => Math.max(1, c - 1))}
+          />
+          <ActionButton
+            icon="chevron-forward-outline"
+            label="Next"
+            onPress={() => setChapter(c => Math.min(chapterCount, c + 1))}
+          />
+        </View>
+
+        <View style={s.plainCard}>
+          {verses.map(item => (
+            <Text key={item.verse} style={s.detailBody}>
+              {item.verse}. {item.text}
+            </Text>
+          ))}
+        </View>
+      </ScrollView>
+    </Screen>
+  );
+}

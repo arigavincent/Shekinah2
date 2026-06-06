@@ -1,0 +1,48 @@
+databases:
+  - name: shekinah-sons-db
+    databaseName: shekinah
+    user: shekinah
+    plan: free
+
+services:
+  - type: web
+    name: shekinah-sons-backend
+    runtime: go
+    rootDir: backend
+    plan: free
+    buildCommand: go build -o shekinah-api ./cmd/api
+    startCommand: ./shekinah-api
+    healthCheckPath: /healthz
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: shekinah-sons-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      - key: MPESA_ENV
+        value: sandbox
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_SHORTCODE
+        value: "174379"
+      - key: MPESA_PASSKEY
+        sync: false
+      - key: MPESA_CALLBACK_URL
+        value: https://shekinah-sons-backend.onrender.com/api/v1/giving/mpesa/callback
+      - key: MPESA_TRANSACTION_TYPE
+        value: CustomerPayBillOnline
+      - key: MPESA_ACCOUNT_REFERENCE
+        value: Shekinah

@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Shekinah Sons Global",
+    "slug": "shekinah-sons-global",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/branding/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/branding/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.shekinahsons.globalapp",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/branding/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "plugins": [
+      "expo-font",
+      "expo-video",
+      "expo-sqlite",
+      "expo-notifications"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "03184d1e-c035-498d-9b53-e713e464c516"
+      }
+    },
+    "owner": "ethan_coder"
+  }
+}

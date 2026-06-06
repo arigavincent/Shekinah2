@@ -1,0 +1,103 @@
+# =========================
+# macOS
+# =========================
+.DS_Store
+
+# =========================
+# Node.js
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# React Native
+# =========================
+*.jsbundle
+metro-cache/
+.expo/
+.expo-shared/
+
+# =========================
+# Android
+# =========================
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/.cxx/
+android/captures/
+
+# Gradle
+.gradle/
+
+# APK / AAB
+*.apk
+*.aab
+
+# Native crash logs
+*.hprof
+
+# Keystore files
+*.jks
+*.keystore
+
+# =========================
+# iOS
+# =========================
+ios/build/
+ios/Pods/
+ios/.symlinks/
+ios/DerivedData/
+
+# Xcode
+*.xcworkspace
+!ios/*.xcworkspace
+xcuserdata/
+*.xcuserstate
+
+# =========================
+# IDEs
+# =========================
+.idea/
+.vscode/
+*.iml
+
+# =========================
+# Testing
+# =========================
+coverage/
+.nyc_output/
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+
+# =========================
+# Temporary Files
+# =========================
+tmp/
+temp/
+.cache/
+
+# =========================
+# TypeScript
+# =========================
+*.tsbuildinfo
+
+# =========================
+# Misc
+# =========================
+*.swp
+*.swo

@@ -1,0 +1,331 @@
+import React, { useEffect, useState } from "react";
+import {
+  BackHandler,
+  SafeAreaView,
+  StatusBar
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { AuthProfileScreen } from "../features/profile/AuthProfileScreen";
+
+import { ContentProvider } from "../providers/ContentProvider";
+
+import { C } from "../constants/theme";
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  STORAGE_KEYS
+} from "../constants/storage";
+
+import { s } from "../styles/appStyles";
+import { stopAudioCompletely } from "../services/audioPlayback";
+
+import { BottomNav } from "../components/BottomNav";
+import { Drawer } from "../components/Drawer";
+import { MiniPlayer } from "../components/MiniPlayer";
+
+import { AboutScreen } from "../screens/AboutScreen";
+import { AudioPlayer } from "../screens/AudioPlayer";
+import { BibleScreen } from "../screens/BibleScreen";
+import { BranchesScreen } from "../screens/BranchesScreen";
+import { DevotionDetail } from "../screens/DevotionDetail";
+import { DevotionsScreen } from "../screens/DevotionsScreen";
+import { DownloadsScreen } from "../screens/DownloadsScreen";
+import { EventDetail } from "../screens/EventDetail";
+import { EventsScreen } from "../screens/EventsScreen";
+import { GivingScreen } from "../screens/GivingScreen";
+import { HomeScreen } from "../screens/HomeScreen";
+import { LiveScreen } from "../screens/LiveScreen";
+import { NotificationsScreen } from "../screens/NotificationsScreen";
+import { PlatformsScreen } from "../screens/PlatformsScreen";
+import { PrayerScreen } from "../screens/PrayerScreen";
+import { SearchScreen } from "../screens/SearchScreen";
+import { SermonsScreen } from "../screens/SermonsScreen";
+import { ServeScreen } from "../screens/ServeScreen";
+import { UpdatesScreen } from "../screens/UpdatesScreen";
+import { VideoDetail } from "../screens/VideoDetail";
+
+function App() {
+  const [screen, setScreen] = useState("Home");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [sermonTab, setSermonTab] = useState("Video");
+  const [devotionTab, setDevotionTab] = useState("Latest");
+  const [platformTab, setPlatformTab] = useState("Web");
+  const [givingTab, setGivingTab] = useState("Give Now");
+  const [downloadsTab, setDownloadsTab] = useState("Sermons");
+  const [prayerTab, setPrayerTab] = useState("All Prayers");
+  const [favorites, setFavorites] = useState([]);
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+  const [notificationPrefs, setNotificationPrefs] = useState(DEFAULT_NOTIFICATION_PREFS);
+  const [notificationPrefsLoaded, setNotificationPrefsLoaded] = useState(false);
+  const [miniPlayer, setMiniPlayer] = useState(null);
+
+useEffect(() => {
+  let mounted = true;
+
+  async function loadFavouriteDevotions() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.favouriteDevotions);
+
+      if (!mounted) return;
+
+      if (!raw) {
+        setFavorites([]);
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      setFavorites(Array.isArray(parsed) ? parsed : []);
+    } catch (error) {
+      console.warn("Failed to load favourite devotions", error);
+
+      if (mounted) {
+        setFavorites([]);
+      }
+    } finally {
+      if (mounted) {
+        setFavoritesLoaded(true);
+      }
+    }
+  }
+
+  loadFavouriteDevotions();
+
+  return () => {
+    mounted = false;
+  };
+}, []);
+
+useEffect(() => {
+  let mounted = true;
+
+  async function loadNotificationPreferences() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.notificationPreferences);
+
+      if (!mounted) return;
+
+      if (!raw) {
+        setNotificationPrefs(DEFAULT_NOTIFICATION_PREFS);
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+
+      setNotificationPrefs({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        ...(parsed && typeof parsed === "object" ? parsed : {})
+      });
+    } catch (error) {
+      console.warn("Failed to load notification preferences", error);
+
+      if (mounted) {
+        setNotificationPrefs(DEFAULT_NOTIFICATION_PREFS);
+      }
+    } finally {
+      if (mounted) {
+        setNotificationPrefsLoaded(true);
+      }
+    }
+  }
+
+  loadNotificationPreferences();
+
+  return () => {
+    mounted = false;
+  };
+}, []);
+
+useEffect(() => {
+  if (!notificationPrefsLoaded) return;
+
+  AsyncStorage.setItem(
+    STORAGE_KEYS.notificationPreferences,
+    JSON.stringify(notificationPrefs)
+  ).catch(error => {
+    console.warn("Failed to save notification preferences", error);
+  });
+}, [notificationPrefs, notificationPrefsLoaded]);
+
+
+useEffect(() => {
+  if (!favoritesLoaded) return;
+
+  AsyncStorage.setItem(
+    STORAGE_KEYS.favouriteDevotions,
+    JSON.stringify(favorites)
+  ).catch(error => {
+    console.warn("Failed to save favourite devotions", error);
+  });
+}, [favorites, favoritesLoaded]);
+
+  const go = (name, nextDetail = null, options = {}) => {
+  if (!options.replace && name !== screen) {
+    setHistory(current => [
+      ...current,
+      {
+        screen,
+        detail
+      }
+    ]);
+  }
+
+  setScreen(name);
+  setDetail(nextDetail);
+  setDrawerOpen(false);
+};
+
+const openDrawer = () => {
+  setDrawerOpen(true);
+};
+
+useEffect(() => {
+  const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+    if (drawerOpen) {
+      setDrawerOpen(false);
+      return true;
+    }
+
+    if (history.length > 0) {
+      const previous = history[history.length - 1];
+
+      setHistory(current => current.slice(0, -1));
+      setScreen(previous.screen);
+      setDetail(previous.detail);
+      return true;
+    }
+
+    if (screen !== "Home") {
+      setScreen("Home");
+      setDetail(null);
+      return true;
+    }
+
+    return false;
+  });
+
+  return () => {
+    subscription.remove();
+  };
+}, [drawerOpen, history, screen]);
+
+  const openSermon = sermon => {
+    if (sermon.type === "audio") {
+      setMiniPlayer(sermon);
+      go("AudioPlayer", sermon);
+    } else {
+      go("VideoDetail", sermon);
+    }
+  };
+
+  const renderScreen = () => {
+    switch (screen) {
+      case "Search":
+        return <SearchScreen go={go} openSermon={openSermon} />;
+      case "Sermons":
+        return (
+          <SermonsScreen
+            go={go}
+            openDrawer={openDrawer}
+            openSermon={openSermon}
+            tab={sermonTab}
+            setTab={setSermonTab}
+          />
+        );
+      case "VideoDetail":
+        return (
+          <VideoDetail
+            sermon={detail}
+            go={go}
+            openSermon={openSermon}
+            setDownloadsTab={setDownloadsTab}
+          />
+        );
+      case "AudioPlayer":
+        return (
+          <AudioPlayer
+            sermon={detail || miniPlayer}
+            go={go}
+            setMiniPlayer={setMiniPlayer}
+            setDownloadsTab={setDownloadsTab}
+          />
+        );
+      case "Devotions":
+        return (
+          <DevotionsScreen
+            go={go}
+            openDrawer={openDrawer}
+            tab={devotionTab}
+            setTab={setDevotionTab}
+            favorites={favorites}
+            setFavorites={setFavorites}
+          />
+        );
+      case "DevotionDetail":
+        return <DevotionDetail devotion={detail} favorites={favorites} setFavorites={setFavorites} go={go} />;
+      case "Live":
+        return <LiveScreen go={go} openDrawer={openDrawer} />;
+      case "Downloads":
+        return <DownloadsScreen go={go} tab={downloadsTab} setTab={setDownloadsTab} />;
+      case "Branches":
+        return <BranchesScreen go={go} />;
+      case "Profile":
+        return <AuthProfileScreen go={go} />;
+      case "Bible":
+        return <BibleScreen go={go} />;
+      case "Events":
+        return <EventsScreen go={go} />;
+      case "EventDetail":
+        return <EventDetail event={detail} go={go} />;
+      case "Giving":
+        return <GivingScreen go={go} tab={givingTab} setTab={setGivingTab} />;
+      case "Prayer":
+        return <PrayerScreen go={go} tab={prayerTab} setTab={setPrayerTab} />;
+      case "Updates":
+        return <UpdatesScreen go={go} />;
+      case "Platforms":
+        return <PlatformsScreen go={go} tab={platformTab} setTab={setPlatformTab} />;
+      case "Serve":
+        return <ServeScreen go={go} />;
+      case "Notifications":
+        return (
+          <NotificationsScreen
+            go={go}
+            preferences={notificationPrefs}
+            setPreferences={setNotificationPrefs}
+          />
+        );
+      case "About":
+        return <AboutScreen go={go} />;
+      default:
+        return <HomeScreen go={go} openDrawer={openDrawer} openSermon={openSermon} />;
+    }
+  };
+
+  return (
+  <ContentProvider>
+    <SafeAreaView style={s.app}>
+      <StatusBar barStyle="light-content" backgroundColor={C.black} />
+      {renderScreen()}
+
+      {miniPlayer && screen !== "AudioPlayer" ? (
+        <MiniPlayer
+          item={miniPlayer}
+          onOpen={() => go("AudioPlayer", miniPlayer)}
+          onClose={async () => {
+            await stopAudioCompletely();
+            setMiniPlayer(null);
+            setDetail(null);
+          }}
+        />
+      ) : null}
+
+      <BottomNav current={screen} go={go} />
+      <Drawer visible={drawerOpen} close={() => setDrawerOpen(false)} go={go} />
+    </SafeAreaView>
+  </ContentProvider>
+);
+}
+
+export default App;

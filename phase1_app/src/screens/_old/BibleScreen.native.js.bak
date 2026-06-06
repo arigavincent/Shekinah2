@@ -1,0 +1,2690 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { defaultDatabaseDirectory, importDatabaseFromAssetAsync, openDatabaseAsync } from 'expo-sqlite';
+import { Screen } from '../components/Screen';
+import { useAuth } from '../hooks/AuthContext';
+import { useTheme } from '../hooks/ThemeContext';
+import { normalizeUserPreferences } from '../lib/userPreferences';
+
+const ENGLISH_VERSION = 'eng_msb';
+const SWAHILI_VERSION = 'swh_neno';
+const STATE_KEY = '@mychurch_bible_reader_state';
+const FAVORITES_KEY = '@mychurch_bible_favorites';
+const BIBLE_DB_VERSION_KEY = '@mychurch_bible_db_version';
+const EAT_OFFSET_MS = 3 * 60 * 60 * 1000;
+const BIBLE_DB_NAME = 'bible.db';
+const BIBLE_DB_VERSION = '2026-05-18-android-copy-v3';
+const ANDROID_BIBLE_RESOURCE_CANDIDATES = [
+  'assets_bible_bible',
+  'assets_bible_bible.db',
+  'asset:///assets_bible_bible.db',
+];
+const BIBLE_DB_ASSET = require('../../assets/bible/bible.db');
+
+const DAILY_VERSE_REFERENCES = [
+  { bookCode: 'ISA', chapter: 41, verse: 10 },
+  { bookCode: 'PSA', chapter: 23, verse: 1 },
+  { bookCode: 'JHN', chapter: 14, verse: 27 },
+  { bookCode: 'ROM', chapter: 8, verse: 28 },
+  { bookCode: 'PHI', chapter: 4, verse: 6 },
+  { bookCode: 'HEB', chapter: 11, verse: 1 },
+  { bookCode: 'MAT', chapter: 11, verse: 28 },
+  { bookCode: 'PRO', chapter: 3, verse: 5 },
+  { bookCode: 'JOS', chapter: 1, verse: 9 },
+  { bookCode: '2TI', chapter: 1, verse: 7 },
+  { bookCode: 'PSA', chapter: 46, verse: 1 },
+  { bookCode: 'GAL', chapter: 6, verse: 9 },
+  { bookCode: 'ECC', chapter: 3, verse: 11 },
+  { bookCode: 'JER', chapter: 29, verse: 11 },
+];
+
+const QUIZ_BANK = [
+  {
+    id: 'ark',
+    question: 'Who built the ark?',
+    correct: 'c',
+    options: [
+      { id: 'a', label: 'A. Moses' },
+      { id: 'b', label: 'B. Abraham' },
+      { id: 'c', label: 'C. Noah' },
+      { id: 'd', label: 'D. David' },
+    ],
+    success: 'Correct. Noah built the ark before the flood.',
+    failure: 'The correct answer is Noah.',
+  },
+  {
+    id: 'creation-light',
+    question: 'On which day did God create light?',
+    correct: 'a',
+    options: [
+      { id: 'a', label: 'A. The first day' },
+      { id: 'b', label: 'B. The second day' },
+      { id: 'c', label: 'C. The fourth day' },
+      { id: 'd', label: 'D. The sixth day' },
+    ],
+    success: 'Correct. God said, “Let there be light” on the first day.',
+    failure: 'The correct answer is the first day.',
+  },
+  {
+    id: 'eden-river',
+    question: 'In which garden did God place Adam?',
+    correct: 'd',
+    options: [
+      { id: 'a', label: 'A. Gethsemane' },
+      { id: 'b', label: 'B. Carmel' },
+      { id: 'c', label: 'C. Shiloh' },
+      { id: 'd', label: 'D. Eden' },
+    ],
+    success: 'Correct. Adam was placed in the Garden of Eden.',
+    failure: 'The correct answer is Eden.',
+  },
+  {
+    id: 'fish',
+    question: 'Which prophet was swallowed by a great fish?',
+    correct: 'b',
+    options: [
+      { id: 'a', label: 'A. Elijah' },
+      { id: 'b', label: 'B. Jonah' },
+      { id: 'c', label: 'C. Isaiah' },
+      { id: 'd', label: 'D. Ezekiel' },
+    ],
+    success: 'Correct. Jonah was swallowed and later sent again by God.',
+    failure: 'The correct answer is Jonah.',
+  },
+  {
+    id: 'ten-commandments',
+    question: 'Who received the Ten Commandments from God?',
+    correct: 'b',
+    options: [
+      { id: 'a', label: 'A. Aaron' },
+      { id: 'b', label: 'B. Moses' },
+      { id: 'c', label: 'C. Joshua' },
+      { id: 'd', label: 'D. Samuel' },
+    ],
+    success: 'Correct. Moses received the commandments on Mount Sinai.',
+    failure: 'The correct answer is Moses.',
+  },
+  {
+    id: 'red-sea',
+    question: 'What sea did God part for Israel to cross?',
+    correct: 'c',
+    options: [
+      { id: 'a', label: 'A. The Dead Sea' },
+      { id: 'b', label: 'B. The Sea of Galilee' },
+      { id: 'c', label: 'C. The Red Sea' },
+      { id: 'd', label: 'D. The Mediterranean Sea' },
+    ],
+    success: 'Correct. God parted the Red Sea for Israel.',
+    failure: 'The correct answer is the Red Sea.',
+  },
+  {
+    id: 'manna',
+    question: 'What food did God provide to Israel in the wilderness?',
+    correct: 'a',
+    options: [
+      { id: 'a', label: 'A. Manna' },
+      { id: 'b', label: 'B. Grapes' },
+      { id: 'c', label: 'C. Fish' },
+      { id: 'd', label: 'D. Bread loaves from Egypt' },
+    ],
+    success: 'Correct. God provided manna from heaven.',
+    failure: 'The correct answer is manna.',
+  },
+  {
+    id: 'joshua-city',
+    question: 'Which city’s walls fell after Joshua obeyed God?',
+    correct: 'd',
+    options: [
+      { id: 'a', label: 'A. Jerusalem' },
+      { id: 'b', label: 'B. Ai' },
+      { id: 'c', label: 'C. Hebron' },
+      { id: 'd', label: 'D. Jericho' },
+    ],
+    success: 'Correct. The walls of Jericho fell.',
+    failure: 'The correct answer is Jericho.',
+  },
+  {
+    id: 'gideon-army',
+    question: 'How many men remained in Gideon’s final army?',
+    correct: 'b',
+    options: [
+      { id: 'a', label: 'A. 700' },
+      { id: 'b', label: 'B. 300' },
+      { id: 'c', label: 'C. 3,000' },
+      { id: 'd', label: 'D. 120' },
+    ],
+    success: 'Correct. Gideon went forward with 300 men.',
+    failure: 'The correct answer is 300.',
+  },
+  {
+    id: 'ruth-country',
+    question: 'From which nation did Ruth come?',
+    correct: 'c',
+    options: [
+      { id: 'a', label: 'A. Egypt' },
+      { id: 'b', label: 'B. Assyria' },
+      { id: 'c', label: 'C. Moab' },
+      { id: 'd', label: 'D. Babylon' },
+    ],
+    success: 'Correct. Ruth was a Moabite.',
+    failure: 'The correct answer is Moab.',
+  },
+  {
+    id: 'david-weapon',
+    question: 'What did David use to defeat Goliath?',
+    correct: 'a',
+    options: [
+      { id: 'a', label: 'A. A sling and a stone' },
+      { id: 'b', label: 'B. A spear' },
+      { id: 'c', label: 'C. A bow and arrow' },
+      { id: 'd', label: 'D. A shield' },
+    ],
+    success: 'Correct. David used a sling and a stone.',
+    failure: 'The correct answer is a sling and a stone.',
+  },
+  {
+    id: 'solomon-gift',
+    question: 'What did Solomon ask God for?',
+    correct: 'd',
+    options: [
+      { id: 'a', label: 'A. Wealth' },
+      { id: 'b', label: 'B. Long life' },
+      { id: 'c', label: 'C. Military power' },
+      { id: 'd', label: 'D. Wisdom' },
+    ],
+    success: 'Correct. Solomon asked for wisdom.',
+    failure: 'The correct answer is wisdom.',
+  },
+  {
+    id: 'elijah-mountain',
+    question: 'On which mountain did Elijah confront the prophets of Baal?',
+    correct: 'b',
+    options: [
+      { id: 'a', label: 'A. Sinai' },
+      { id: 'b', label: 'B. Carmel' },
+      { id: 'c', label: 'C. Zion' },
+      { id: 'd', label: 'D. Hermon' },
+    ],
+    success: 'Correct. Elijah stood on Mount Carmel.',
+    failure: 'The correct answer is Mount Carmel.',
+  },
+  {
+    id: 'elisha-river',
+    question: 'How many times did Naaman dip in the Jordan to be healed?',
+    correct: 'c',
+    options: [
+      { id: 'a', label: 'A. Three times' },
+      { id: 'b', label: 'B. Five times' },
+      { id: 'c', label: 'C. Seven times' },
+      { id: 'd', label: 'D. Ten times' },
+    ],
+    success: 'Correct. Naaman dipped seven times.',
+    failure: 'The correct answer is seven times.',
+  },
+  {
+    id: 'esther-role',
+    question: 'Who went before the king to save her people?',
+    correct: 'a',
+    options: [
+      { id: 'a', label: 'A. Esther' },
+      { id: 'b', label: 'B. Miriam' },
+      { id: 'c', label: 'C. Deborah' },
+      { id: 'd', label: 'D. Hannah' },
+    ],
+    success: 'Correct. Esther courageously went before the king.',
+    failure: 'The correct answer is Esther.',
+  },
+  {
+    id: 'job-patience',
+    question: 'Which man remained faithful in intense suffering and loss?',
+    correct: 'd',
+    options: [
+      { id: 'a', label: 'A. Lot' },
+      { id: 'b', label: 'B. Saul' },
+      { id: 'c', label: 'C. Samson' },
+      { id: 'd', label: 'D. Job' },
+    ],
+    success: 'Correct. Job remained faithful through suffering.',
+    failure: 'The correct answer is Job.',
+  },
+  {
+    id: 'psalm-shepherd',
+    question: 'Which psalm begins with “The Lord is my shepherd”?',
+    correct: 'b',
+    options: [
+      { id: 'a', label: 'A. Psalm 1' },
+      { id: 'b', label: 'B. Psalm 23' },
+      { id: 'c', label: 'C. Psalm 51' },
+      { id: 'd', label: 'D. Psalm 91' },
+    ],
+    success: 'Correct. That line opens Psalm 23.',
+    failure: 'The correct answer is Psalm 23.',
+  },
+  {
+    id: 'dreams',
+    question: 'Who interpreted Pharaoh’s dreams in Egypt?',
+    correct: 'd',
+    options: [
+      { id: 'a', label: 'A. Daniel' },
+      { id: 'b', label: 'B. Aaron' },
+      { id: 'c', label: 'C. Joshua' },
+      { id: 'd', label: 'D. Joseph' },
+    ],
+    success: 'Correct. Joseph interpreted Pharaoh’s dreams.',
+    failure: 'The correct answer is Joseph.',
+  },
+  {
+    id: 'lion-den',
+    question: 'Who was thrown into the lions’ den?',
+    correct: 'c',
+    options: [
+      { id: 'a', label: 'A. Jeremiah' },
+      { id: 'b', label: 'B. Ezra' },
+      { id: 'c', label: 'C. Daniel' },
+      { id: 'd', label: 'D. Nehemiah' },
+    ],
+    success: 'Correct. Daniel was thrown into the lions’ den.',
+    failure: 'The correct answer is Daniel.',
+  },
+  {
+    id: 'fire-furnace',
+    question: 'How many Hebrew men were thrown into the fiery furnace?',
+    correct: 'a',
+    options: [
+      { id: 'a', label: 'A. Three' },
+      { id: 'b', label: 'B. Two' },
+      { id: 'c', label: 'C. Four' },
+      { id: 'd', label: 'D. Seven' },
+    ],
+    success: 'Correct. Shadrach, Meshach, and Abednego were thrown in.',
+    failure: 'The correct answer is three.',
+  },
+  {
+    id: 'bethlehem-born',
+    question: 'In which town was Jesus born?',
+    correct: 'd',
+    options: [
+      { id: 'a', label: 'A. Nazareth' },
+      { id: 'b', label: 'B. Jerusalem' },
+      { id: 'c', label: 'C. Bethany' },
+      { id: 'd', label: 'D. Bethlehem' },
+    ],
+    success: 'Correct. Jesus was born in Bethlehem.',
+    failure: 'The correct answer is Bethlehem.',
+  },
+  {
+    id: 'jesus-baptizer',
+    question: 'Who baptized Jesus in the Jordan River?',
+    correct: 'b',
+    options: [
+      { id: 'a', label: 'A. Peter' },
+      { id: 'b', label: 'B. John the Baptist' },
+      { id: 'c', label: 'C. Andrew' },
+      { id: 'd', label: 'D. James' },
+    ],
+    success: 'Correct. John the Baptist baptized Jesus.',
+    failure: 'The correct answer is John the Baptist.',
+  },
+  {
+    id: 'disciples-count',
+    question: 'How many disciples did Jesus choose as apostles?',
+    correct: 'c',
+    options: [
+      { id: 'a', label: 'A. Seven' },
+      { id: 'b', label: 'B. Ten' },
+      { id: 'c', label: 'C. Twelve' },
+      { id: 'd', label: 'D. Seventy' },
+    ],
+    success: 'Correct. Jesus chose twelve apostles.',
+    failure: 'The correct answer is twelve.',
+  },
+  {
+    id: 'loaves-fishes',
+    question: 'How many loaves did Jesus use to feed the five thousand?',
+    correct: 'a',
+    options: [
+      { id: 'a', label: 'A. Five loaves' },
+      { id: 'b', label: 'B. Two loaves' },
+      { id: 'c', label: 'C. Seven loaves' },
+      { id: 'd', label: 'D. Twelve loaves' },
+    ],
+    success: 'Correct. Jesus used five loaves and two fish.',
+    failure: 'The correct answer is five loaves.',
+  },
+  {
+    id: 'walking-water',
+    question: 'Which disciple briefly walked on water toward Jesus?',
+    correct: 'd',
+    options: [
+      { id: 'a', label: 'A. John' },
+      { id: 'b', label: 'B. Thomas' },
+      { id: 'c', label: 'C. Andrew' },
+      { id: 'd', label: 'D. Peter' },
+    ],
+    success: 'Correct. Peter stepped out onto the water.',
+    failure: 'The correct answer is Peter.',
+  },
+  {
+    id: 'good-samaritan',
+    question: 'In Jesus’ parable, who stopped to help the injured man?',
+    correct: 'c',
+    options: [
+      { id: 'a', label: 'A. A priest' },
+      { id: 'b', label: 'B. A Levite' },
+      { id: 'c', label: 'C. A Samaritan' },
+      { id: 'd', label: 'D. A scribe' },
+    ],
+    success: 'Correct. The Samaritan showed mercy.',
+    failure: 'The correct answer is the Samaritan.',
+  },
+  {
+    id: 'resurrection-day',
+    question: 'On which day did Jesus rise from the dead?',
+    correct: 'a',
+    options: [
+      { id: 'a', label: 'A. The first day of the week' },
+      { id: 'b', label: 'B. The Sabbath' },
+      { id: 'c', label: 'C. The day of Pentecost' },
+      { id: 'd', label: 'D. Passover eve' },
+    ],
+    success: 'Correct. Jesus rose on the first day of the week.',
+    failure: 'The correct answer is the first day of the week.',
+  },
+  {
+    id: 'acts-pentecost',
+    question: 'What came upon the believers at Pentecost?',
+    correct: 'b',
+    options: [
+      { id: 'a', label: 'A. A cloud and thunder only' },
+      { id: 'b', label: 'B. The Holy Spirit' },
+      { id: 'c', label: 'C. A new stone tablet' },
+      { id: 'd', label: 'D. Fire from heaven on the altar' },
+    ],
+    success: 'Correct. The Holy Spirit came upon the believers.',
+    failure: 'The correct answer is the Holy Spirit.',
+  },
+  {
+    id: 'paul-name',
+    question: 'What was Paul’s name before he was called Paul?',
+    correct: 'd',
+    options: [
+      { id: 'a', label: 'A. Simon' },
+      { id: 'b', label: 'B. Silas' },
+      { id: 'c', label: 'C. Stephen' },
+      { id: 'd', label: 'D. Saul' },
+    ],
+    success: 'Correct. Paul was first known as Saul.',
+    failure: 'The correct answer is Saul.',
+  },
+  {
+    id: 'first-martyr',
+    question: 'Who is recorded as the first Christian martyr in Acts?',
+    correct: 'c',
+    options: [
+      { id: 'a', label: 'A. James' },
+      { id: 'b', label: 'B. Barnabas' },
+      { id: 'c', label: 'C. Stephen' },
+      { id: 'd', label: 'D. Philip' },
+    ],
+    success: 'Correct. Stephen was the first Christian martyr recorded in Acts.',
+    failure: 'The correct answer is Stephen.',
+  },
+  {
+    id: 'philippian-jailer',
+    question: 'Which apostle was in prison when the Philippian jailer was saved?',
+    correct: 'a',
+    options: [
+      { id: 'a', label: 'A. Paul' },
+      { id: 'b', label: 'B. Peter' },
+      { id: 'c', label: 'C. John' },
+      { id: 'd', label: 'D. Matthew' },
+    ],
+    success: 'Correct. Paul was there, alongside Silas.',
+    failure: 'The correct answer is Paul.',
+  },
+  {
+    id: 'armor-of-god',
+    question: 'In Ephesians 6, what are believers told to put on?',
+    correct: 'b',
+    options: [
+      { id: 'a', label: 'A. A crown of gold' },
+      { id: 'b', label: 'B. The whole armor of God' },
+      { id: 'c', label: 'C. The robe of kings' },
+      { id: 'd', label: 'D. The garments of Aaron' },
+    ],
+    success: 'Correct. Believers are told to put on the whole armor of God.',
+    failure: 'The correct answer is the whole armor of God.',
+  },
+  {
+    id: 'love-chapter',
+    question: 'Which chapter is widely known as the “love chapter”?',
+    correct: 'd',
+    options: [
+      { id: 'a', label: 'A. Romans 8' },
+      { id: 'b', label: 'B. Hebrews 11' },
+      { id: 'c', label: 'C. John 3' },
+      { id: 'd', label: 'D. 1 Corinthians 13' },
+    ],
+    success: 'Correct. 1 Corinthians 13 is known as the love chapter.',
+    failure: 'The correct answer is 1 Corinthians 13.',
+  },
+  {
+    id: 'faith-definition',
+    question: 'Which book says faith is the substance of things hoped for?',
+    correct: 'c',
+    options: [
+      { id: 'a', label: 'A. James' },
+      { id: 'b', label: 'B. Romans' },
+      { id: 'c', label: 'C. Hebrews' },
+      { id: 'd', label: 'D. Revelation' },
+    ],
+    success: 'Correct. Hebrews 11 gives that definition of faith.',
+    failure: 'The correct answer is Hebrews.',
+  },
+  {
+    id: 'revelation-isle',
+    question: 'On which island did John receive the Revelation?',
+    correct: 'a',
+    options: [
+      { id: 'a', label: 'A. Patmos' },
+      { id: 'b', label: 'B. Cyprus' },
+      { id: 'c', label: 'C. Crete' },
+      { id: 'd', label: 'D. Malta' },
+    ],
+    success: 'Correct. John received the Revelation on Patmos.',
+    failure: 'The correct answer is Patmos.',
+  },
+];
+
+const PRAYER_PROMPTS = [
+  {
+    title: 'Pray for strength',
+    body: 'Ask God to steady your heart, strengthen your mind, and help you stand in courage today.',
+    reference: 'Isaiah 41:10',
+  },
+  {
+    title: 'Pray for peace at home',
+    body: 'Invite the peace of Christ into your house, your work, and every conversation that matters this week.',
+    reference: 'John 14:27',
+  },
+  {
+    title: 'Pray for the church family',
+    body: 'Cover the house in wisdom, unity, provision, and hunger for the Word as people gather and serve.',
+    reference: 'Colossians 3:16',
+  },
+];
+
+function getResponsiveLayout(width) {
+  const viewportWidth = Math.max(width || 0, 320);
+  const isCompact = viewportWidth < 390;
+  const isLargePhone = viewportWidth >= 430;
+  const isTablet = viewportWidth >= 760;
+  const columns = isTablet ? 6 : 4;
+  const gap = isCompact ? 10 : 12;
+  const cardWidth = Math.floor((viewportWidth - 32 - gap * (columns - 1)) / columns);
+
+  return {
+    isCompact,
+    isLargePhone,
+    isTablet,
+    columns,
+    contentMaxWidth: isTablet ? 920 : viewportWidth >= 600 ? 760 : 560,
+    shellGap: isCompact ? 18 : 22,
+    heroPadding: isCompact ? 18 : isTablet ? 28 : 22,
+    panelPadding: isCompact ? 16 : isTablet ? 24 : 20,
+    titleSize: isCompact ? 24 : isTablet ? 36 : isLargePhone ? 30 : 27,
+    titleLineHeight: isCompact ? 30 : isTablet ? 42 : isLargePhone ? 36 : 33,
+    dualHeadingSize: isCompact ? 16 : 18,
+    gridGap: gap,
+    gridCardWidth: Math.max(cardWidth, 68),
+  };
+}
+
+function getDailyReference() {
+  const dayIndex = new Date().getDate() % DAILY_VERSE_REFERENCES.length;
+  return DAILY_VERSE_REFERENCES[dayIndex];
+}
+
+function getEATDateParts(date = new Date()) {
+  const eatNow = new Date(date.getTime() + EAT_OFFSET_MS);
+  return {
+    year: eatNow.getUTCFullYear(),
+    month: eatNow.getUTCMonth() + 1,
+    day: eatNow.getUTCDate(),
+    hour: eatNow.getUTCHours(),
+  };
+}
+
+function getRotationKey(date = new Date()) {
+  const nowParts = getEATDateParts(date);
+  const anchorDate = nowParts.hour >= 8 ? date : new Date(date.getTime() - 24 * 60 * 60 * 1000);
+  const anchorParts = getEATDateParts(anchorDate);
+  return `${anchorParts.year}-${String(anchorParts.month).padStart(2, '0')}-${String(anchorParts.day).padStart(2, '0')}`;
+}
+
+function getRotationIndex(rotationKey) {
+  const [year, month, day] = rotationKey.split('-').map((value) => Number.parseInt(value, 10));
+  return Math.floor(Date.UTC(year, month - 1, day) / (24 * 60 * 60 * 1000));
+}
+
+function getNextRotationTimestamp(date = new Date()) {
+  const parts = getEATDateParts(date);
+  const eatNowMs = date.getTime() + EAT_OFFSET_MS;
+  let nextRotationEatMs = Date.UTC(parts.year, parts.month - 1, parts.day, 8, 0, 0, 0);
+  if (eatNowMs >= nextRotationEatMs) {
+    nextRotationEatMs += 24 * 60 * 60 * 1000;
+  }
+  return nextRotationEatMs - EAT_OFFSET_MS;
+}
+
+function getDailyQuizSet(rotationKey, count = 3) {
+  const startIndex = (getRotationIndex(rotationKey) * count) % QUIZ_BANK.length;
+  return Array.from({ length: count }, (_, offset) => QUIZ_BANK[(startIndex + offset) % QUIZ_BANK.length]);
+}
+
+function formatTestamentLabel(testament) {
+  return testament === 'NT' ? 'New Testament' : 'Old Testament';
+}
+
+function getReaderLabel(readingMode, activeVersion) {
+  if (readingMode === 'parallel') {
+    return 'Kiswahili + English';
+  }
+  return activeVersion === SWAHILI_VERSION ? 'Kiswahili • NENO' : 'English • MSB';
+}
+
+function getBookPrimaryName(book, activeVersion) {
+  return activeVersion === SWAHILI_VERSION ? book?.swahiliName : book?.englishName;
+}
+
+async function loadBooks(db) {
+  return db.getAllAsync(
+    `SELECT
+      books.id,
+      books.code,
+      books.testament,
+      books.sort_order AS sortOrder,
+      english.name AS englishName,
+      swahili.name AS swahiliName
+    FROM books
+    LEFT JOIN book_labels AS english
+      ON english.book_id = books.id AND english.version_id = ?
+    LEFT JOIN book_labels AS swahili
+      ON swahili.book_id = books.id AND swahili.version_id = ?
+    ORDER BY books.sort_order ASC`,
+    [ENGLISH_VERSION, SWAHILI_VERSION]
+  );
+}
+
+async function loadDailyVersePair(db, books, reference) {
+  const book = books.find((item) => item.code === reference.bookCode) || books[0] || null;
+
+  if (!book) {
+    return null;
+  }
+
+  const [english, swahili] = await Promise.all([
+    db.getFirstAsync(
+      'SELECT text FROM verses WHERE version_id = ? AND book_id = ? AND chapter = ? AND verse = ?',
+      [ENGLISH_VERSION, book.id, reference.chapter, reference.verse]
+    ),
+    db.getFirstAsync(
+      'SELECT text FROM verses WHERE version_id = ? AND book_id = ? AND chapter = ? AND verse = ?',
+      [SWAHILI_VERSION, book.id, reference.chapter, reference.verse]
+    ),
+  ]);
+
+  return {
+    book,
+    chapter: reference.chapter,
+    verse: reference.verse,
+    englishText: english?.text || '',
+    swahiliText: swahili?.text || '',
+  };
+}
+
+async function loadChapterCount(db, versionId, bookId) {
+  const row = await db.getFirstAsync(
+    'SELECT MAX(chapter) AS maxChapter FROM verses WHERE version_id = ? AND book_id = ?',
+    [versionId, bookId]
+  );
+  return Number(row?.maxChapter || 1);
+}
+
+async function loadSingleVerses(db, versionId, bookId, chapter) {
+  return db.getAllAsync(
+    'SELECT verse, text FROM verses WHERE version_id = ? AND book_id = ? AND chapter = ? ORDER BY verse ASC',
+    [versionId, bookId, chapter]
+  );
+}
+
+async function loadParallelVerses(db, bookId, chapter) {
+  return db.getAllAsync(
+    `SELECT
+      english.verse AS verse,
+      english.text AS englishText,
+      swahili.text AS swahiliText
+    FROM verses AS english
+    LEFT JOIN verses AS swahili
+      ON swahili.version_id = ?
+      AND swahili.book_id = english.book_id
+      AND swahili.chapter = english.chapter
+      AND swahili.verse = english.verse
+    WHERE english.version_id = ?
+      AND english.book_id = ?
+      AND english.chapter = ?
+    ORDER BY english.verse ASC`,
+    [SWAHILI_VERSION, ENGLISH_VERSION, bookId, chapter]
+  );
+}
+
+async function loadSearchResults(db, versionId, query) {
+  return db.getAllAsync(
+    `SELECT
+      verses.book_id AS bookId,
+      verses.chapter,
+      verses.verse,
+      verses.text,
+      labels.name AS bookName
+    FROM verses
+    JOIN book_labels AS labels
+      ON labels.book_id = verses.book_id
+      AND labels.version_id = verses.version_id
+    WHERE verses.version_id = ?
+      AND verses.text LIKE ?
+    ORDER BY verses.book_id ASC, verses.chapter ASC, verses.verse ASC
+    LIMIT 50`,
+    [versionId, `%${query}%`]
+  );
+}
+
+async function ensureBundledBibleDatabaseAsync() {
+  if (Platform.OS === 'android') {
+    const destinationPath = `${defaultDatabaseDirectory}/${BIBLE_DB_NAME}`;
+    const destination = `file://${destinationPath}`;
+    const directoryUri = `file://${defaultDatabaseDirectory}`;
+    const currentVersion = await AsyncStorage.getItem(BIBLE_DB_VERSION_KEY);
+
+    await FileSystemLegacy.makeDirectoryAsync(directoryUri, {
+      intermediates: true,
+    }).catch(() => {});
+
+    if (currentVersion !== BIBLE_DB_VERSION) {
+      const existing = await FileSystemLegacy.getInfoAsync(destination);
+      if (existing.exists) {
+        await FileSystemLegacy.deleteAsync(destination, { idempotent: true }).catch(() => {});
+      }
+
+      let copied = false;
+      let lastCopyError = null;
+
+      for (const source of ANDROID_BIBLE_RESOURCE_CANDIDATES) {
+        try {
+          await FileSystemLegacy.copyAsync({
+            from: source,
+            to: destination,
+          });
+          copied = true;
+          break;
+        } catch (copyError) {
+          lastCopyError = copyError;
+        }
+      }
+
+      if (!copied) {
+        throw lastCopyError || new Error('Could not copy the bundled Bible database on Android.');
+      }
+
+      await AsyncStorage.setItem(BIBLE_DB_VERSION_KEY, BIBLE_DB_VERSION);
+    }
+
+    return;
+  }
+
+  await importDatabaseFromAssetAsync(BIBLE_DB_NAME, {
+    assetId: BIBLE_DB_ASSET,
+    forceOverwrite: true,
+  });
+}
+
+function BibleIconButton({ icon, onPress, active, theme }) {
+  return (
+    <TouchableOpacity
+      style={{
+        width: 42,
+        height: 42,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: active ? theme.colors.accentSoft : theme.colors.surface,
+        borderWidth: 1,
+        borderColor: active ? theme.colors.borderStrong : theme.colors.border,
+      }}
+      activeOpacity={0.9}
+      onPress={onPress}
+    >
+      <Ionicons name={icon} size={20} color={active ? theme.colors.accent : theme.colors.text} />
+    </TouchableOpacity>
+  );
+}
+
+function SearchModal({ visible, onClose, theme, styles, query, onChangeQuery, results, searching, onSelect }) {
+  return (
+    <Modal visible={visible} transparent animationType='fade' onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Search the Bible</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10}>
+              <Ionicons name='close' size={20} color={theme.colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <TextInput
+            value={query}
+            onChangeText={onChangeQuery}
+            placeholder='Search this translation'
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.modalInput}
+            autoFocus
+            autoCorrect={false}
+            autoCapitalize='none'
+          />
+
+          <ScrollView contentContainerStyle={styles.modalResults}>
+            {searching ? (
+              <View style={styles.modalState}>
+                <ActivityIndicator size='small' color={theme.colors.accent} />
+                <Text style={styles.modalStateText}>Searching the bundled text...</Text>
+              </View>
+            ) : null}
+
+            {!searching && query.trim().length < 2 ? (
+              <View style={styles.modalState}>
+                <Text style={styles.modalStateText}>Type at least two letters to search verses.</Text>
+              </View>
+            ) : null}
+
+            {!searching && query.trim().length >= 2 && results.length === 0 ? (
+              <View style={styles.modalState}>
+                <Text style={styles.modalStateText}>No verses matched that search.</Text>
+              </View>
+            ) : null}
+
+            {results.map((item) => (
+              <TouchableOpacity
+                key={`${item.bookId}-${item.chapter}-${item.verse}`}
+                style={styles.modalResultCard}
+                activeOpacity={0.92}
+                onPress={() => onSelect(item)}
+              >
+                <Text style={styles.modalResultReference}>
+                  {item.bookName} {item.chapter}:{item.verse}
+                </Text>
+                <Text style={styles.modalResultText} numberOfLines={4}>{item.text}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function BibleFlowScreen() {
+  const { user } = useAuth();
+  const scrollRef = useRef(null);
+  const dbRef = useRef(null);
+  const { width } = useWindowDimensions();
+  const { theme } = useTheme();
+  const userPreferences = useMemo(() => normalizeUserPreferences(user?.preferences), [user?.preferences]);
+  const [fontScale, setFontScale] = useState(1);
+  const [rotationKey, setRotationKey] = useState(() => getRotationKey());
+  const layout = useMemo(() => getResponsiveLayout(width), [width]);
+  const styles = useMemo(() => createStyles(theme, layout, fontScale), [theme, layout, fontScale]);
+
+  const [db, setDb] = useState(null);
+  const [screen, setScreen] = useState('home');
+  const [homeTab, setHomeTab] = useState('home');
+  const [books, setBooks] = useState([]);
+  const [bookId, setBookId] = useState(null);
+  const [chapter, setChapter] = useState(1);
+  const [chapterCount, setChapterCount] = useState(1);
+  const [selectedVerse, setSelectedVerse] = useState(1);
+  const [readingMode, setReadingMode] = useState(userPreferences.bibleLayout);
+  const [activeVersion, setActiveVersion] = useState(
+    userPreferences.biblePrimaryLanguage === 'english' ? ENGLISH_VERSION : SWAHILI_VERSION
+  );
+  const [verses, setVerses] = useState([]);
+  const [todayVerse, setTodayVerse] = useState(null);
+  const [bookFilter, setBookFilter] = useState('ALL');
+  const [booksSearchOpen, setBooksSearchOpen] = useState(false);
+  const [booksSearchQuery, setBooksSearchQuery] = useState('');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoriteBooks, setFavoriteBooks] = useState([]);
+  const [bookmarkedReferences, setBookmarkedReferences] = useState([]);
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [quizChoices, setQuizChoices] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+
+  const todayQuizSet = useMemo(() => getDailyQuizSet(rotationKey), [rotationKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrap() {
+      let openedDb = null;
+      try {
+        setLoading(true);
+        setError('');
+
+        await ensureBundledBibleDatabaseAsync();
+
+        openedDb = await openDatabaseAsync(BIBLE_DB_NAME);
+        await openedDb.execAsync('PRAGMA foreign_keys = ON;');
+
+        if (cancelled) {
+          await openedDb.closeAsync().catch(() => {});
+          return;
+        }
+
+        dbRef.current = openedDb;
+        setDb(openedDb);
+
+        const [loadedBooks, storedStateRaw, storedFavoritesRaw] = await Promise.all([
+          loadBooks(openedDb),
+          AsyncStorage.getItem(STATE_KEY),
+          AsyncStorage.getItem(FAVORITES_KEY),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        const storedState = storedStateRaw ? JSON.parse(storedStateRaw) : null;
+        const storedFavorites = storedFavoritesRaw ? JSON.parse(storedFavoritesRaw) : { books: [], references: [] };
+
+        const initialBook =
+          loadedBooks.find((item) => item.code === storedState?.bookCode) ||
+          loadedBooks.find((item) => item.code === 'GEN') ||
+          loadedBooks[0] ||
+          null;
+
+        setBooks(loadedBooks);
+        setBookId(initialBook?.id || null);
+        setChapter(Math.max(1, Number(storedState?.chapter || 1)));
+        setSelectedVerse(Math.max(1, Number(storedState?.verse || 1)));
+        const preferredLayout =
+          storedState?.readingMode === 'single' || storedState?.readingMode === 'parallel'
+            ? storedState.readingMode
+            : userPreferences.bibleLayout;
+        const preferredVersion = storedState?.activeVersion === ENGLISH_VERSION
+          ? ENGLISH_VERSION
+          : storedState?.activeVersion === SWAHILI_VERSION
+            ? SWAHILI_VERSION
+            : userPreferences.biblePrimaryLanguage === 'english'
+              ? ENGLISH_VERSION
+              : SWAHILI_VERSION;
+
+        setReadingMode(preferredLayout);
+        setActiveVersion(preferredVersion);
+        setFontScale([0.94, 1, 1.08].includes(storedState?.fontScale) ? storedState.fontScale : 1);
+        setFavoriteBooks(Array.isArray(storedFavorites?.books) ? storedFavorites.books : []);
+        setBookmarkedReferences(Array.isArray(storedFavorites?.references) ? storedFavorites.references : []);
+        setReady(true);
+      } catch (bootstrapError) {
+        if (!cancelled) {
+          setError(bootstrapError.message || 'Could not open the Bible right now.');
+          setReady(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    bootstrap();
+
+    return () => {
+      cancelled = true;
+      const activeDb = dbRef.current;
+      dbRef.current = null;
+      activeDb?.closeAsync?.().catch(() => {});
+    };
+  }, [userPreferences.bibleLayout, userPreferences.biblePrimaryLanguage]);
+
+  useEffect(() => {
+    let timeoutId;
+
+    const scheduleRotation = () => {
+      const nextRunAt = getNextRotationTimestamp();
+      const delay = Math.max(1000, nextRunAt - Date.now() + 1000);
+      timeoutId = setTimeout(() => {
+        setRotationKey(getRotationKey());
+        scheduleRotation();
+      }, delay);
+    };
+
+    scheduleRotation();
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+
+    if (readingMode !== userPreferences.bibleLayout) {
+      setReadingMode(userPreferences.bibleLayout);
+    }
+
+    if (userPreferences.bibleLayout === 'single') {
+      const preferredVersion = userPreferences.biblePrimaryLanguage === 'english' ? ENGLISH_VERSION : SWAHILI_VERSION;
+      if (activeVersion !== preferredVersion) {
+        setActiveVersion(preferredVersion);
+      }
+    }
+  }, [activeVersion, readingMode, ready, userPreferences.bibleLayout, userPreferences.biblePrimaryLanguage]);
+
+  const currentBook = useMemo(
+    () => books.find((item) => item.id === bookId) || null,
+    [bookId, books]
+  );
+
+  useEffect(() => {
+    if (!db || !ready || books.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadRotatingHomeVerse() {
+      try {
+        const nextTodayVerse = await loadDailyVersePair(db, books, DAILY_VERSE_REFERENCES[getRotationIndex(rotationKey) % DAILY_VERSE_REFERENCES.length]);
+        if (!cancelled) {
+          setTodayVerse(nextTodayVerse);
+        }
+      } catch {
+        if (!cancelled) {
+          setTodayVerse(null);
+        }
+      }
+    }
+
+    loadRotatingHomeVerse();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [books, db, ready, rotationKey]);
+
+  useEffect(() => {
+    setQuizChoices({});
+  }, [rotationKey]);
+
+  const bookSearchValue = booksSearchQuery.trim().toLowerCase();
+  const filteredBooks = useMemo(() => {
+    return books.filter((item) => {
+      if (bookFilter !== 'ALL' && item.testament !== bookFilter) {
+        return false;
+      }
+      if (favoritesOnly && !favoriteBooks.includes(item.code)) {
+        return false;
+      }
+      if (!bookSearchValue) {
+        return true;
+      }
+      const haystack = `${item.englishName} ${item.swahiliName}`.toLowerCase();
+      return haystack.includes(bookSearchValue);
+    });
+  }, [bookFilter, bookSearchValue, books, favoriteBooks, favoritesOnly]);
+
+  useEffect(() => {
+    if (!ready || !currentBook) {
+      return;
+    }
+
+    AsyncStorage.setItem(
+      STATE_KEY,
+      JSON.stringify({
+        activeVersion,
+        bookCode: currentBook.code,
+        chapter,
+        fontScale,
+        readingMode,
+        verse: selectedVerse,
+      })
+    ).catch(() => {});
+  }, [activeVersion, chapter, currentBook, fontScale, readingMode, ready, selectedVerse]);
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+
+    AsyncStorage.setItem(
+      FAVORITES_KEY,
+      JSON.stringify({
+        books: favoriteBooks,
+        references: bookmarkedReferences,
+      })
+    ).catch(() => {});
+  }, [bookmarkedReferences, favoriteBooks, ready]);
+
+  useEffect(() => {
+    if (!db || !ready || !bookId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadReaderContent() {
+      try {
+        setLoading(true);
+        setError('');
+
+        const baseVersion = readingMode === 'parallel' ? ENGLISH_VERSION : activeVersion;
+        const nextChapterCount = await loadChapterCount(db, baseVersion, bookId);
+
+        if (cancelled) {
+          return;
+        }
+
+        const safeChapter = Math.min(Math.max(1, chapter), nextChapterCount);
+        const nextVerses = readingMode === 'parallel'
+          ? await loadParallelVerses(db, bookId, safeChapter)
+          : await loadSingleVerses(db, activeVersion, bookId, safeChapter);
+
+        if (cancelled) {
+          return;
+        }
+
+        setChapterCount(nextChapterCount);
+        setVerses(nextVerses);
+
+        if (chapter !== safeChapter) {
+          setChapter(safeChapter);
+        }
+
+        const maxVerse = nextVerses[nextVerses.length - 1]?.verse || 1;
+        if (selectedVerse > maxVerse) {
+          setSelectedVerse(maxVerse);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError.message || 'Could not load that Bible passage.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadReaderContent();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeVersion, bookId, chapter, db, readingMode, ready, selectedVerse]);
+
+  useEffect(() => {
+    if (!db || !searchModalVisible) {
+      return;
+    }
+
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timeout = setTimeout(async () => {
+      try {
+        setSearching(true);
+        const results = await loadSearchResults(
+          db,
+          readingMode === 'parallel' ? SWAHILI_VERSION : activeVersion,
+          query
+        );
+        if (!cancelled) {
+          setSearchResults(results);
+        }
+      } catch {
+        if (!cancelled) {
+          setSearchResults([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setSearching(false);
+        }
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [activeVersion, db, readingMode, searchModalVisible, searchQuery]);
+
+  const scrollToTop = () => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  const openBooks = (nextFilter = 'ALL') => {
+    setBookFilter(nextFilter);
+    setScreen('books');
+    scrollToTop();
+  };
+
+  const openChapters = (nextBook) => {
+    setBookId(nextBook.id);
+    setChapter(1);
+    setSelectedVerse(1);
+    setScreen('chapters');
+    scrollToTop();
+  };
+
+  const openVerses = (nextChapter) => {
+    setChapter(nextChapter);
+    setSelectedVerse(1);
+    setScreen('verses');
+    scrollToTop();
+  };
+
+  const openReader = (verseNumber = 1) => {
+    setSelectedVerse(verseNumber);
+    setScreen('reader');
+    scrollToTop();
+  };
+
+  const jumpToReference = (nextBookId, nextChapter, nextVerse) => {
+    setSearchModalVisible(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setBookId(nextBookId);
+    setChapter(nextChapter);
+    setSelectedVerse(nextVerse);
+    setScreen('reader');
+    scrollToTop();
+  };
+
+  const moveChapter = (delta) => {
+    const nextChapter = chapter + delta;
+    if (nextChapter < 1 || nextChapter > chapterCount) {
+      return;
+    }
+    setChapter(nextChapter);
+    setSelectedVerse(1);
+    scrollToTop();
+  };
+
+  const cycleFontScale = () => {
+    setFontScale((current) => {
+      if (current === 0.94) return 1;
+      if (current === 1) return 1.08;
+      return 0.94;
+    });
+  };
+
+  const toggleFavoriteBook = (bookCode) => {
+    setFavoriteBooks((current) => (
+      current.includes(bookCode)
+        ? current.filter((item) => item !== bookCode)
+        : [...current, bookCode]
+    ));
+  };
+
+  const activeReferenceKey = currentBook ? `${currentBook.code}:${chapter}:${selectedVerse}` : '';
+  const activeReferenceSaved = activeReferenceKey ? bookmarkedReferences.includes(activeReferenceKey) : false;
+
+  const toggleBookmarkedReference = () => {
+    if (!activeReferenceKey) {
+      return;
+    }
+
+    setBookmarkedReferences((current) => (
+      current.includes(activeReferenceKey)
+        ? current.filter((item) => item !== activeReferenceKey)
+        : [...current, activeReferenceKey]
+    ));
+  };
+
+  const answerQuiz = (quizId, optionId) => {
+    setQuizChoices((current) => ({
+      ...current,
+      [quizId]: optionId,
+    }));
+  };
+
+  const shareTodayVerse = () => {
+    if (!todayVerse) {
+      return;
+    }
+
+    Share.share({
+      message: `${todayVerse.book.swahiliName} ${todayVerse.chapter}:${todayVerse.verse}\n\n${todayVerse.swahiliText}\n\n${todayVerse.book.englishName} ${todayVerse.chapter}:${todayVerse.verse}\n\n${todayVerse.englishText}`,
+    }).catch(() => {});
+  };
+
+  const shareCurrentVerse = () => {
+    if (!currentBook) {
+      return;
+    }
+
+    const row = verses.find((item) => item.verse === selectedVerse) || verses[0];
+    if (!row) {
+      return;
+    }
+
+    const reference = `${currentBook.swahiliName} ${chapter}:${selectedVerse} / ${currentBook.englishName} ${chapter}:${selectedVerse}`;
+    const message = readingMode === 'parallel'
+      ? `${reference}\n\nKiswahili\n${row.swahiliText || ''}\n\nEnglish\n${row.englishText || ''}`
+      : `${reference}\n\n${row.text || ''}`;
+
+    Share.share({ message }).catch(() => {});
+  };
+
+  const continueReadingLabel = currentBook
+    ? `${currentBook.swahiliName} ${chapter}:${selectedVerse}`
+    : '';
+
+  const currentBookPrimary = currentBook ? getBookPrimaryName(currentBook, activeVersion) : 'Bible';
+
+  const renderTopNav = () => (
+    <View style={styles.topBar}>
+      <Text style={styles.topBarTitle}>Bible</Text>
+      <BibleIconButton icon='menu-outline' onPress={() => openBooks('ALL')} theme={theme} />
+    </View>
+  );
+
+  const renderHomeTabBar = () => (
+    <View style={styles.primaryTabRail}>
+      {[
+        { value: 'home', label: 'Home' },
+        { value: 'prayer', label: 'Prayer' },
+      ].map((tab) => (
+        <TouchableOpacity
+          key={tab.value}
+          style={[styles.primaryTab, homeTab === tab.value ? styles.primaryTabActive : null]}
+          activeOpacity={0.92}
+          onPress={() => setHomeTab(tab.value)}
+        >
+          <Text style={[styles.primaryTabText, homeTab === tab.value ? styles.primaryTabTextActive : null]}>
+            {tab.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderBibleHome = () => (
+    <>
+      {renderTopNav()}
+      {renderHomeTabBar()}
+
+      {homeTab === 'home' ? (
+        <View style={styles.stageColumn}>
+          <Text style={styles.foodTitle}>Food 4 Soul</Text>
+          <Text style={styles.dailyVerseMeta}>Refreshes every day at 8:00 AM EAT.</Text>
+
+          <View style={styles.dailyVerseCard}>
+            {todayVerse ? (
+              <>
+                <Text style={styles.dailyVersePrimary}>
+                  {todayVerse.swahiliText}
+                  {'\n'}
+                  {todayVerse.book.swahiliName} {todayVerse.chapter}:{todayVerse.verse}
+                </Text>
+                <Text style={styles.dailyVerseSecondary}>
+                  {todayVerse.englishText}
+                  {'\n'}
+                  {todayVerse.book.englishName} {todayVerse.chapter}:{todayVerse.verse}
+                </Text>
+                <View style={styles.dailyVerseActions}>
+                  <TouchableOpacity style={styles.softActionButton} activeOpacity={0.92} onPress={shareTodayVerse}>
+                    <Ionicons name='share-social-outline' size={16} color={theme.colors.accent} />
+                    <Text style={styles.softActionText}>Share</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.softActionButton}
+                    activeOpacity={0.92}
+                    onPress={() => jumpToReference(todayVerse.book.id, todayVerse.chapter, todayVerse.verse)}
+                  >
+                    <Ionicons name='book-outline' size={16} color={theme.colors.accent} />
+                    <Text style={styles.softActionText}>Open verse</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <ActivityIndicator size='small' color={theme.colors.accent} />
+            )}
+          </View>
+
+          <View style={styles.quizCard}>
+            <Text style={styles.quizTitle}>Quick Bible Quiz</Text>
+            <Text style={styles.quizMeta}>A fresh set rotates with the daily verse at 8:00 AM EAT.</Text>
+
+            <View style={styles.quizDeck}>
+              {todayQuizSet.map((quiz, index) => {
+                const selectedOption = quizChoices[quiz.id];
+                const feedback = selectedOption
+                  ? selectedOption === quiz.correct
+                    ? quiz.success
+                    : quiz.failure
+                  : '';
+
+                return (
+                  <View key={quiz.id} style={styles.quizItemCard}>
+                    <View style={styles.quizItemHeader}>
+                      <Text style={styles.quizItemIndex}>Quiz {index + 1}</Text>
+                    </View>
+                    <Text style={styles.quizQuestion}>{quiz.question}</Text>
+
+                    <View style={styles.quizOptions}>
+                      {quiz.options.map((option) => {
+                        const isSelected = selectedOption === option.id;
+                        const isCorrect = selectedOption && option.id === quiz.correct;
+                        const isWrongSelected = isSelected && option.id !== quiz.correct;
+                        return (
+                          <TouchableOpacity
+                            key={option.id}
+                            style={[
+                              styles.quizOption,
+                              isCorrect ? styles.quizOptionCorrect : null,
+                              isWrongSelected ? styles.quizOptionWrong : null,
+                            ]}
+                            activeOpacity={0.92}
+                            onPress={() => answerQuiz(quiz.id, option.id)}
+                          >
+                            <Text
+                              style={[
+                                styles.quizOptionText,
+                                isCorrect ? styles.quizOptionTextOnState : null,
+                                isWrongSelected ? styles.quizOptionTextOnState : null,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {feedback ? <Text style={styles.quizFeedback}>{feedback}</Text> : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          {currentBook ? (
+            <TouchableOpacity style={styles.continueCard} activeOpacity={0.92} onPress={() => setScreen('reader')}>
+              <View style={styles.continueIcon}>
+                <Ionicons name='play' size={18} color={theme.colors.textOnAccent} />
+              </View>
+              <View style={styles.continueCopy}>
+                <Text style={styles.continueEyebrow}>Continue reading</Text>
+                <Text style={styles.continueTitle}>{continueReadingLabel}</Text>
+                <Text style={styles.continueBody}>{getReaderLabel(readingMode, activeVersion)}</Text>
+              </View>
+              <Ionicons name='arrow-forward' size={18} color={theme.colors.textOnAccent} />
+            </TouchableOpacity>
+          ) : null}
+
+          <View style={styles.testamentButtonRow}>
+            <TouchableOpacity
+              style={[styles.testamentButton, styles.testamentButtonLeft]}
+              activeOpacity={0.92}
+              onPress={() => openBooks('OT')}
+            >
+              <Text style={styles.testamentButtonText}>Old Testament</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.testamentButton, styles.testamentButtonRight]}
+              activeOpacity={0.92}
+              onPress={() => openBooks('NT')}
+            >
+              <Text style={styles.testamentButtonText}>New Testament</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.stageColumn}>
+          <View style={styles.prayerHeroCard}>
+            <Text style={styles.prayerHeroEyebrow}>Pray the Word</Text>
+            <Text style={styles.prayerHeroTitle}>Turn scripture into focused prayer for the day ahead.</Text>
+            <Text style={styles.prayerHeroBody}>
+              Use these prompts as a starting point, then carry your own requests into the Prayer Wall when you are ready.
+            </Text>
+          </View>
+
+          {PRAYER_PROMPTS.map((prompt) => (
+            <View key={prompt.title} style={styles.prayerPromptCard}>
+              <Text style={styles.prayerPromptTitle}>{prompt.title}</Text>
+              <Text style={styles.prayerPromptBody}>{prompt.body}</Text>
+              <View style={styles.prayerPromptFooter}>
+                <Text style={styles.prayerPromptReference}>{prompt.reference}</Text>
+                <TouchableOpacity
+                  style={styles.softActionButton}
+                  activeOpacity={0.92}
+                  onPress={() => go?.('Prayer')}
+                >
+                  <Ionicons name='heart-outline' size={16} color={theme.colors.accent} />
+                  <Text style={styles.softActionText}>Prayer wall</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+
+          <TouchableOpacity
+            style={styles.primaryPrayerButton}
+            activeOpacity={0.92}
+            onPress={() => go?.('Prayer')}
+          >
+            <Ionicons name='heart-outline' size={18} color={theme.colors.textOnAccent} />
+            <Text style={styles.primaryPrayerButtonText}>Open Prayer Wall</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  );
+
+  const renderBooksScreen = () => (
+    <>
+      <View style={styles.stageHeader}>
+        <View style={styles.stageHeaderLeft}>
+          <TouchableOpacity style={styles.backButton} activeOpacity={0.9} onPress={() => setScreen('home')}>
+            <Ionicons name='arrow-back' size={22} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.stageHeaderTitle}>Books</Text>
+        </View>
+        <View style={styles.stageHeaderActions}>
+          <BibleIconButton
+            icon='search-outline'
+            onPress={() => setBooksSearchOpen((current) => !current)}
+            active={booksSearchOpen}
+            theme={theme}
+          />
+          <BibleIconButton
+            icon={favoritesOnly ? 'heart' : 'heart-outline'}
+            onPress={() => setFavoritesOnly((current) => !current)}
+            active={favoritesOnly}
+            theme={theme}
+          />
+        </View>
+      </View>
+
+      <View style={styles.secondaryTabRail}>
+        {[
+          { value: 'ALL', label: 'All Books' },
+          { value: 'OT', label: 'Old Testament' },
+          { value: 'NT', label: 'New Testament' },
+        ].map((tab) => (
+          <TouchableOpacity
+            key={tab.value}
+            style={[styles.secondaryTab, bookFilter === tab.value ? styles.secondaryTabActive : null]}
+            activeOpacity={0.92}
+            onPress={() => setBookFilter(tab.value)}
+          >
+            <Text style={[styles.secondaryTabText, bookFilter === tab.value ? styles.secondaryTabTextActive : null]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {booksSearchOpen ? (
+        <View style={styles.booksSearchCard}>
+          <TextInput
+            value={booksSearchQuery}
+            onChangeText={setBooksSearchQuery}
+            placeholder='Search English or Kiswahili book names'
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.booksSearchInput}
+            autoCorrect={false}
+          />
+        </View>
+      ) : null}
+
+      <View style={styles.stageColumn}>
+        {filteredBooks.map((item) => {
+          const isFavorite = favoriteBooks.includes(item.code);
+          return (
+            <TouchableOpacity
+              key={item.code}
+              style={styles.bookCard}
+              activeOpacity={0.92}
+              onPress={() => openChapters(item)}
+            >
+              <View style={styles.bookIconWrap}>
+                <Ionicons name='book-outline' size={24} color={theme.colors.accent} />
+              </View>
+
+              <View style={styles.bookCopy}>
+                <Text style={styles.bookTitle}>{item.swahiliName} ~ {item.englishName}</Text>
+                <Text style={styles.bookSubtitle}>{formatTestamentLabel(item.testament)}</Text>
+              </View>
+
+              <View style={styles.bookActions}>
+                <TouchableOpacity
+                  hitSlop={10}
+                  onPress={() => toggleFavoriteBook(item.code)}
+                  style={styles.bookActionButton}
+                >
+                  <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={18} color={isFavorite ? theme.colors.accent : theme.colors.textMuted} />
+                </TouchableOpacity>
+                <Ionicons name='arrow-forward' size={22} color={theme.colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {filteredBooks.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No books in this view</Text>
+            <Text style={styles.emptyBody}>
+              {favoritesOnly
+                ? 'You have not marked any books as favorites yet.'
+                : 'Try another testament filter or clear the book search.'}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </>
+  );
+
+  const renderChaptersScreen = () => (
+    <>
+      <View style={styles.stageHeader}>
+        <View style={styles.stageHeaderLeft}>
+          <TouchableOpacity style={styles.backButton} activeOpacity={0.9} onPress={() => setScreen('books')}>
+            <Ionicons name='arrow-back' size={22} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.stageHeaderTitle}>{currentBookPrimary}</Text>
+        </View>
+        {currentBook ? (
+          <BibleIconButton
+            icon={favoriteBooks.includes(currentBook.code) ? 'heart' : 'heart-outline'}
+            onPress={() => toggleFavoriteBook(currentBook.code)}
+            active={favoriteBooks.includes(currentBook.code)}
+            theme={theme}
+          />
+        ) : null}
+      </View>
+
+      <View style={styles.stageColumn}>
+        <Text style={styles.gridIntroTitle}>Select a Chapter</Text>
+        <View style={styles.gridWrap}>
+          {Array.from({ length: chapterCount }, (_, index) => index + 1).map((value) => (
+            <TouchableOpacity
+              key={String(value)}
+              style={[
+                styles.numberCard,
+                { width: layout.gridCardWidth },
+                chapter === value ? styles.numberCardActive : null,
+              ]}
+              activeOpacity={0.92}
+              onPress={() => openVerses(value)}
+            >
+              <Text style={[styles.numberCardValue, chapter === value ? styles.numberCardValueActive : null]}>
+                {value}.
+              </Text>
+              <Text style={[styles.numberCardLabel, chapter === value ? styles.numberCardLabelActive : null]}>
+                Chapter
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    </>
+  );
+
+  const renderVersesScreen = () => (
+    <>
+      <View style={styles.stageHeader}>
+        <View style={styles.stageHeaderLeft}>
+          <TouchableOpacity style={styles.backButton} activeOpacity={0.9} onPress={() => setScreen('chapters')}>
+            <Ionicons name='arrow-back' size={22} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.stageHeaderTitle}>{currentBookPrimary} : {chapter}</Text>
+        </View>
+        <BibleIconButton icon='book-outline' onPress={() => openReader(1)} theme={theme} />
+      </View>
+
+      <View style={styles.stageColumn}>
+        <Text style={styles.gridIntroTitle}>Select a Verse</Text>
+        <TouchableOpacity style={styles.openWholeChapterButton} activeOpacity={0.92} onPress={() => openReader(1)}>
+          <Ionicons name='reader-outline' size={18} color={theme.colors.textOnAccent} />
+          <Text style={styles.openWholeChapterText}>Read full chapter</Text>
+        </TouchableOpacity>
+
+        <View style={styles.gridWrap}>
+          {verses.map((row) => (
+            <TouchableOpacity
+              key={String(row.verse)}
+              style={[
+                styles.numberCard,
+                { width: layout.gridCardWidth },
+                selectedVerse === row.verse ? styles.numberCardActive : null,
+              ]}
+              activeOpacity={0.92}
+              onPress={() => openReader(row.verse)}
+            >
+              <Text style={[styles.numberCardValue, selectedVerse === row.verse ? styles.numberCardValueActive : null]}>
+                {row.verse}.
+              </Text>
+              <Text style={[styles.numberCardLabel, selectedVerse === row.verse ? styles.numberCardLabelActive : null]}>
+                Verse
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    </>
+  );
+
+  const renderReaderScreen = () => (
+    <>
+      <View style={styles.stageHeader}>
+        <View style={styles.stageHeaderLeft}>
+          <TouchableOpacity style={styles.backButton} activeOpacity={0.9} onPress={() => setScreen('verses')}>
+            <Ionicons name='arrow-back' size={22} color={theme.colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.readerTitleButton} activeOpacity={0.9} onPress={() => setScreen('verses')}>
+            <Text style={styles.stageHeaderTitle}>{currentBookPrimary} : {chapter}</Text>
+            <Ionicons name='chevron-down' size={18} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.stageHeaderActions}>
+          <BibleIconButton
+            icon={activeReferenceSaved ? 'heart' : 'heart-outline'}
+            onPress={toggleBookmarkedReference}
+            active={activeReferenceSaved}
+            theme={theme}
+          />
+          <BibleIconButton
+            icon='search-outline'
+            onPress={() => setSearchModalVisible(true)}
+            theme={theme}
+          />
+          <BibleIconButton
+            icon='text-outline'
+            onPress={cycleFontScale}
+            theme={theme}
+          />
+        </View>
+      </View>
+
+      <View style={styles.readerModeRow}>
+        {[
+          { value: 'parallel', label: 'Parallel' },
+          { value: 'single', label: 'Single' },
+        ].map((mode) => (
+          <TouchableOpacity
+            key={mode.value}
+            style={[styles.readerModePill, readingMode === mode.value ? styles.readerModePillActive : null]}
+            activeOpacity={0.92}
+            onPress={() => setReadingMode(mode.value)}
+          >
+            <Text style={[styles.readerModePillText, readingMode === mode.value ? styles.readerModePillTextActive : null]}>
+              {mode.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+
+        {readingMode === 'single' ? (
+          <>
+            {[SWAHILI_VERSION, ENGLISH_VERSION].map((versionId) => (
+              <TouchableOpacity
+                key={versionId}
+                style={[styles.readerModePill, activeVersion === versionId ? styles.readerModePillActive : null]}
+                activeOpacity={0.92}
+                onPress={() => setActiveVersion(versionId)}
+              >
+                <Text style={[styles.readerModePillText, activeVersion === versionId ? styles.readerModePillTextActive : null]}>
+                  {versionId === SWAHILI_VERSION ? 'Kiswahili' : 'English'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : null}
+      </View>
+
+      <View style={styles.readerMetaRow}>
+        <Text style={styles.readerMetaText}>{getReaderLabel(readingMode, activeVersion)}</Text>
+        <TouchableOpacity style={styles.readerShareButton} activeOpacity={0.92} onPress={shareCurrentVerse}>
+          <Ionicons name='share-social-outline' size={16} color={theme.colors.accent} />
+          <Text style={styles.readerShareText}>Share verse</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.readerCard}>
+        {readingMode === 'parallel' ? (
+          <>
+            <View style={styles.parallelColumnHeader}>
+              <Text style={styles.parallelColumnHeading}>Kiswahili</Text>
+              <Text style={styles.parallelColumnHeading}>English</Text>
+            </View>
+
+            {verses.map((row) => {
+              const isSelected = selectedVerse === row.verse;
+              return (
+                <TouchableOpacity
+                  key={`parallel-${row.verse}`}
+                  style={[styles.parallelRow, isSelected ? styles.parallelRowSelected : null]}
+                  activeOpacity={0.92}
+                  onPress={() => setSelectedVerse(row.verse)}
+                >
+                  <View style={styles.parallelColumn}>
+                    <Text style={styles.parallelText}>
+                      <Text style={styles.parallelVerseNumber}>{row.verse} </Text>
+                      {row.swahiliText}
+                    </Text>
+                  </View>
+                  <View style={styles.parallelColumn}>
+                    <Text style={styles.parallelText}>
+                      <Text style={styles.parallelVerseNumber}>{row.verse} </Text>
+                      {row.englishText}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        ) : (
+          verses.map((row) => {
+            const isSelected = selectedVerse === row.verse;
+            return (
+              <TouchableOpacity
+                key={`single-${row.verse}`}
+                style={[styles.singleVerseRow, isSelected ? styles.parallelRowSelected : null]}
+                activeOpacity={0.92}
+                onPress={() => setSelectedVerse(row.verse)}
+              >
+                <Text style={styles.singleVerseText}>
+                  <Text style={styles.parallelVerseNumber}>{row.verse} </Text>
+                  {row.text}
+                </Text>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </View>
+
+      <View style={styles.readerBottomNav}>
+        <TouchableOpacity
+          style={[styles.bottomNavButton, chapter <= 1 ? styles.bottomNavButtonDisabled : null]}
+          disabled={chapter <= 1}
+          activeOpacity={0.92}
+          onPress={() => moveChapter(-1)}
+        >
+          <Ionicons name='chevron-back' size={18} color={chapter <= 1 ? theme.colors.textMuted : theme.colors.textOnAccent} />
+          <Text style={[styles.bottomNavText, chapter <= 1 ? styles.bottomNavTextDisabled : null]}>Previous</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.bottomNavButton, chapter >= chapterCount ? styles.bottomNavButtonDisabled : null]}
+          disabled={chapter >= chapterCount}
+          activeOpacity={0.92}
+          onPress={() => moveChapter(1)}
+        >
+          <Text style={[styles.bottomNavText, chapter >= chapterCount ? styles.bottomNavTextDisabled : null]}>Next</Text>
+          <Ionicons name='chevron-forward' size={18} color={chapter >= chapterCount ? theme.colors.textMuted : theme.colors.textOnAccent} />
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
+  return (
+    <Screen>
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.contentShell}>
+          {loading && !ready ? (
+            <View style={styles.loadingCard}>
+              <ActivityIndicator size='small' color={theme.colors.accent} />
+              <Text style={styles.loadingText}>Opening the bundled Bible...</Text>
+            </View>
+          ) : null}
+
+          {error && !ready ? (
+            <View style={styles.errorCard}>
+              <Text style={styles.errorTitle}>Bible reader issue</Text>
+              <Text style={styles.errorBody}>{error}</Text>
+            </View>
+          ) : null}
+
+          {ready ? (
+            <>
+              {screen === 'home' ? renderBibleHome() : null}
+              {screen === 'books' ? renderBooksScreen() : null}
+              {screen === 'chapters' ? renderChaptersScreen() : null}
+              {screen === 'verses' ? renderVersesScreen() : null}
+              {screen === 'reader' ? renderReaderScreen() : null}
+            </>
+          ) : null}
+        </View>
+      </ScrollView>
+
+      <SearchModal
+        visible={searchModalVisible}
+        onClose={() => {
+          setSearchModalVisible(false);
+          setSearchQuery('');
+          setSearchResults([]);
+        }}
+        theme={theme}
+        styles={styles}
+        query={searchQuery}
+        onChangeQuery={setSearchQuery}
+        results={searchResults}
+        searching={searching}
+        onSelect={(item) => jumpToReference(item.bookId, item.chapter, item.verse)}
+      />
+    </Screen>
+  );
+}
+
+export default function BibleScreen({ go }) {
+  return <BibleFlowScreen />;
+}
+
+function createStyles(theme, layout, fontScale) {
+  return StyleSheet.create({
+    scrollContent: {
+      paddingBottom: theme.spacing.xxl,
+    },
+    contentShell: {
+      width: '100%',
+      maxWidth: layout.contentMaxWidth,
+      alignSelf: 'center',
+      gap: layout.shellGap,
+    },
+    loadingCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.lg,
+      padding: layout.panelPadding,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
+    loadingText: {
+      color: theme.colors.text,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    topBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    topBarTitle: {
+      color: theme.colors.text,
+      fontSize: 20,
+      fontWeight: '800',
+    },
+    primaryTabRail: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.primaryStrong,
+      borderRadius: theme.radius.lg,
+      padding: 4,
+      gap: 4,
+    },
+    primaryTab: {
+      flex: 1,
+      borderRadius: theme.radius.md,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    primaryTabActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    primaryTabText: {
+      color: theme.colors.slate200 || theme.colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 1.1,
+    },
+    primaryTabTextActive: {
+      color: '#FFFFFF',
+    },
+    stageColumn: {
+      gap: theme.spacing.lg,
+    },
+    foodTitle: {
+      color: theme.colors.accentStrong,
+      fontSize: layout.titleSize,
+      lineHeight: layout.titleLineHeight,
+      fontWeight: '900',
+      textAlign: 'center',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+    },
+    dailyVerseMeta: {
+      color: theme.colors.textMuted,
+      fontSize: 12,
+      fontWeight: '700',
+      textAlign: 'center',
+      marginTop: -6,
+    },
+    dailyVerseCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      padding: layout.heroPadding,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...theme.shadows.md,
+    },
+    dailyVersePrimary: {
+      color: theme.colors.text,
+      fontSize: 18 * fontScale,
+      lineHeight: 29 * fontScale,
+      fontWeight: '700',
+      fontStyle: 'italic',
+      marginBottom: theme.spacing.lg,
+    },
+    dailyVerseSecondary: {
+      color: theme.colors.text,
+      fontSize: 17 * fontScale,
+      lineHeight: 28 * fontScale,
+      fontWeight: '700',
+      fontStyle: 'italic',
+    },
+    dailyVerseActions: {
+      marginTop: theme.spacing.lg,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: theme.spacing.sm,
+    },
+    softActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: theme.colors.accentSoft,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: theme.radius.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.borderStrong,
+    },
+    softActionText: {
+      color: theme.colors.accent,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    quizCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      padding: layout.panelPadding,
+      borderWidth: 1,
+      borderColor: 'rgba(212, 175, 55, 0.22)',
+      ...theme.shadows.md,
+    },
+    quizTitle: {
+      color: theme.colors.text,
+      fontSize: 19,
+      fontWeight: '800',
+      marginBottom: 6,
+    },
+    quizMeta: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      lineHeight: 18,
+      fontWeight: '700',
+      marginBottom: theme.spacing.md,
+    },
+    quizDeck: {
+      gap: theme.spacing.md,
+    },
+    quizItemCard: {
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.colors.surfaceRaised,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.lg,
+    },
+    quizItemHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    quizItemIndex: {
+      color: theme.colors.accent,
+      fontSize: 11,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 1.2,
+    },
+    quizQuestion: {
+      color: theme.colors.text,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: theme.spacing.md,
+      fontWeight: '800',
+    },
+    quizOptions: {
+      gap: theme.spacing.sm,
+    },
+    quizOption: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.md,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    quizOptionCorrect: {
+      backgroundColor: 'rgba(16, 185, 129, 0.16)',
+      borderColor: '#10B981',
+      borderWidth: 1.5,
+    },
+    quizOptionWrong: {
+      backgroundColor: 'rgba(239, 68, 68, 0.16)',
+      borderColor: '#EF4444',
+      borderWidth: 1.5,
+    },
+    quizOptionText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    quizOptionTextOnState: {
+      color: theme.colors.text,
+      fontWeight: '800',
+    },
+    quizFeedback: {
+      marginTop: theme.spacing.md,
+      color: theme.colors.accentStrong,
+      fontSize: 13,
+      lineHeight: 19,
+      fontWeight: '800',
+    },
+    continueCard: {
+      backgroundColor: theme.colors.accent,
+      borderRadius: theme.radius.xl,
+      padding: layout.panelPadding,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+      ...theme.shadows.md,
+    },
+    continueIcon: {
+      width: 46,
+      height: 46,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(5, 7, 13, 0.16)',
+    },
+    continueCopy: {
+      flex: 1,
+    },
+    continueEyebrow: {
+      color: 'rgba(5, 7, 13, 0.72)',
+      fontSize: 12,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 0.9,
+      marginBottom: 4,
+    },
+    continueTitle: {
+      color: theme.colors.textOnAccent,
+      fontSize: 18,
+      fontWeight: '800',
+      marginBottom: 4,
+    },
+    continueBody: {
+      color: 'rgba(5, 7, 13, 0.72)',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    testamentButtonRow: {
+      flexDirection: 'row',
+      gap: 0,
+    },
+    testamentButton: {
+      flex: 1,
+      backgroundColor: '#2F7A1F',
+      paddingVertical: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    testamentButtonLeft: {
+      borderTopLeftRadius: theme.radius.xl,
+      borderBottomLeftRadius: theme.radius.xl,
+      marginRight: 6,
+    },
+    testamentButtonRight: {
+      borderTopRightRadius: theme.radius.xl,
+      borderBottomRightRadius: theme.radius.xl,
+      marginLeft: 6,
+    },
+    testamentButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    prayerHeroCard: {
+      backgroundColor: theme.colors.hero,
+      borderRadius: theme.radius.xl,
+      padding: layout.heroPadding,
+      borderWidth: 1,
+      borderColor: theme.colors.borderStrong,
+    },
+    prayerHeroEyebrow: {
+      color: theme.colors.accent,
+      fontSize: 12,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 1.1,
+      marginBottom: theme.spacing.sm,
+    },
+    prayerHeroTitle: {
+      color: theme.colors.text,
+      fontSize: layout.titleSize,
+      lineHeight: layout.titleLineHeight,
+      fontWeight: '800',
+      marginBottom: theme.spacing.sm,
+    },
+    prayerHeroBody: {
+      color: theme.colors.textSecondary,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    prayerPromptCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.lg,
+      padding: layout.panelPadding,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    prayerPromptTitle: {
+      color: theme.colors.text,
+      fontSize: 18,
+      fontWeight: '800',
+      marginBottom: 8,
+    },
+    prayerPromptBody: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 21,
+      marginBottom: theme.spacing.md,
+    },
+    prayerPromptFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.md,
+    },
+    prayerPromptReference: {
+      color: theme.colors.accent,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    primaryPrayerButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: theme.colors.accent,
+      borderRadius: theme.radius.xl,
+      paddingVertical: 18,
+    },
+    primaryPrayerButtonText: {
+      color: theme.colors.textOnAccent,
+      fontSize: 15,
+      fontWeight: '800',
+    },
+    stageHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.md,
+    },
+    stageHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+      flex: 1,
+    },
+    stageHeaderActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    backButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    stageHeaderTitle: {
+      color: theme.colors.text,
+      fontSize: 20,
+      fontWeight: '800',
+      flexShrink: 1,
+    },
+    readerTitleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      flexShrink: 1,
+      flex: 1,
+    },
+    secondaryTabRail: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.primaryStrong,
+      borderRadius: theme.radius.lg,
+      padding: 4,
+      gap: 4,
+    },
+    secondaryTab: {
+      flex: 1,
+      borderRadius: theme.radius.md,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    secondaryTabActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    secondaryTabText: {
+      color: '#DCE7F7',
+      fontSize: 12,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      textAlign: 'center',
+    },
+    secondaryTabTextActive: {
+      color: '#FFFFFF',
+    },
+    booksSearchCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.lg,
+      padding: layout.panelPadding,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    booksSearchInput: {
+      borderRadius: theme.radius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.borderStrong,
+      backgroundColor: theme.colors.surfaceMuted,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      color: theme.colors.text,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    bookCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.lg,
+      padding: layout.panelPadding,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
+    bookIconWrap: {
+      width: 52,
+      height: 52,
+      borderRadius: 16,
+      backgroundColor: 'rgba(227, 93, 106, 0.14)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    bookCopy: {
+      flex: 1,
+    },
+    bookTitle: {
+      color: theme.colors.text,
+      fontSize: 16,
+      fontWeight: '800',
+      marginBottom: 4,
+    },
+    bookSubtitle: {
+      color: theme.colors.textMuted,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    bookActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    bookActionButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emptyCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.lg,
+      padding: layout.panelPadding,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    emptyTitle: {
+      color: theme.colors.text,
+      fontSize: 18,
+      fontWeight: '800',
+      marginBottom: 6,
+    },
+    emptyBody: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    gridIntroTitle: {
+      color: theme.colors.text,
+      fontSize: 18,
+      fontWeight: '800',
+    },
+    gridWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: layout.gridGap,
+    },
+    numberCard: {
+      height: layout.isCompact ? 82 : 90,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    numberCardActive: {
+      borderColor: theme.colors.accent,
+      backgroundColor: theme.colors.accentSoft,
+    },
+    numberCardValue: {
+      color: theme.colors.text,
+      fontSize: 20,
+      fontWeight: '900',
+      marginBottom: 4,
+    },
+    numberCardValueActive: {
+      color: theme.colors.accent,
+    },
+    numberCardLabel: {
+      color: theme.colors.textMuted,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    numberCardLabelActive: {
+      color: theme.colors.accent,
+    },
+    openWholeChapterButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: theme.colors.accent,
+      borderRadius: theme.radius.lg,
+      paddingVertical: 16,
+    },
+    openWholeChapterText: {
+      color: theme.colors.textOnAccent,
+      fontSize: 15,
+      fontWeight: '800',
+    },
+    readerModeRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: theme.spacing.sm,
+    },
+    readerModePill: {
+      borderRadius: theme.radius.pill,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    readerModePillActive: {
+      backgroundColor: theme.colors.accent,
+      borderColor: theme.colors.accent,
+    },
+    readerModePillText: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    readerModePillTextActive: {
+      color: theme.colors.textOnAccent,
+    },
+    readerMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.md,
+      flexWrap: 'wrap',
+    },
+    readerMetaText: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    readerShareButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    readerShareText: {
+      color: theme.colors.accent,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    readerCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      padding: layout.panelPadding,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...theme.shadows.sm,
+    },
+    parallelColumnHeader: {
+      flexDirection: 'row',
+      gap: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+    },
+    parallelColumnHeading: {
+      flex: 1,
+      color: theme.colors.text,
+      fontSize: layout.dualHeadingSize,
+      fontWeight: '800',
+    },
+    parallelRow: {
+      flexDirection: 'row',
+      gap: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    parallelRowSelected: {
+      backgroundColor: theme.colors.accentSoft,
+      borderRadius: theme.radius.lg,
+      paddingHorizontal: theme.spacing.sm,
+    },
+    parallelColumn: {
+      flex: 1,
+    },
+    parallelText: {
+      color: theme.colors.text,
+      fontSize: 17 * fontScale,
+      lineHeight: 29 * fontScale,
+      fontWeight: '600',
+    },
+    parallelVerseNumber: {
+      color: theme.colors.success,
+      fontWeight: '800',
+    },
+    singleVerseRow: {
+      paddingVertical: theme.spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    singleVerseText: {
+      color: theme.colors.text,
+      fontSize: 18 * fontScale,
+      lineHeight: 30 * fontScale,
+      fontWeight: '600',
+    },
+    readerBottomNav: {
+      flexDirection: 'row',
+      gap: theme.spacing.md,
+    },
+    bottomNavButton: {
+      flex: 1,
+      backgroundColor: theme.colors.primaryStrong,
+      borderRadius: theme.radius.lg,
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    bottomNavButtonDisabled: {
+      backgroundColor: theme.colors.surfaceMuted,
+    },
+    bottomNavText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    bottomNavTextDisabled: {
+      color: theme.colors.textMuted,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: theme.colors.overlay,
+      justifyContent: 'center',
+      padding: theme.spacing.md,
+    },
+    modalCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      maxHeight: '80%',
+      borderWidth: 1,
+      borderColor: theme.colors.borderStrong,
+      overflow: 'hidden',
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: layout.panelPadding,
+      paddingVertical: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    modalTitle: {
+      color: theme.colors.text,
+      fontSize: 18,
+      fontWeight: '800',
+    },
+    modalInput: {
+      margin: layout.panelPadding,
+      marginBottom: theme.spacing.sm,
+      borderRadius: theme.radius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.borderStrong,
+      backgroundColor: theme.colors.surfaceMuted,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      color: theme.colors.text,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    modalResults: {
+      paddingHorizontal: layout.panelPadding,
+      paddingBottom: layout.panelPadding,
+      gap: theme.spacing.md,
+    },
+    modalState: {
+      paddingVertical: theme.spacing.xl,
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    modalStateText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 20,
+      textAlign: 'center',
+    },
+    modalResultCard: {
+      backgroundColor: theme.colors.surfaceRaised,
+      borderRadius: theme.radius.lg,
+      padding: theme.spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    modalResultReference: {
+      color: theme.colors.accent,
+      fontSize: 13,
+      fontWeight: '800',
+      marginBottom: 6,
+    },
+    modalResultText: {
+      color: theme.colors.text,
+      fontSize: 14,
+      lineHeight: 21,
+      fontWeight: '600',
+    },
+    errorCard: {
+      backgroundColor: theme.colors.danger,
+      borderRadius: theme.radius.lg,
+      padding: layout.panelPadding,
+    },
+    errorTitle: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '800',
+      marginBottom: 6,
+    },
+    errorBody: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      lineHeight: 20,
+    },
+  });
+}
