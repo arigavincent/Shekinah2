@@ -11,6 +11,9 @@ import (
 	adminsermons "github.com/ariga/shekinah-backend/internal/admin/sermons"
 	adminupdates "github.com/ariga/shekinah-backend/internal/admin/updates"
 	"github.com/ariga/shekinah-backend/internal/auth"
+	"github.com/ariga/shekinah-backend/internal/bibleversions"
+	"github.com/ariga/shekinah-backend/internal/checkins"
+	"github.com/ariga/shekinah-backend/internal/community"
 	"github.com/ariga/shekinah-backend/internal/config"
 	"github.com/ariga/shekinah-backend/internal/content"
 	"github.com/ariga/shekinah-backend/internal/giving"
@@ -18,6 +21,8 @@ import (
 	"github.com/ariga/shekinah-backend/internal/httpx"
 	"github.com/ariga/shekinah-backend/internal/notifications"
 	"github.com/ariga/shekinah-backend/internal/prayers"
+	"github.com/ariga/shekinah-backend/internal/readingplans"
+	"github.com/ariga/shekinah-backend/internal/testimonies"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -73,6 +78,11 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	givingHandler := giving.NewHandler(db)
 	notificationHandler := notifications.NewHandler(db)
 	prayerHandler := prayers.NewHandler(db)
+	communityHandler := community.NewHandler(db)
+	testimonyHandler := testimonies.NewHandler(db)
+	readingPlanHandler := readingplans.NewHandler(db)
+	checkinHandler := checkins.NewHandler(db)
+	bibleVersionsHandler := bibleversions.NewHandler(db, cfg)
 
 	r.GET("/healthz", health.HandleHealthz(cfg, db))
 	r.Static("/uploads", "./uploads")
@@ -83,6 +93,10 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/home", contentHandler.Home)
 		api.POST("/giving/mpesa/stk-push", givingHandler.STKPush)
 		api.POST("/giving/mpesa/callback", givingHandler.Callback)
+		api.POST("/giving/card/checkout", givingHandler.CardCheckout)
+		api.GET("/giving/card/return", givingHandler.CardReturn)
+		api.GET("/giving/card/mock-checkout/:id", givingHandler.MockCheckoutPage)
+		api.GET("/giving/card/mock-complete/:id", givingHandler.MockComplete)
 		api.GET("/giving/transactions/:id", givingHandler.GetTransaction)
 		api.POST("/notifications/register", notificationHandler.RegisterDevice)
 		api.PATCH("/notifications/preferences", notificationHandler.UpdatePreferences)
@@ -90,6 +104,22 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.POST("/prayer-requests", auth.RequireAuth(authService), prayerHandler.Create)
 		api.GET("/prayer-requests/mine", auth.RequireAuth(authService), prayerHandler.ListMine)
 		api.POST("/prayer-requests/:id/pray", auth.RequireAuth(authService), prayerHandler.Pray)
+		api.GET("/community/messages", communityHandler.List)
+		api.POST("/community/messages", auth.RequireAuth(authService), communityHandler.Create)
+		api.GET("/testimonies", testimonyHandler.List)
+		api.GET("/testimonies/mine", auth.RequireAuth(authService), testimonyHandler.ListMine)
+		api.POST("/testimonies", auth.RequireAuth(authService), testimonyHandler.Create)
+		api.POST("/testimonies/:id/like", auth.RequireAuth(authService), testimonyHandler.Like)
+		api.GET("/reading-plans", readingPlanHandler.List)
+		api.GET("/reading-plans/mine", auth.RequireAuth(authService), readingPlanHandler.List)
+		api.GET("/reading-plans/:id", readingPlanHandler.Detail)
+		api.GET("/reading-plans/:id/mine", auth.RequireAuth(authService), readingPlanHandler.Detail)
+		api.POST("/reading-plans/:id/days/:day/complete", auth.RequireAuth(authService), readingPlanHandler.CompleteDay)
+		api.GET("/checkin/code", auth.RequireAuth(authService), checkinHandler.MemberCode)
+		api.GET("/bible/versions", bibleVersionsHandler.List)
+		api.GET("/bible/versions/:id/download", bibleVersionsHandler.Download)
+		api.GET("/bible/installs", auth.RequireAuth(authService), bibleVersionsHandler.ListInstalled)
+		api.POST("/bible/installs", auth.RequireAuth(authService), bibleVersionsHandler.RecordInstall)
 
 		authGroup := api.Group("/auth")
 		{
@@ -137,6 +167,13 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.GET("/giving/transactions", givingHandler.ListTransactions)
 			adminGroup.GET("/notifications/messages", notificationHandler.ListMessages)
 			adminGroup.POST("/notifications/broadcast", notificationHandler.Broadcast)
+			adminGroup.GET("/community/messages", communityHandler.AdminList)
+			adminGroup.PATCH("/community/messages/:id", communityHandler.AdminUpdate)
+			adminGroup.DELETE("/community/messages/:id", communityHandler.Delete)
+			adminGroup.GET("/testimonies", testimonyHandler.AdminList)
+			adminGroup.PATCH("/testimonies/:id", testimonyHandler.AdminUpdate)
+			adminGroup.GET("/checkins/recent", checkinHandler.Recent)
+			adminGroup.POST("/checkins/verify", checkinHandler.Verify)
 		}
 	}
 

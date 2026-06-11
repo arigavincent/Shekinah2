@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"os"
 	"regexp"
@@ -25,6 +26,15 @@ type Handler struct {
 
 type STKPushRequest struct {
 	Category string `json:"category"`
+	Phone    string `json:"phone"`
+	Amount   int    `json:"amount"`
+	Note     string `json:"note"`
+}
+
+type CardCheckoutRequest struct {
+	Category string `json:"category"`
+	Email    string `json:"email"`
+	Name     string `json:"name"`
 	Phone    string `json:"phone"`
 	Amount   int    `json:"amount"`
 	Note     string `json:"note"`
@@ -116,6 +126,11 @@ func category(value string) string {
 	}
 
 	return cleaned
+}
+
+func emailValid(value string) bool {
+	value = strings.TrimSpace(strings.ToLower(value))
+	return strings.Contains(value, "@") && strings.Contains(value, ".")
 }
 
 func (h Handler) STKPush(c *gin.Context) {
@@ -231,6 +246,191 @@ func (h Handler) STKPush(c *gin.Context) {
 			"message":           firstNonEmpty(stkResponse.CustomerMessage, stkResponse.ResponseDescription, stkResponse.ErrorMessage),
 		},
 	})
+}
+
+func flutterwaveBaseURL() string {
+	return firstNonEmpty(env("FLUTTERWAVE_BASE_URL"), "https://developersandbox-api.flutterwave.com")
+}
+
+func (h Handler) CardCheckout(c *gin.Context) {
+	var req CardCheckoutRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid card giving payload"})
+		return
+	}
+
+	if req.Amount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Amount must be greater than zero"})
+		return
+	}
+
+	if req.Amount > 1000000 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Amount exceeds supported card payment limit"})
+		return
+	}
+
+	if !emailValid(req.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "A valid email address is required"})
+		return
+	}
+
+	txID := newID("card")
+	currency := firstNonEmpty(strings.TrimSpace(env("GIVING_CURRENCY")), "KES")
+
+	_, err := h.db.Exec(
+		c.Request.Context(),
+		`
+			INSERT INTO giving_transactions (
+				id,
+				category,
+				method,
+				phone,
+				email,
+				amount,
+				note,
+				status,
+				currency,
+				provider
+			)
+			VALUES ($1, $2, 'card', $3, $4, $5, $6, 'pending', $7, 'flutterwave')
+		`,
+		txID,
+		category(req.Category),
+		strings.TrimSpace(req.Phone),
+		strings.TrimSpace(strings.ToLower(req.Email)),
+		req.Amount,
+		strings.TrimSpace(req.Note),
+		currency,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create card giving transaction"})
+		return
+	}
+
+	checkoutURL := ""
+	providerReference := txID
+	status := "pending"
+
+	if strings.TrimSpace(env("FLUTTERWAVE_SECRET_KEY")) == "" {
+		checkoutURL = strings.TrimRight(baseURLFromRequest(c), "/") + "/api/v1/giving/card/mock-checkout/" + txID
+	} else {
+		checkoutURL, providerReference, err = h.createFlutterwaveCheckout(c.Request.Context(), txID, req, currency)
+		if err != nil {
+			_ = h.markTransactionFailed(c.Request.Context(), txID, err.Error())
+			c.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
+			return
+		}
+	}
+
+	_, err = h.db.Exec(
+		c.Request.Context(),
+		`
+			UPDATE giving_transactions
+			SET checkout_url = $2,
+			    provider_reference = $3,
+			    status = $4,
+			    updated_at = NOW()
+			WHERE id = $1
+		`,
+		txID,
+		checkoutURL,
+		providerReference,
+		status,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update card giving transaction"})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"transaction": gin.H{
+			"id":          txID,
+			"category":    category(req.Category),
+			"method":      "card",
+			"amount":      req.Amount,
+			"email":       strings.TrimSpace(strings.ToLower(req.Email)),
+			"status":      status,
+			"currency":    currency,
+			"checkoutUrl": checkoutURL,
+			"provider":    "flutterwave",
+			"reference":   providerReference,
+			"message":     "Open the secure checkout page to finish the card payment.",
+		},
+	})
+}
+
+func baseURLFromRequest(c *gin.Context) string {
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	if forwarded := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")); forwarded != "" {
+		scheme = forwarded
+	}
+	return scheme + "://" + c.Request.Host
+}
+
+func (h Handler) createFlutterwaveCheckout(ctx context.Context, txID string, req CardCheckoutRequest, currency string) (string, string, error) {
+	payload := map[string]any{
+		"tx_ref":          txID,
+		"amount":          req.Amount,
+		"currency":        currency,
+		"redirect_url":    firstNonEmpty(env("FLUTTERWAVE_REDIRECT_URL"), "https://example.com/giving/flutterwave/return"),
+		"payment_options": "card",
+		"customer": map[string]any{
+			"email":       strings.TrimSpace(strings.ToLower(req.Email)),
+			"name":        strings.TrimSpace(req.Name),
+			"phonenumber": strings.TrimSpace(req.Phone),
+		},
+		"customizations": map[string]any{
+			"title":       "Shekinah Sons Global Giving",
+			"description": category(req.Category),
+		},
+		"meta": map[string]any{
+			"category": category(req.Category),
+			"note":     strings.TrimSpace(req.Note),
+			"method":   "card",
+		},
+	}
+
+	body, _ := json.Marshal(payload)
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		strings.TrimRight(flutterwaveBaseURL(), "/")+"/payments",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return "", "", err
+	}
+
+	request.Header.Set("Authorization", "Bearer "+env("FLUTTERWAVE_SECRET_KEY"))
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := h.client.Do(request)
+	if err != nil {
+		return "", "", err
+	}
+	defer response.Body.Close()
+
+	var payloadResponse struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+		Data    struct {
+			Link string `json:"link"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(response.Body).Decode(&payloadResponse); err != nil {
+		return "", "", err
+	}
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 || strings.TrimSpace(payloadResponse.Data.Link) == "" {
+		return "", "", fmt.Errorf("%s", firstNonEmpty(payloadResponse.Message, "Failed to initialize card checkout"))
+	}
+
+	return strings.TrimSpace(payloadResponse.Data.Link), txID, nil
 }
 
 func validateMpesaConfig() string {
@@ -396,6 +596,89 @@ func (h Handler) Callback(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ResultCode": 0, "ResultDesc": "Accepted"})
 }
 
+func (h Handler) CardReturn(c *gin.Context) {
+	txRef := strings.TrimSpace(c.Query("tx_ref"))
+	status := strings.TrimSpace(strings.ToLower(c.Query("status")))
+	transactionID := strings.TrimSpace(c.Query("transaction_id"))
+
+	if txRef != "" {
+		nextStatus := "pending"
+		description := "Waiting for card provider confirmation."
+
+		switch status {
+		case "successful", "completed":
+			nextStatus = "success"
+			description = "Card payment reported as successful."
+		case "failed", "cancelled":
+			nextStatus = status
+			description = "Card payment did not complete."
+		}
+
+		_, _ = h.db.Exec(
+			c.Request.Context(),
+			`
+				UPDATE giving_transactions
+				SET status = $2,
+				    provider_reference = COALESCE(NULLIF($3, ''), provider_reference),
+				    result_description = $4,
+				    updated_at = NOW()
+				WHERE id = $1
+			`,
+			txRef,
+			nextStatus,
+			transactionID,
+			description,
+		)
+	}
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, "<html><body style='background:#000;color:#fff;font-family:sans-serif;padding:32px;'><h2>Payment received</h2><p>You can return to the Shekinah app and refresh Giving History.</p></body></html>")
+}
+
+func (h Handler) MockCheckoutPage(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.String(http.StatusBadRequest, "Missing transaction id")
+		return
+	}
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	page := `
+	<html>
+		<body style="background:#000;color:#fff;font-family:sans-serif;padding:32px;">
+			<h2>Flutterwave Sandbox Mock</h2>
+			<p>This local page simulates a hosted card checkout for transaction {{.ID}}.</p>
+			<p><a style="color:#d4af37" href="/api/v1/giving/card/mock-complete/{{.ID}}">Mark Payment Successful</a></p>
+		</body>
+	</html>`
+
+	_ = template.Must(template.New("mock").Parse(page)).Execute(c.Writer, gin.H{"ID": id})
+}
+
+func (h Handler) MockComplete(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.String(http.StatusBadRequest, "Missing transaction id")
+		return
+	}
+
+	_, _ = h.db.Exec(
+		c.Request.Context(),
+		`
+			UPDATE giving_transactions
+			SET status = 'success',
+			    provider_reference = COALESCE(NULLIF(provider_reference, ''), id),
+			    result_description = 'Sandbox mock payment completed.',
+			    updated_at = NOW()
+			WHERE id = $1
+		`,
+		id,
+	)
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, "<html><body style='background:#000;color:#fff;font-family:sans-serif;padding:32px;'><h2>Payment marked successful</h2><p>Return to the Shekinah app and refresh Giving History.</p></body></html>")
+}
+
 func (h Handler) GetTransaction(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 
@@ -419,7 +702,8 @@ func (h Handler) ListTransactions(c *gin.Context) {
 		`
 			SELECT id, category, method, phone, amount, note, status,
 			       checkout_request_id, merchant_request_id, mpesa_receipt_number,
-			       COALESCE(result_code, -1), result_description, created_at, updated_at
+			       COALESCE(result_code, -1), result_description, created_at, updated_at,
+			       email, currency, provider, checkout_url, provider_reference
 			FROM giving_transactions
 			ORDER BY created_at DESC
 			LIMIT 200
@@ -456,7 +740,8 @@ func (h Handler) getTransaction(ctx context.Context, id string) (gin.H, bool, er
 		`
 			SELECT id, category, method, phone, amount, note, status,
 			       checkout_request_id, merchant_request_id, mpesa_receipt_number,
-			       COALESCE(result_code, -1), result_description, created_at, updated_at
+			       COALESCE(result_code, -1), result_description, created_at, updated_at,
+			       email, currency, provider, checkout_url, provider_reference
 			FROM giving_transactions
 			WHERE id = $1
 			LIMIT 1
@@ -492,6 +777,11 @@ func scanTransaction(row scanner) (gin.H, error) {
 		resultDescription string
 		createdAt         time.Time
 		updatedAt         time.Time
+		email             string
+		currency          string
+		provider          string
+		checkoutURL       string
+		providerReference string
 	)
 
 	err := row.Scan(
@@ -509,6 +799,11 @@ func scanTransaction(row scanner) (gin.H, error) {
 		&resultDescription,
 		&createdAt,
 		&updatedAt,
+		&email,
+		&currency,
+		&provider,
+		&checkoutURL,
+		&providerReference,
 	)
 	if err != nil {
 		return nil, err
@@ -534,6 +829,11 @@ func scanTransaction(row scanner) (gin.H, error) {
 		"resultDescription":  resultDescription,
 		"createdAt":          createdAt,
 		"updatedAt":          updatedAt,
+		"email":              email,
+		"currency":           currency,
+		"provider":           provider,
+		"checkoutUrl":        checkoutURL,
+		"providerReference":  providerReference,
 	}, nil
 }
 
