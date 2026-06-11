@@ -14,6 +14,7 @@ import { useContent } from "../providers/ContentProvider";
 import { PHASE1_IMAGES } from "../content";
 import { resolveMediaUrl } from "../utils/mediaUrl";
 import { C } from "../constants/theme";
+import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
@@ -96,7 +97,8 @@ export function DevotionsScreen({
   tab,
   setTab,
   favorites = [],
-  setFavorites
+  setFavorites,
+  appLanguage = "en"
 }) {
   const [query, setQuery] = useState("");
   const { data, loading, reload } = useContent();
@@ -125,18 +127,20 @@ export function DevotionsScreen({
         title="Devotions"
         go={go}
         onMenu={openDrawer}
+        appLanguage={appLanguage}
       />
 
       <Tabs
         tabs={["Latest", "Favourites"]}
         active={tab}
         setActive={handleSetTab}
+        appLanguage={appLanguage}
       />
 
       <View style={s.pad}>
         <TextInput
           style={s.searchInput}
-          placeholder={`Search ${tab.toLowerCase()}`}
+          placeholder={tab === "Latest" ? tr(appLanguage, "Search latest") : tr(appLanguage, "Search favourites")}
           placeholderTextColor={C.faint}
           value={query}
           onChangeText={setQuery}
@@ -157,11 +161,11 @@ export function DevotionsScreen({
       >
         {visible.length === 0 ? (
           <EmptyState
-            title={tab === "Favourites" ? "No Favourites" : "No Devotions"}
+            title={tab === "Favourites" ? tr(appLanguage, "No Favourites") : tr(appLanguage, "No Devotions")}
             text={
               tab === "Favourites"
-                ? "Tap the heart icon on a devotion to save it here."
-                : "New devotions will appear here."
+                ? tr(appLanguage, "Tap the heart icon on a devotion to save it here.")
+                : tr(appLanguage, "New devotions will appear here.")
             }
           />
         ) : (

@@ -13,6 +13,7 @@ import YoutubePlayer from "react-native-youtube-iframe";
 
 import { PHASE1_IMAGES } from "../content";
 import { C } from "../constants/theme";
+import { tr } from "../i18n/labels";
 import { useContent } from "../providers/ContentProvider";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
@@ -35,7 +36,7 @@ function playablePastService(item) {
   return item?.type === "video" && Boolean(extractYouTubeId(mediaUrl) || isVideoUrl(mediaUrl));
 }
 
-export function LiveScreen({ go, openDrawer, openSermon }) {
+export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
   const { width } = useWindowDimensions();
   const [playing, setPlaying] = useState(true);
@@ -56,7 +57,7 @@ export function LiveScreen({ go, openDrawer, openSermon }) {
 
   return (
     <Screen>
-      <TopBar title="Live Stream" go={go} onMenu={openDrawer} />
+      <TopBar title="Live Stream" go={go} onMenu={openDrawer} appLanguage={appLanguage} />
       <ScrollView
         contentContainerStyle={s.scrollPad}
         refreshControl={
@@ -97,29 +98,29 @@ export function LiveScreen({ go, openDrawer, openSermon }) {
                     size={17}
                     color={C.white}
                   />
-                  <Text style={s.actionText}>{playing ? "Pause" : "Play"}</Text>
+                  <Text style={s.actionText}>{tr(appLanguage, playing ? "Pause" : "Play")}</Text>
                 </Pressable>
 
                 <Pressable style={s.actionBtn} onPress={openLiveOnYouTube}>
                   <Ionicons name="logo-youtube" size={17} color={C.white} />
-                  <Text style={s.actionText}>Open YouTube</Text>
+                  <Text style={s.actionText}>{tr(appLanguage, "Open YouTube")}</Text>
                 </Pressable>
               </View>
             ) : null}
 
             <View style={s.reactionStrip}>
-              {["Amen", "Glory", "Hallelujah", "Praying", "Blessed"].map(x => <Text key={x} style={s.reaction}>{x}</Text>)}
+              {["Amen", "Glory", "Hallelujah", "Praying", "Blessed"].map(x => <Text key={x} style={s.reaction}>{tr(appLanguage, x)}</Text>)}
             </View>
           </>
         ) : (
-          <EmptyState title="No live service right now" text={`Next service: ${live.nextService}`} />
+          <EmptyState title={tr(appLanguage, "No live service right now")} text={`${tr(appLanguage, "Next service:")} ${live.nextService}`} />
         )}
-        <SectionHeader title="Past Services" />
+        <SectionHeader title="Past Services" appLanguage={appLanguage} />
         {pastServices.length === 0 ? (
           <View style={s.plainCard}>
-            <Text style={s.rowTitle}>No past services found</Text>
+            <Text style={s.rowTitle}>{tr(appLanguage, "No past services found")}</Text>
             <Text style={s.mutedText}>
-              Past services will appear here.
+              {tr(appLanguage, "Past services will appear here.")}
             </Text>
           </View>
         ) : (

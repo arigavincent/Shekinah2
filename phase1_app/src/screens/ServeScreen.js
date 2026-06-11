@@ -105,7 +105,7 @@ function MinistryCard({ ministry, active, onPress }) {
   );
 }
 
-export function ServeScreen({ go }) {
+export function ServeScreen({ go, appLanguage = "en" }) {
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -212,7 +212,7 @@ export function ServeScreen({ go }) {
 
   return (
     <Screen>
-      <TopBar title="Serve" go={go} back="Home" />
+      <TopBar title="Serve" go={go} back="Home" appLanguage={appLanguage} />
 
       <ScrollView
         contentContainerStyle={s.scrollPad}

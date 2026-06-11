@@ -20,6 +20,7 @@ import {
   registerAndSaveSession
 } from "../auth/authSession";
 import { API_CONFIG } from "../../config/apiConfig";
+import { APP_LANGUAGES, tr } from "../../i18n/labels";
 
 const C = {
   black: "#000000",
@@ -35,7 +36,7 @@ const C = {
   red: "#F13B3B"
 };
 
-export function AuthProfileScreen({ go }) {
+export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage }) {
   const [mode, setMode] = useState("Login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -79,17 +80,17 @@ export function AuthProfileScreen({ go }) {
     const cleanEmail = email.trim().toLowerCase();
 
     if (mode === "Register" && cleanName.length < 2) {
-      Alert.alert("Check Form", "Full name is required.");
+      Alert.alert(tr(appLanguage, "Check Form"), tr(appLanguage, "Full name is required."));
       return;
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      Alert.alert("Check Form", "Enter a valid email address.");
+      Alert.alert(tr(appLanguage, "Check Form"), tr(appLanguage, "Enter a valid email address."));
       return;
     }
 
     if (password.length < 8) {
-      Alert.alert("Check Form", "Password must be at least 8 characters.");
+      Alert.alert(tr(appLanguage, "Check Form"), tr(appLanguage, "Password must be at least 8 characters."));
       return;
     }
 
@@ -103,7 +104,7 @@ export function AuthProfileScreen({ go }) {
 
       setSession(result);
     } catch (error) {
-      Alert.alert("Auth Failed", error?.message || "Unable to authenticate.");
+      Alert.alert(tr(appLanguage, "Auth Failed"), error?.message || tr(appLanguage, "Unable to authenticate."));
     } finally {
       setSubmitting(false);
     }
@@ -116,7 +117,7 @@ export function AuthProfileScreen({ go }) {
       await logoutSession();
       setSession({ token: null, user: null });
     } catch (error) {
-      Alert.alert("Logout Failed", error?.message || "Unable to logout.");
+      Alert.alert(tr(appLanguage, "Logout Failed"), error?.message || tr(appLanguage, "Unable to logout."));
     } finally {
       setSubmitting(false);
     }
@@ -125,10 +126,10 @@ export function AuthProfileScreen({ go }) {
   if (loading) {
     return (
       <View style={s.screen}>
-        <Top go={go} />
+        <Top go={go} appLanguage={appLanguage} />
         <View style={s.center}>
           <ActivityIndicator color={C.gold} />
-          <Text style={s.muted}>Loading session...</Text>
+          <Text style={s.muted}>{tr(appLanguage, "Loading session...")}</Text>
         </View>
       </View>
     );
@@ -139,7 +140,7 @@ export function AuthProfileScreen({ go }) {
       style={s.screen}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <Top go={go} />
+      <Top go={go} appLanguage={appLanguage} />
 
       <ScrollView
         contentContainerStyle={s.content}
@@ -151,12 +152,18 @@ export function AuthProfileScreen({ go }) {
           <Text style={s.apiText}>{API_CONFIG.baseUrl}</Text>
         </View>
 
+        <LanguageCard
+          appLanguage={appLanguage}
+          setAppLanguage={setAppLanguage}
+        />
+
         {signedIn ? (
           <SignedInView
             user={session.user}
             go={go}
             logout={logout}
             submitting={submitting}
+            appLanguage={appLanguage}
           />
         ) : (
           <SignedOutView
@@ -170,6 +177,7 @@ export function AuthProfileScreen({ go }) {
             setPassword={setPassword}
             submitAuth={submitAuth}
             submitting={submitting}
+            appLanguage={appLanguage}
           />
         )}
       </ScrollView>
@@ -177,7 +185,7 @@ export function AuthProfileScreen({ go }) {
   );
 }
 
-function Top({ go }) {
+function Top({ go, appLanguage = "en" }) {
   return (
     <View style={s.topBar}>
       <Pressable style={s.iconBtn} onPress={() => go("Home")}>
@@ -185,11 +193,34 @@ function Top({ go }) {
       </Pressable>
 
       <View style={s.titleWrap}>
-        <Text style={s.title}>Profile</Text>
-        <Text style={s.subtitle}>Account and member access</Text>
+        <Text style={s.title}>{tr(appLanguage, "Profile")}</Text>
+        <Text style={s.subtitle}>{tr(appLanguage, "Account and member access")}</Text>
       </View>
 
       <View style={s.iconSpacer} />
+    </View>
+  );
+}
+
+function LanguageCard({ appLanguage, setAppLanguage }) {
+  return (
+    <View style={s.card}>
+      <Text style={s.sectionTitle}>{tr(appLanguage, "Language Preference")}</Text>
+      <Text style={s.noteText}>{tr(appLanguage, "Choose how the app labels and buttons appear.")}</Text>
+
+      <View style={[s.modeRow, { marginTop: 14, marginBottom: 0 }]}>
+        {APP_LANGUAGES.map(item => (
+          <Pressable
+            key={item.key}
+            style={[s.modeBtn, appLanguage === item.key && s.modeActive]}
+            onPress={() => setAppLanguage?.(item.key)}
+          >
+            <Text style={[s.modeText, appLanguage === item.key && s.modeTextActive]}>
+              {item.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
@@ -204,7 +235,8 @@ function SignedOutView({
   password,
   setPassword,
   submitAuth,
-  submitting
+  submitting,
+  appLanguage
 }) {
   return (
     <>
@@ -213,9 +245,9 @@ function SignedOutView({
           <Ionicons name="person-outline" size={36} color={C.gold} />
         </View>
 
-        <Text style={s.heroTitle}>Welcome</Text>
+        <Text style={s.heroTitle}>{tr(appLanguage, "Welcome")}</Text>
         <Text style={s.heroText}>
-          Sign in to access saved devotions, giving history, prayer requests, and member features.
+          {tr(appLanguage, "Sign in to access saved devotions, giving history, prayer requests, and member features.")}
         </Text>
       </View>
 
@@ -227,21 +259,21 @@ function SignedOutView({
             onPress={() => setMode(item)}
           >
             <Text style={[s.modeText, mode === item && s.modeTextActive]}>
-              {item}
+              {tr(appLanguage, item)}
             </Text>
           </Pressable>
         ))}
       </View>
 
       <View style={s.card}>
-        <Text style={s.sectionTitle}>{mode}</Text>
+        <Text style={s.sectionTitle}>{tr(appLanguage, mode)}</Text>
 
         {mode === "Register" ? (
           <>
-            <Text style={s.inputLabel}>Full Name</Text>
+            <Text style={s.inputLabel}>{tr(appLanguage, "Full Name")}</Text>
             <TextInput
               style={s.input}
-              placeholder="Full name"
+              placeholder={tr(appLanguage, "Full Name")}
               placeholderTextColor={C.faint}
               value={name}
               onChangeText={setName}
@@ -249,7 +281,7 @@ function SignedOutView({
           </>
         ) : null}
 
-        <Text style={s.inputLabel}>Email</Text>
+        <Text style={s.inputLabel}>{tr(appLanguage, "Email")}</Text>
         <TextInput
           style={s.input}
           placeholder="name@example.com"
@@ -260,10 +292,10 @@ function SignedOutView({
           onChangeText={setEmail}
         />
 
-        <Text style={s.inputLabel}>Password</Text>
+        <Text style={s.inputLabel}>{tr(appLanguage, "Password")}</Text>
         <TextInput
           style={s.input}
-          placeholder="Minimum 8 characters"
+          placeholder={tr(appLanguage, "Minimum 8 characters")}
           placeholderTextColor={C.faint}
           secureTextEntry
           value={password}
@@ -274,21 +306,21 @@ function SignedOutView({
           {submitting ? (
             <ActivityIndicator color={C.black} />
           ) : (
-            <Text style={s.primaryText}>{mode}</Text>
+            <Text style={s.primaryText}>{tr(appLanguage, mode)}</Text>
           )}
         </Pressable>
       </View>
 
       <View style={s.note}>
         <Text style={s.noteText}>
-          Phase 2 auth is live against the Go API. Profile data is now backed by JWT login and PostgreSQL users.
+          {tr(appLanguage, "Phase 2 auth is live against the Go API. Profile data is now backed by JWT login and PostgreSQL users.")}
         </Text>
       </View>
     </>
   );
 }
 
-function SignedInView({ user, go, logout, submitting }) {
+function SignedInView({ user, go, logout, submitting, appLanguage }) {
   return (
     <>
       <View style={s.profileCard}>
@@ -305,34 +337,34 @@ function SignedInView({ user, go, logout, submitting }) {
       </View>
 
       <View style={s.stats}>
-        <Stat label="Sermons" value="12" />
-        <Stat label="Devotions" value="8" />
-        <Stat label="Given" value="Hidden" />
+        <Stat label={tr(appLanguage, "Sermons")} value="12" />
+        <Stat label={tr(appLanguage, "Devotions")} value="8" />
+        <Stat label={tr(appLanguage, "Given")} value={tr(appLanguage, "Hidden")} />
       </View>
 
       <View style={s.card}>
-        <Text style={s.sectionTitle}>Account</Text>
+        <Text style={s.sectionTitle}>{tr(appLanguage, "Account")}</Text>
         <Info label="User ID" value={user.id} />
-        <Info label="Role" value={user.role} />
-        <Info label="Active" value={String(user.isActive)} />
-        <Info label="Created" value={user.createdAt} />
+        <Info label={tr(appLanguage, "Role")} value={user.role} />
+        <Info label={tr(appLanguage, "Active")} value={String(user.isActive)} />
+        <Info label={tr(appLanguage, "Created")} value={user.createdAt} />
       </View>
 
       <View style={s.card}>
-        <Text style={s.sectionTitle}>Quick Access</Text>
+        <Text style={s.sectionTitle}>{tr(appLanguage, "Quick Access")}</Text>
 
-        <MenuRow label="My Downloads" onPress={() => go("Downloads")} />
-        <MenuRow label="Saved Devotions" onPress={() => go("Devotions")} />
-        <MenuRow label="Giving History" onPress={() => go("Giving")} />
-        <MenuRow label="My Prayer Requests" onPress={() => go("Prayer")} />
-        <MenuRow label="Notification Settings" onPress={() => go("Notifications")} />
+        <MenuRow label={tr(appLanguage, "My Downloads")} onPress={() => go("Downloads")} />
+        <MenuRow label={tr(appLanguage, "Saved Devotions")} onPress={() => go("Devotions")} />
+        <MenuRow label={tr(appLanguage, "Giving History")} onPress={() => go("Giving")} />
+        <MenuRow label={tr(appLanguage, "My Prayer Requests")} onPress={() => go("Prayer")} />
+        <MenuRow label={tr(appLanguage, "Notification Settings")} onPress={() => go("Notifications")} />
       </View>
 
       <Pressable style={s.logoutBtn} onPress={logout} disabled={submitting}>
         {submitting ? (
           <ActivityIndicator color={C.red} />
         ) : (
-          <Text style={s.logoutText}>Logout</Text>
+          <Text style={s.logoutText}>{tr(appLanguage, "Logout")}</Text>
         )}
       </Pressable>
     </>

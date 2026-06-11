@@ -4,9 +4,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { brandLogo } from "../constants/assets";
 import { C } from "../constants/theme";
+import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 
-export function TopBar({ title, go, right, back, onMenu }) {
+export function TopBar({ title, go, right, back, onMenu, appLanguage = "en" }) {
   const handleLeftPress = () => {
     if (back) {
       go(back);
@@ -30,7 +31,7 @@ export function TopBar({ title, go, right, back, onMenu }) {
 
       <View style={s.logoWrap}>
         <Image source={brandLogo} style={s.logo} resizeMode="contain" />
-        <Text style={s.logoText}>{title || "Shekinah Sons Global"}</Text>
+        <Text style={s.logoText}>{tr(appLanguage, title || "Shekinah Sons Global")}</Text>
       </View>
 
       <View style={s.topRight}>{right}</View>

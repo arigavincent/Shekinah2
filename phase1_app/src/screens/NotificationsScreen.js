@@ -14,6 +14,7 @@ import {
   DEFAULT_NOTIFICATION_PREFS,
   NOTIFICATION_ITEMS
 } from "../constants/storage";
+import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
@@ -31,7 +32,7 @@ function enabledCount(preferences) {
   );
 }
 
-function NotificationSummary({ preferences }) {
+function NotificationSummary({ preferences, appLanguage }) {
   const count = enabledCount(preferences);
   const total = NOTIFICATION_ITEMS.length;
   const allEnabled = count === total;
@@ -59,12 +60,12 @@ function NotificationSummary({ preferences }) {
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={[s.rowTitle, { color: C.white }]}>Notification Preferences</Text>
+          <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Notification Preferences")}</Text>
           <Text style={[s.mutedText, { color: C.muted }]}>
             {count} of {total} enabled
           </Text>
           <Text style={[s.goldSmall, { color: C.gold }]}>
-            Device preferences are ready
+            {tr(appLanguage, "Device preferences are ready")}
           </Text>
         </View>
       </View>
@@ -89,7 +90,7 @@ function ActionCard({ icon, title, text, onPress }) {
   );
 }
 
-export function NotificationsScreen({ go, preferences, setPreferences }) {
+export function NotificationsScreen({ go, preferences, setPreferences, appLanguage = "en" }) {
   const count = useMemo(() => enabledCount(preferences), [preferences]);
   const allEnabled = count === NOTIFICATION_ITEMS.length;
 
@@ -150,7 +151,7 @@ export function NotificationsScreen({ go, preferences, setPreferences }) {
       );
     } catch (error) {
       Alert.alert(
-        "Push Registration Failed",
+        tr(appLanguage, "Push Registration Failed"),
         error instanceof Error ? error.message : "Unable to register this device."
       );
     }
@@ -170,7 +171,7 @@ export function NotificationsScreen({ go, preferences, setPreferences }) {
       );
     } catch (error) {
       Alert.alert(
-        "Local Test Failed",
+        tr(appLanguage, "Local Test Failed"),
         error instanceof Error ? error.message : "Unable to schedule a local notification."
       );
     }
@@ -178,16 +179,16 @@ export function NotificationsScreen({ go, preferences, setPreferences }) {
 
   function openDeviceSettings() {
     Linking.openSettings().catch(() => {
-      Alert.alert("Settings unavailable", "Open your phone settings manually.");
+      Alert.alert(tr(appLanguage, "Settings unavailable"), tr(appLanguage, "Open your phone settings manually."));
     });
   }
 
   return (
     <Screen>
-      <TopBar title="Notifications" go={go} back="Home" />
+      <TopBar title="Notifications" go={go} back="Home" appLanguage={appLanguage} />
 
       <ScrollView contentContainerStyle={s.scrollPad}>
-        <NotificationSummary preferences={preferences} />
+        <NotificationSummary preferences={preferences} appLanguage={appLanguage} />
 
         <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
           <Pressable
@@ -202,7 +203,7 @@ export function NotificationsScreen({ go, preferences, setPreferences }) {
             onPress={enableAll}
           >
             <Ionicons name="checkmark-circle-outline" size={18} color={C.gold} />
-            <Text style={[s.secondaryText, { color: C.gold }]}>Enable All</Text>
+            <Text style={[s.secondaryText, { color: C.gold }]}>{tr(appLanguage, "Enable All")}</Text>
           </Pressable>
 
           <Pressable
@@ -210,50 +211,50 @@ export function NotificationsScreen({ go, preferences, setPreferences }) {
             onPress={disableAll}
           >
             <Ionicons name="close-circle-outline" size={18} color={C.gold} />
-            <Text style={[s.secondaryText, { color: C.gold }]}>Disable All</Text>
+            <Text style={[s.secondaryText, { color: C.gold }]}>{tr(appLanguage, "Disable All")}</Text>
           </Pressable>
         </View>
 
         <ActionCard
           icon="notifications-outline"
-          title="Register Remote Push"
-          text="Use this on a development build or release app to register this device for backend broadcasts."
+          title={tr(appLanguage, "Register Remote Push")}
+          text={tr(appLanguage, "Use this on a development build or release app to register this device for backend broadcasts.")}
           onPress={requestPushPermission}
         />
 
         <ActionCard
           icon="flash-outline"
-          title="Send Local Test"
-          text="Works in Expo Go on Android. Tapping the notification should open the Live screen."
+          title={tr(appLanguage, "Send Local Test")}
+          text={tr(appLanguage, "Works in Expo Go on Android. Tapping the notification should open the Live screen.")}
           onPress={sendLocalTestNotification}
         />
 
         <ActionCard
           icon="settings-outline"
-          title="Open Device Settings"
-          text="Manage Android notification permissions for this app."
+          title={tr(appLanguage, "Open Device Settings")}
+          text={tr(appLanguage, "Manage Android notification permissions for this app.")}
           onPress={openDeviceSettings}
         />
 
-        <Text style={[s.sectionTitle, { marginTop: 12 }]}>Alert Types</Text>
+        <Text style={[s.sectionTitle, { marginTop: 12 }]}>{tr(appLanguage, "Alert Types")}</Text>
 
         {NOTIFICATION_ITEMS.map(item => (
           <Setting
             key={item.key}
-            label={item.label}
-            value={preferences[item.key] ? "Enabled" : "Disabled"}
+            label={tr(appLanguage, item.label)}
+            value={preferences[item.key] ? tr(appLanguage, "Enabled") : tr(appLanguage, "Disabled")}
             onPress={() => togglePreference(item.key)}
           />
         ))}
 
         <Pressable style={s.primaryBtn} onPress={resetDefaults}>
-          <Text style={s.primaryText}>Reset Defaults</Text>
+          <Text style={s.primaryText}>{tr(appLanguage, "Reset Defaults")}</Text>
         </Pressable>
 
         <View style={s.formNote}>
           <Ionicons name="information-circle-outline" size={20} color={C.gold} />
           <Text style={s.formNoteText}>
-            Expo Go on Android can test local notifications, but remote push registration and admin broadcasts require a development build or release app.
+            {tr(appLanguage, "Expo Go on Android can test local notifications, but remote push registration and admin broadcasts require a development build or release app.")}
           </Text>
         </View>
       </ScrollView>

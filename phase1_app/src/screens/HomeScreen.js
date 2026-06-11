@@ -25,6 +25,7 @@ import {
   EventMiniCard
 } from "../components/Cards";
 import { useDownloadsMap } from "../hooks/useDownloadsMap";
+import { tr } from "../i18n/labels";
 import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
 import {
   formatPlaybackTime,
@@ -108,7 +109,7 @@ function playableClipFromContent(item) {
   };
 }
 
-function HomeHero({ live, featuredVideo, go }) {
+function HomeHero({ live, featuredVideo, go, appLanguage }) {
   const heroImage = featuredVideo
     ? sermonThumbnail(featuredVideo, PHASE1_IMAGES.sermon)
     : PHASE1_IMAGES.crowd;
@@ -138,7 +139,7 @@ function HomeHero({ live, featuredVideo, go }) {
           }}
         >
           <Text style={{ color: C.white, fontWeight: "900", fontSize: 12 }}>
-            {live?.isLive ? "LIVE NOW" : "NEXT SERVICE"}
+            {tr(appLanguage, live?.isLive ? "LIVE NOW" : "NEXT SERVICE")}
           </Text>
         </View>
 
@@ -162,7 +163,7 @@ function HomeHero({ live, featuredVideo, go }) {
         </Text>
 
         <Text style={{ color: C.muted, fontSize: 14, fontWeight: "800", marginTop: 8 }}>
-          {live?.isLive ? "Join the service now." : live?.nextService || "Stay connected to the word, worship, and prayer."}
+          {live?.isLive ? tr(appLanguage, "Join the service now.") : live?.nextService || tr(appLanguage, "Stay connected to the word, worship, and prayer.")}
         </Text>
 
         <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
@@ -177,7 +178,7 @@ function HomeHero({ live, featuredVideo, go }) {
             onPress={() => go("Live")}
           >
             <Text style={{ color: C.black, fontWeight: "900" }}>
-              {live?.isLive ? "Watch Live" : "Open Live"}
+              {tr(appLanguage, live?.isLive ? "Watch Live" : "Open Live")}
             </Text>
           </Pressable>
 
@@ -193,7 +194,7 @@ function HomeHero({ live, featuredVideo, go }) {
             }}
             onPress={() => go("Sermons")}
           >
-            <Text style={{ color: C.white, fontWeight: "900" }}>Sermons</Text>
+            <Text style={{ color: C.white, fontWeight: "900" }}>{tr(appLanguage, "Sermons")}</Text>
           </Pressable>
         </View>
       </View>
@@ -201,7 +202,7 @@ function HomeHero({ live, featuredVideo, go }) {
   );
 }
 
-function QuickActions({ go }) {
+function QuickActions({ go, appLanguage }) {
   const actions = [
     { label: "Give", icon: "heart-outline", screen: "Giving" },
     { label: "Prayer", icon: "flame-outline", screen: "Prayer" },
@@ -228,7 +229,7 @@ function QuickActions({ go }) {
         >
           <Ionicons name={action.icon} size={21} color={C.gold} />
           <Text style={{ color: C.white, fontSize: 12, fontWeight: "900" }}>
-            {action.label}
+            {tr(appLanguage, action.label)}
           </Text>
         </Pressable>
       ))}
@@ -236,7 +237,7 @@ function QuickActions({ go }) {
   );
 }
 
-function FeaturedMediaCard({ item, onPress, progressEntry, downloadEntry }) {
+function FeaturedMediaCard({ item, onPress, progressEntry, downloadEntry, appLanguage }) {
   if (!item) return null;
 
   const thumbnail = sermonThumbnail(item, PHASE1_IMAGES.sermon);
@@ -316,7 +317,7 @@ function FeaturedMediaCard({ item, onPress, progressEntry, downloadEntry }) {
           {showContinue ? (
             <>
               <Text style={{ color: C.gold, fontSize: 12, fontWeight: "900", marginTop: 8 }}>
-                Continue · {formatPlaybackTime(progressEntry.positionMs)} / {formatPlaybackTime(progressEntry.durationMs)}
+                {tr(appLanguage, "Continue")} · {formatPlaybackTime(progressEntry.positionMs)} / {formatPlaybackTime(progressEntry.durationMs)}
               </Text>
 
               <View
@@ -345,7 +346,7 @@ function FeaturedMediaCard({ item, onPress, progressEntry, downloadEntry }) {
   );
 }
 
-function DevotionPreview({ devotion, go }) {
+function DevotionPreview({ devotion, go, appLanguage }) {
   if (!devotion) return null;
 
   return (
@@ -357,7 +358,7 @@ function DevotionPreview({ devotion, go }) {
         <Image source={{ uri: devotionImage(devotion) }} style={s.devotionThumb} />
 
         <View style={s.badgeOnImage}>
-          <Text style={s.badgeText}>Today</Text>
+          <Text style={s.badgeText}>{tr(appLanguage, "Today")}</Text>
         </View>
       </View>
 
@@ -365,7 +366,7 @@ function DevotionPreview({ devotion, go }) {
         <Text style={s.cardTitle}>{devotion.title}</Text>
 
         <Text style={s.mutedText} numberOfLines={3}>
-          {devotion.excerpt || devotion.body || "Read today's devotion."}
+          {devotion.excerpt || devotion.body || tr(appLanguage, "Read today's devotion.")}
         </Text>
 
         <Text style={s.goldSmall}>{devotion.date || devotion.devotionDate || ""}</Text>
@@ -390,7 +391,7 @@ function UpdateRow({ item, go }) {
   );
 }
 
-export function HomeScreen({ go, openDrawer, openSermon }) {
+export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
   const progressMap = usePlaybackProgressMap();
   const downloads = useDownloadsMap();
@@ -428,6 +429,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
       <TopBar
         go={go}
         onMenu={openDrawer}
+        appLanguage={appLanguage}
         right={<IconButton name="search-outline" onPress={() => go("Search")} />}
       />
 
@@ -443,17 +445,17 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
           />
         }
       >
-        <HomeHero live={data.live} featuredVideo={featuredVideo} go={go} />
+        <HomeHero live={data.live} featuredVideo={featuredVideo} go={go} appLanguage={appLanguage} />
 
-        <QuickActions go={go} />
+        <QuickActions go={go} appLanguage={appLanguage} />
 
-        <DevotionPreview devotion={todayDevotion} go={go} />
+        <DevotionPreview devotion={todayDevotion} go={go} appLanguage={appLanguage} />
 
-        <ScriptureCard scripture={data.scripture} />
+        <ScriptureCard scripture={data.scripture} appLanguage={appLanguage} />
 
         {continuingSermons.length > 0 ? (
           <>
-            <SectionHeader title="Continue Listening" onPress={() => go("Sermons")} />
+            <SectionHeader title="Continue Listening" onPress={() => go("Sermons")} appLanguage={appLanguage} />
             <Horizontal>
               {continuingSermons.map(item => (
                 <FeaturedMediaCard
@@ -461,6 +463,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
                   item={item}
                   downloadEntry={downloads.bySermonId[item.id]}
                   progressEntry={progressMap[item.id]}
+                  appLanguage={appLanguage}
                   onPress={() => openSermon(item)}
                 />
               ))}
@@ -468,13 +471,14 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
           </>
         ) : null}
 
-        <SectionHeader title="Featured Sermons" onPress={() => go("Sermons")} />
+        <SectionHeader title="Featured Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
         <Horizontal>
           {featuredVideo ? (
             <FeaturedMediaCard
               item={featuredVideo}
               downloadEntry={downloads.bySermonId[featuredVideo.id]}
               progressEntry={progressMap[featuredVideo.id]}
+              appLanguage={appLanguage}
               onPress={() => openSermon(featuredVideo)}
             />
           ) : null}
@@ -484,6 +488,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
               item={featuredAudio}
               downloadEntry={downloads.bySermonId[featuredAudio.id]}
               progressEntry={progressMap[featuredAudio.id]}
+              appLanguage={appLanguage}
               onPress={() => openSermon(featuredAudio)}
             />
           ) : null}
@@ -494,6 +499,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
               item={item}
               downloadEntry={downloads.bySermonId[item.id]}
               progressEntry={progressMap[item.id]}
+              appLanguage={appLanguage}
               onPress={() => openSermon(item)}
             />
           ))}
@@ -501,7 +507,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
 
         {playableClips.length > 0 ? (
           <>
-            <SectionHeader title="Short Clips" />
+            <SectionHeader title="Short Clips" appLanguage={appLanguage} />
             <Horizontal>
               {playableClips.slice(0, 6).map(item => (
                 <ClipCard
@@ -516,7 +522,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
 
         {events.length > 0 ? (
           <>
-            <SectionHeader title="Upcoming Events" onPress={() => go("Events")} />
+            <SectionHeader title="Upcoming Events" onPress={() => go("Events")} appLanguage={appLanguage} />
             <Horizontal>
               {events.slice(0, 5).map(item => (
                 <EventMiniCard
@@ -534,7 +540,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
 
         {updates.length > 0 ? (
           <>
-            <SectionHeader title="Latest Updates" onPress={() => go("Updates")} />
+            <SectionHeader title="Latest Updates" onPress={() => go("Updates")} appLanguage={appLanguage} />
             {updates.slice(0, 3).map(item => (
               <UpdateRow key={item.id} item={item} go={go} />
             ))}
@@ -545,7 +551,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
   );
 }
 
-function ScriptureCard({ scripture }) {
+function ScriptureCard({ scripture, appLanguage }) {
   const item = scripture || {};
 
   const share = () => {
@@ -555,14 +561,14 @@ function ScriptureCard({ scripture }) {
   return (
     <View style={s.scriptureCard}>
       <View style={s.scriptureHead}>
-        <Text style={s.goldSmall}>{item.title || "Scripture of the Day"}</Text>
+        <Text style={s.goldSmall}>{item.title || tr(appLanguage, "Scripture of the Day")}</Text>
 
         <Pressable onPress={share} style={s.smallCircle}>
           <Ionicons name="share-social-outline" size={18} color={C.white} />
         </Pressable>
       </View>
 
-      <Text style={s.verseText}>{item.verse || "The word of God is life."}</Text>
+      <Text style={s.verseText}>{item.verse || tr(appLanguage, "The word of God is life.")}</Text>
       <Text style={s.mutedText}>{item.reference || ""}</Text>
     </View>
   );

@@ -75,7 +75,7 @@ async function lockPortrait() {
   }
 }
 
-export function VideoDetail({ sermon, go, openSermon, setDownloadsTab }) {
+export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLanguage = "en" }) {
   const { data } = useContent();
   const videoRef = useRef(null);
   const [youtubePlaying, setYoutubePlaying] = useState(false);
@@ -227,7 +227,7 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab }) {
 
   return (
     <Screen>
-      <TopBar title={hasAudio ? "Audio Sermon" : "Video Sermon"} go={go} back="Sermons" />
+      <TopBar title={hasAudio ? "Audio Sermon" : "Video Sermon"} go={go} back="Sermons" appLanguage={appLanguage} />
 
       <ScrollView contentContainerStyle={s.scrollPad}>
         <View style={s.videoBox}>

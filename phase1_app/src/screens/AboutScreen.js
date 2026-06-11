@@ -225,7 +225,7 @@ function PlatformCard({ item }) {
   );
 }
 
-export function AboutScreen({ go }) {
+export function AboutScreen({ go, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
 
   const branches = Array.isArray(data.branches) ? data.branches : [];
@@ -248,7 +248,7 @@ export function AboutScreen({ go }) {
 
   return (
     <Screen>
-      <TopBar title="About & Contact" go={go} back="Home" />
+      <TopBar title="About & Contact" go={go} back="Home" appLanguage={appLanguage} />
 
       <ScrollView
         contentContainerStyle={s.scrollPad}

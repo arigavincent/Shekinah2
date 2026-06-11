@@ -17,7 +17,7 @@ import { TopBar } from "../components/TopBar";
 import { SectionHeader } from "../components/SectionHeader";
 import { EmptyState } from "../components/Cards";
 
-export function SearchScreen({ go, openSermon }) {
+export function SearchScreen({ go, openSermon, appLanguage = "en" }) {
   const { data } = useContent();
   const [query, setQuery] = useState("");
   const groups = useMemo(() => {
@@ -34,7 +34,7 @@ export function SearchScreen({ go, openSermon }) {
 
   return (
     <Screen>
-      <TopBar title="Global Search" go={go} back="Home" />
+      <TopBar title="Global Search" go={go} back="Home" appLanguage={appLanguage} />
       <View style={s.pad}>
         <TextInput style={s.searchInput} placeholder="Search sermons, devotions, verses, events" placeholderTextColor={C.faint} value={query} onChangeText={setQuery} />
       </View>

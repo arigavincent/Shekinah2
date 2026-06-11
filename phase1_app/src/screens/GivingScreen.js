@@ -155,7 +155,7 @@ function GivingTransactionCard({ item, onRefresh, refreshing }) {
   );
 }
 
-export function GivingScreen({ go, tab, setTab }) {
+export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
   const [category, setCategory] = useState("Tithe");

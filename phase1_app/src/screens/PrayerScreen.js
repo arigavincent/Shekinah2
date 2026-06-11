@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useContent } from "../providers/ContentProvider";
 import { C } from "../constants/theme";
+import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
@@ -51,7 +52,7 @@ function prayerStatusLabel(prayer) {
   }
 }
 
-function PrayerCard({ prayer, onPray, disabled }) {
+function PrayerCard({ prayer, onPray, disabled, appLanguage }) {
   return (
     <View style={s.plainCard}>
       <View style={s.rowTight}>
@@ -72,17 +73,17 @@ function PrayerCard({ prayer, onPray, disabled }) {
 
         <View style={{ flex: 1 }}>
           <Text style={[s.rowTitle, { color: C.white }]}>
-            {prayer?.name || "Anonymous"}
+            {prayer?.name || tr(appLanguage, "Anonymous")}
           </Text>
 
           <Text style={[s.goldSmall, { color: C.gold }]}>
-            {prayer?.date || "Today"} · {prayer?.category || "Prayer"}
+            {prayer?.date || tr(appLanguage, "Today")} · {tr(appLanguage, prayer?.category || "Prayer")}
           </Text>
         </View>
       </View>
 
       <Text style={[s.detailBody, { color: C.white, marginTop: 12 }]}>
-        {prayer?.text || "Prayer request"}
+        {prayer?.text || tr(appLanguage, "Prayer request")}
       </Text>
 
       <Pressable
@@ -109,14 +110,14 @@ function PrayerCard({ prayer, onPray, disabled }) {
             fontWeight: "900"
           }}
         >
-          {disabled ? "Sign in to pray" : `Praying · ${Number(prayer?.count || 0)}`}
+          {disabled ? tr(appLanguage, "Sign in to pray") : `${tr(appLanguage, "Praying")} · ${Number(prayer?.count || 0)}`}
         </Text>
       </Pressable>
     </View>
   );
 }
 
-function MyRequestCard({ request }) {
+function MyRequestCard({ request, appLanguage }) {
   return (
     <View style={s.plainCard}>
       <View style={s.rowTight}>
@@ -125,7 +126,7 @@ function MyRequestCard({ request }) {
         </Text>
 
         <Text style={[s.goldSmall, { color: C.gold }]}>
-          {visibilityLabel(request)}
+          {tr(appLanguage, visibilityLabel(request))}
         </Text>
       </View>
 
@@ -134,32 +135,32 @@ function MyRequestCard({ request }) {
       </Text>
 
       <Text style={[s.mutedText, { color: C.muted, marginTop: 10 }]}>
-        {request?.date || "Today"} · {Number(request?.count || 0)} praying
+        {request?.date || tr(appLanguage, "Today")} · {Number(request?.count || 0)} {tr(appLanguage, "Praying").toLowerCase()}
       </Text>
 
       <Text style={[s.goldSmall, { color: C.gold, marginTop: 8 }]}>
-        Status · {prayerStatusLabel(request)}
+        {tr(appLanguage, "Status")} · {tr(appLanguage, prayerStatusLabel(request))}
       </Text>
     </View>
   );
 }
 
-function SignedOutNotice({ go }) {
+function SignedOutNotice({ go, appLanguage }) {
   return (
     <View style={s.formSection}>
-      <Text style={s.formSectionTitle}>Member Access</Text>
+      <Text style={s.formSectionTitle}>{tr(appLanguage, "Member Access")}</Text>
       <Text style={s.formHelp}>
-        Sign in to post your own prayer requests, choose public or private visibility, and support others with Praying.
+        {tr(appLanguage, "Sign in to post your own prayer requests, choose public or private visibility, and support others with Praying.")}
       </Text>
 
       <Pressable style={s.primaryBtn} onPress={() => go("Profile")}>
-        <Text style={s.primaryText}>Sign In</Text>
+        <Text style={s.primaryText}>{tr(appLanguage, "Sign In")}</Text>
       </Pressable>
     </View>
   );
 }
 
-export function PrayerScreen({ go, tab, setTab }) {
+export function PrayerScreen({ go, tab, setTab, appLanguage = "en" }) {
   const { data, reload } = useContent();
   const fallbackPrayers = Array.isArray(data.prayers) ? data.prayers : [];
 
@@ -235,7 +236,7 @@ export function PrayerScreen({ go, tab, setTab }) {
 
   async function handlePray(prayer) {
     if (!signedIn) {
-      Alert.alert("Sign In Required", "Sign in first to support prayer requests.");
+      Alert.alert(tr(appLanguage, "Sign In Required"), tr(appLanguage, "Sign in first to support prayer requests."));
       go("Profile");
       return;
     }
@@ -248,26 +249,26 @@ export function PrayerScreen({ go, tab, setTab }) {
       }
 
       if (response?.prayed === false) {
-        Alert.alert("Already Prayed", "You have already marked this prayer request as prayed for.");
+        Alert.alert(tr(appLanguage, "Already Prayed"), tr(appLanguage, "You have already marked this prayer request as prayed for."));
       }
     } catch (error) {
       Alert.alert(
-        "Prayer Support Failed",
-        error instanceof Error ? error.message : "Could not record your prayer support."
+        tr(appLanguage, "Prayer Support Failed"),
+        error instanceof Error ? error.message : tr(appLanguage, "Could not record your prayer support.")
       );
     }
   }
 
   async function submitPrayerRequest() {
     if (!signedIn) {
-      Alert.alert("Sign In Required", "Sign in first to post your prayer request.");
+      Alert.alert(tr(appLanguage, "Sign In Required"), tr(appLanguage, "Sign in first to post your prayer request."));
       go("Profile");
       return;
     }
 
     const text = form.text.trim();
     if (text.length < 10) {
-      Alert.alert("Check Prayer Request", "Prayer request should be at least 10 characters.");
+      Alert.alert(tr(appLanguage, "Check Prayer Request"), tr(appLanguage, "Prayer request should be at least 10 characters."));
       return;
     }
 
@@ -293,15 +294,15 @@ export function PrayerScreen({ go, tab, setTab }) {
       await reload().catch(() => {});
 
       Alert.alert(
-        "Prayer Request Submitted",
+        tr(appLanguage, "Prayer Request Submitted"),
         form.isPublic
-          ? "Your prayer request is now visible on the Prayer Wall."
-          : "Your private prayer request has been saved to My Requests and is available to the church team in admin review."
+          ? tr(appLanguage, "Your prayer request is now visible on the Prayer Wall.")
+          : tr(appLanguage, "Your private prayer request has been saved to My Requests and is available to the church team in admin review.")
       );
     } catch (error) {
       Alert.alert(
-        "Submission Failed",
-        error instanceof Error ? error.message : "Could not submit prayer request."
+        tr(appLanguage, "Submission Failed"),
+        error instanceof Error ? error.message : tr(appLanguage, "Could not submit prayer request.")
       );
     } finally {
       setSubmitting(false);
@@ -310,12 +311,13 @@ export function PrayerScreen({ go, tab, setTab }) {
 
   return (
     <Screen>
-      <TopBar title="Prayer Wall" go={go} back="Home" />
+      <TopBar title="Prayer Wall" go={go} back="Home" appLanguage={appLanguage} />
 
       <Tabs
         tabs={["All Prayers", "My Requests"]}
         active={tab}
         setActive={setTab}
+        appLanguage={appLanguage}
       />
 
       <ScrollView
@@ -335,14 +337,15 @@ export function PrayerScreen({ go, tab, setTab }) {
         {tab === "All Prayers" ? (
           visiblePrayers.length === 0 ? (
             <EmptyState
-              title="No Prayer Requests"
-              text="Public prayer requests will appear here."
+              title={tr(appLanguage, "No Prayer Requests")}
+              text={tr(appLanguage, "Public prayer requests will appear here.")}
             />
           ) : (
             visiblePrayers.map(prayer => (
               <PrayerCard
                 key={prayer.id}
                 prayer={prayer}
+                appLanguage={appLanguage}
                 onPray={() => handlePray(prayer)}
                 disabled={!signedIn}
               />
@@ -350,16 +353,16 @@ export function PrayerScreen({ go, tab, setTab }) {
           )
         ) : (
           <>
-            {!signedIn ? <SignedOutNotice go={go} /> : null}
+            {!signedIn ? <SignedOutNotice go={go} appLanguage={appLanguage} /> : null}
 
             {signedIn ? (
               <View style={s.formSection}>
-                <Text style={s.formSectionTitle}>Submit A Prayer Request</Text>
+                <Text style={s.formSectionTitle}>{tr(appLanguage, "Submit A Prayer Request")}</Text>
                 <Text style={s.formHelp}>
-                  Public requests appear on the wall for everyone. Private requests stay off the wall and can be reviewed by the church team in admin.
+                  {tr(appLanguage, "Public requests appear on the wall for everyone. Private requests stay off the wall and can be reviewed by the church team in admin.")}
                 </Text>
 
-                <Text style={s.inputLabel}>Category</Text>
+                <Text style={s.inputLabel}>{tr(appLanguage, "Category")}</Text>
                 <View style={s.ministryGrid}>
                   {CATEGORIES.map(category => {
                     const active = form.category === category;
@@ -381,14 +384,14 @@ export function PrayerScreen({ go, tab, setTab }) {
                             active && s.ministryChipTextActive
                           ]}
                         >
-                          {category}
+                          {tr(appLanguage, category)}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
 
-                <Text style={s.inputLabel}>Visibility</Text>
+                <Text style={s.inputLabel}>{tr(appLanguage, "Visibility")}</Text>
                 <View style={s.rowTight}>
                   {[
                     { label: "Public", value: true },
@@ -411,14 +414,14 @@ export function PrayerScreen({ go, tab, setTab }) {
                             active && { color: C.black }
                           ]}
                         >
-                          {option.label}
+                          {tr(appLanguage, option.label)}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
 
-                <Text style={s.inputLabel}>Display Name</Text>
+                <Text style={s.inputLabel}>{tr(appLanguage, "Display Name")}</Text>
                 <View style={s.rowTight}>
                   {[
                     { label: "My Name", value: false },
@@ -441,14 +444,14 @@ export function PrayerScreen({ go, tab, setTab }) {
                             active && { color: C.black }
                           ]}
                         >
-                          {option.label}
+                          {tr(appLanguage, option.label)}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
 
-                <Text style={s.inputLabel}>Prayer Request</Text>
+                <Text style={s.inputLabel}>{tr(appLanguage, "Prayer Request")}</Text>
                 <TextInput
                   style={[
                     s.formInput,
@@ -458,7 +461,7 @@ export function PrayerScreen({ go, tab, setTab }) {
                       paddingTop: 12
                     }
                   ]}
-                  placeholder="Share what you would like the church to pray with you about."
+                  placeholder={tr(appLanguage, "Share what you would like the church to pray with you about.")}
                   placeholderTextColor={C.faint}
                   multiline
                   value={form.text}
@@ -470,14 +473,14 @@ export function PrayerScreen({ go, tab, setTab }) {
 
             {signedIn && visibleMine.length === 0 ? (
               <EmptyState
-                title="No Requests Yet"
-                text="Your public and private prayer requests will appear here."
+                title={tr(appLanguage, "No Requests Yet")}
+                text={tr(appLanguage, "Your public and private prayer requests will appear here.")}
               />
             ) : null}
 
             {signedIn
               ? visibleMine.map(request => (
-                  <MyRequestCard key={request.id} request={request} />
+                  <MyRequestCard key={request.id} request={request} appLanguage={appLanguage} />
                 ))
               : null}
           </>
@@ -507,7 +510,7 @@ export function PrayerScreen({ go, tab, setTab }) {
             disabled={submitting}
           >
             <Text style={s.primaryText}>
-              {submitting ? "Submitting..." : "Submit Prayer Request"}
+              {submitting ? tr(appLanguage, "Submitting...") : tr(appLanguage, "Submit Prayer Request")}
             </Text>
           </Pressable>
         </View>

@@ -13,6 +13,7 @@ import { ContentProvider } from "../providers/ContentProvider";
 
 import { C } from "../constants/theme";
 import {
+  DEFAULT_APP_LANGUAGE,
   DEFAULT_NOTIFICATION_PREFS,
   STORAGE_KEYS
 } from "../constants/storage";
@@ -102,6 +103,8 @@ function App() {
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState(DEFAULT_NOTIFICATION_PREFS);
   const [notificationPrefsLoaded, setNotificationPrefsLoaded] = useState(false);
+  const [appLanguage, setAppLanguage] = useState(DEFAULT_APP_LANGUAGE);
+  const [appLanguageLoaded, setAppLanguageLoaded] = useState(false);
   const [miniPlayer, setMiniPlayer] = useState(null);
 
 useEffect(() => {
@@ -134,6 +137,36 @@ useEffect(() => {
   }
 
   loadFavouriteDevotions();
+
+  return () => {
+    mounted = false;
+  };
+}, []);
+
+useEffect(() => {
+  let mounted = true;
+
+  async function loadAppLanguage() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.appLanguage);
+
+      if (!mounted) return;
+
+      setAppLanguage(raw === "sw" ? "sw" : DEFAULT_APP_LANGUAGE);
+    } catch (error) {
+      console.warn("Failed to load app language", error);
+
+      if (mounted) {
+        setAppLanguage(DEFAULT_APP_LANGUAGE);
+      }
+    } finally {
+      if (mounted) {
+        setAppLanguageLoaded(true);
+      }
+    }
+  }
+
+  loadAppLanguage();
 
   return () => {
     mounted = false;
@@ -190,6 +223,14 @@ useEffect(() => {
     console.warn("Failed to save notification preferences", error);
   });
 }, [notificationPrefs, notificationPrefsLoaded]);
+
+useEffect(() => {
+  if (!appLanguageLoaded) return;
+
+  AsyncStorage.setItem(STORAGE_KEYS.appLanguage, appLanguage).catch(error => {
+    console.warn("Failed to save app language", error);
+  });
+}, [appLanguage, appLanguageLoaded]);
 
 
 useEffect(() => {
@@ -289,7 +330,7 @@ useEffect(() => {
   const renderScreen = () => {
     switch (screen) {
       case "Search":
-        return <SearchScreen go={go} openSermon={openSermon} />;
+        return <SearchScreen go={go} openSermon={openSermon} appLanguage={appLanguage} />;
       case "Sermons":
         return (
           <SermonsScreen
@@ -298,6 +339,7 @@ useEffect(() => {
             openSermon={openSermon}
             tab={sermonTab}
             setTab={setSermonTab}
+            appLanguage={appLanguage}
           />
         );
       case "VideoDetail":
@@ -307,6 +349,7 @@ useEffect(() => {
             go={go}
             openSermon={openSermon}
             setDownloadsTab={setDownloadsTab}
+            appLanguage={appLanguage}
           />
         );
       case "AudioPlayer":
@@ -316,6 +359,7 @@ useEffect(() => {
             go={go}
             setMiniPlayer={setMiniPlayer}
             setDownloadsTab={setDownloadsTab}
+            appLanguage={appLanguage}
           />
         );
       case "Devotions":
@@ -327,46 +371,48 @@ useEffect(() => {
             setTab={setDevotionTab}
             favorites={favorites}
             setFavorites={setFavorites}
+            appLanguage={appLanguage}
           />
         );
       case "DevotionDetail":
-        return <DevotionDetail devotion={detail} favorites={favorites} setFavorites={setFavorites} go={go} />;
+        return <DevotionDetail devotion={detail} favorites={favorites} setFavorites={setFavorites} go={go} appLanguage={appLanguage} />;
       case "Live":
-        return <LiveScreen go={go} openDrawer={openDrawer} openSermon={openSermon} />;
+        return <LiveScreen go={go} openDrawer={openDrawer} openSermon={openSermon} appLanguage={appLanguage} />;
       case "Downloads":
-        return <DownloadsScreen go={go} tab={downloadsTab} setTab={setDownloadsTab} />;
+        return <DownloadsScreen go={go} tab={downloadsTab} setTab={setDownloadsTab} appLanguage={appLanguage} />;
       case "Branches":
-        return <BranchesScreen go={go} />;
+        return <BranchesScreen go={go} appLanguage={appLanguage} />;
       case "Profile":
-        return <AuthProfileScreen go={go} />;
+        return <AuthProfileScreen go={go} appLanguage={appLanguage} setAppLanguage={setAppLanguage} />;
       case "Bible":
-        return <BibleScreen go={go} />;
+        return <BibleScreen go={go} appLanguage={appLanguage} />;
       case "Events":
-        return <EventsScreen go={go} />;
+        return <EventsScreen go={go} appLanguage={appLanguage} />;
       case "EventDetail":
-        return <EventDetail event={detail} go={go} />;
+        return <EventDetail event={detail} go={go} appLanguage={appLanguage} />;
       case "Giving":
-        return <GivingScreen go={go} tab={givingTab} setTab={setGivingTab} />;
+        return <GivingScreen go={go} tab={givingTab} setTab={setGivingTab} appLanguage={appLanguage} />;
       case "Prayer":
-        return <PrayerScreen go={go} tab={prayerTab} setTab={setPrayerTab} />;
+        return <PrayerScreen go={go} tab={prayerTab} setTab={setPrayerTab} appLanguage={appLanguage} />;
       case "Updates":
-        return <UpdatesScreen go={go} />;
+        return <UpdatesScreen go={go} appLanguage={appLanguage} />;
       case "Platforms":
-        return <PlatformsScreen go={go} tab={platformTab} setTab={setPlatformTab} />;
+        return <PlatformsScreen go={go} tab={platformTab} setTab={setPlatformTab} appLanguage={appLanguage} />;
       case "Serve":
-        return <ServeScreen go={go} />;
+        return <ServeScreen go={go} appLanguage={appLanguage} />;
       case "Notifications":
         return (
           <NotificationsScreen
             go={go}
             preferences={notificationPrefs}
             setPreferences={setNotificationPrefs}
+            appLanguage={appLanguage}
           />
         );
       case "About":
-        return <AboutScreen go={go} />;
+        return <AboutScreen go={go} appLanguage={appLanguage} />;
       default:
-        return <HomeScreen go={go} openDrawer={openDrawer} openSermon={openSermon} />;
+        return <HomeScreen go={go} openDrawer={openDrawer} openSermon={openSermon} appLanguage={appLanguage} />;
     }
   };
 
@@ -388,8 +434,8 @@ useEffect(() => {
         />
       ) : null}
 
-      <BottomNav current={screen} go={go} />
-      <Drawer visible={drawerOpen} close={() => setDrawerOpen(false)} go={go} />
+      <BottomNav current={screen} go={go} appLanguage={appLanguage} />
+      <Drawer visible={drawerOpen} close={() => setDrawerOpen(false)} go={go} appLanguage={appLanguage} />
     </SafeAreaView>
   </ContentProvider>
 );

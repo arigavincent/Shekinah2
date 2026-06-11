@@ -7,13 +7,13 @@ import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 
-export function UpdatesScreen({ go }) {
+export function UpdatesScreen({ go, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
   const updates = data.updates;
 
   return (
     <Screen>
-      <TopBar title="Updates" go={go} back="Home" />
+      <TopBar title="Updates" go={go} back="Home" appLanguage={appLanguage} />
 
       <ScrollView
         contentContainerStyle={s.scrollPad}

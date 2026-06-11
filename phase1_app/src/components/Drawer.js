@@ -13,9 +13,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { brandLogo } from "../constants/assets";
 import { C } from "../constants/theme";
 import { DRAWER_GROUPS } from "../constants/drawerGroups";
+import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 
-export function Drawer({ visible, close, go }) {
+export function Drawer({ visible, close, go, appLanguage = "en" }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <Pressable style={s.drawerBackdrop} onPress={close} />
@@ -29,7 +30,7 @@ export function Drawer({ visible, close, go }) {
         <ScrollView>
           {DRAWER_GROUPS.map(([title, items]) => (
             <View key={title} style={s.drawerGroup}>
-              <Text style={s.drawerGroupTitle}>{title}</Text>
+              <Text style={s.drawerGroupTitle}>{tr(appLanguage, title)}</Text>
 
               {items.map(([label, target]) => (
                 <Pressable
@@ -37,11 +38,11 @@ export function Drawer({ visible, close, go }) {
                   style={s.drawerItem}
                   onPress={() =>
                     target === "Share"
-                      ? Share.share({ message: "Shekinah Sons Global Church App" })
+                      ? Share.share({ message: tr(appLanguage, "Shekinah Sons Global Church App") })
                       : go(target)
                   }
                 >
-                  <Text style={s.drawerItemText}>{label}</Text>
+                  <Text style={s.drawerItemText}>{tr(appLanguage, label)}</Text>
                   <Ionicons name="chevron-forward-outline" size={18} color={C.muted} />
                 </Pressable>
               ))}

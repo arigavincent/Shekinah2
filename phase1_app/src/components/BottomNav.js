@@ -3,10 +3,11 @@ import { Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { C } from "../constants/theme";
+import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 import { useContent } from "../providers/ContentProvider";
 
-export function BottomNav({ current, go }) {
+export function BottomNav({ current, go, appLanguage = "en" }) {
   const { data } = useContent();
   const tabs = ["Home", "Sermons", "Devotions", "Live"];
 
@@ -27,7 +28,7 @@ export function BottomNav({ current, go }) {
             />
 
             <View style={s.navLabelRow}>
-              <Text style={[s.navLabel, active && s.navActive]}>{tab}</Text>
+              <Text style={[s.navLabel, active && s.navActive]}>{tr(appLanguage, tab)}</Text>
               {tab === "Live" && data.live.isLive ? <View style={s.redBadge} /> : null}
             </View>
           </Pressable>

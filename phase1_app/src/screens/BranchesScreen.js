@@ -107,7 +107,7 @@ function BranchAction({ icon, label, disabled, onPress }) {
   );
 }
 
-export function BranchesScreen({ go }) {
+export function BranchesScreen({ go, appLanguage = "en" }) {
   const [query, setQuery] = useState("");
   const { data, loading, reload } = useContent();
 
@@ -121,7 +121,7 @@ export function BranchesScreen({ go }) {
 
   return (
     <Screen>
-      <TopBar title="Branches" go={go} back="Home" />
+      <TopBar title="Branches" go={go} back="Home" appLanguage={appLanguage} />
 
       <View style={s.pad}>
         <TextInput

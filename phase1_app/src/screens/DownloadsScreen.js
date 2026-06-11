@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { PHASE1_IMAGES } from "../content";
 import { C } from "../constants/theme";
+import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
@@ -25,7 +26,7 @@ import {
 
 const STORAGE_LIMIT_BYTES = 5 * 1024 * 1024 * 1024;
 
-function DownloadRow({ item, onOpen, onDelete }) {
+function DownloadRow({ item, onOpen, onDelete, appLanguage }) {
   const isAudio = item.type === DOWNLOAD_TYPES.SERMON_AUDIO;
   const isVideo = item.type === DOWNLOAD_TYPES.SERMON_VIDEO;
 
@@ -40,7 +41,7 @@ function DownloadRow({ item, onOpen, onDelete }) {
         <Text style={[s.rowTitle, { color: C.white }]}>{item.title}</Text>
 
         <Text style={[s.mutedText, { color: C.muted }]} numberOfLines={1}>
-          {isAudio ? "Audio sermon" : isVideo ? "Video sermon" : "Download"} · {formatBytes(item.sizeBytes)}
+          {tr(appLanguage, isAudio ? "Audio sermon" : isVideo ? "Video sermon" : "Download")} · {formatBytes(item.sizeBytes)}
         </Text>
 
         {item.speaker ? (
@@ -63,7 +64,7 @@ function DownloadRow({ item, onOpen, onDelete }) {
   );
 }
 
-function BibleVersionCard({ go }) {
+function BibleVersionCard({ go, appLanguage }) {
   return (
     <View style={s.plainCard}>
       <View style={s.rowTight}>
@@ -85,20 +86,20 @@ function BibleVersionCard({ go }) {
         <View style={{ flex: 1 }}>
           <Text style={[s.rowTitle, { color: C.white }]}>English KJV</Text>
           <Text style={[s.mutedText, { color: C.muted }]}>
-            Bundled offline · 66 books · 31,102 verses
+            {tr(appLanguage, "Bundled offline")} · 66 books · 31,102 verses
           </Text>
-          <Text style={[s.goldSmall, { color: C.gold }]}>Available offline</Text>
+          <Text style={[s.goldSmall, { color: C.gold }]}>{tr(appLanguage, "Available offline")}</Text>
         </View>
       </View>
 
       <Pressable style={[s.primaryBtn, { marginTop: 14 }]} onPress={() => go("Bible")}>
-        <Text style={s.primaryText}>Open Bible</Text>
+        <Text style={s.primaryText}>{tr(appLanguage, "Open Bible")}</Text>
       </Pressable>
     </View>
   );
 }
 
-export function DownloadsScreen({ go, tab, setTab }) {
+export function DownloadsScreen({ go, tab, setTab, appLanguage = "en" }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -134,12 +135,12 @@ export function DownloadsScreen({ go, tab, setTab }) {
 
   function removeItem(item) {
     Alert.alert(
-      "Delete Download",
-      `Remove "${item.title}" from this device?`,
+      tr(appLanguage, "Delete Download"),
+      `${tr(appLanguage, "Remove")} "${item.title}" ${tr(appLanguage, "from this device?")}`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: tr(appLanguage, "Cancel"), style: "cancel" },
         {
-          text: "Delete",
+          text: tr(appLanguage, "Delete"),
           style: "destructive",
           onPress: async () => {
             const next = await deleteDownload(item.id);
@@ -169,7 +170,7 @@ export function DownloadsScreen({ go, tab, setTab }) {
       return;
     }
 
-    Alert.alert("Download", "This download cannot be opened yet.");
+    Alert.alert(tr(appLanguage, "Download"), tr(appLanguage, "This download cannot be opened yet."));
   }
 
   return (
@@ -178,12 +179,14 @@ export function DownloadsScreen({ go, tab, setTab }) {
         title="Downloads"
         go={go}
         back="Home"
+        appLanguage={appLanguage}
       />
 
       <Tabs
         tabs={["Sermons", "Bible Versions"]}
         active={tab}
         setActive={setTab}
+        appLanguage={appLanguage}
       />
 
       <ScrollView
@@ -199,7 +202,7 @@ export function DownloadsScreen({ go, tab, setTab }) {
         }
       >
         <View style={s.plainCard}>
-          <Text style={[s.goldSmall, { color: C.gold }]}>Device Storage</Text>
+          <Text style={[s.goldSmall, { color: C.gold }]}>{tr(appLanguage, "Device Storage")}</Text>
           <Text style={[s.rowTitle, { color: C.white }]}>
             Using {formatBytes(usedBytes)} of {formatBytes(STORAGE_LIMIT_BYTES)}
           </Text>
@@ -219,13 +222,13 @@ export function DownloadsScreen({ go, tab, setTab }) {
         {tab === "Sermons" ? (
           loading ? (
             <View style={s.plainCard}>
-              <Text style={[s.rowTitle, { color: C.white }]}>Loading downloads...</Text>
+              <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Loading downloads...")}</Text>
             </View>
           ) : sermonDownloads.length === 0 ? (
             <View style={s.plainCard}>
-              <Text style={[s.rowTitle, { color: C.white }]}>No sermon downloads</Text>
+              <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "No sermon downloads")}</Text>
               <Text style={[s.mutedText, { color: C.muted }]}>
-                Open an audio sermon and tap Download to save it offline.
+                {tr(appLanguage, "Open an audio sermon and tap Download to save it offline.")}
               </Text>
             </View>
           ) : (
@@ -233,6 +236,7 @@ export function DownloadsScreen({ go, tab, setTab }) {
               <DownloadRow
                 key={item.id}
                 item={item}
+                appLanguage={appLanguage}
                 onOpen={() => openDownload(item)}
                 onDelete={() => removeItem(item)}
               />
@@ -240,12 +244,12 @@ export function DownloadsScreen({ go, tab, setTab }) {
           )
         ) : (
           <>
-            <BibleVersionCard go={go} />
+            <BibleVersionCard go={go} appLanguage={appLanguage} />
 
             <View style={s.plainCard}>
-              <Text style={[s.rowTitle, { color: C.white }]}>More versions coming later</Text>
+              <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "More versions coming later")}</Text>
               <Text style={[s.mutedText, { color: C.muted }]}>
-                Additional translations require licensing or public-domain sources.
+                {tr(appLanguage, "Additional translations require licensing or public-domain sources.")}
               </Text>
             </View>
           </>

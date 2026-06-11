@@ -13,7 +13,7 @@ import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { IconButton } from "../components/IconButton";
 
-export function DevotionDetail({ devotion, favorites = [], setFavorites, go }) {
+export function DevotionDetail({ devotion, favorites = [], setFavorites, go, appLanguage = "en" }) {
   const saved = favorites.includes(devotion?.id);
   const toggle = () => {
     if (!devotion) return;
@@ -22,7 +22,7 @@ export function DevotionDetail({ devotion, favorites = [], setFavorites, go }) {
   };
   return (
     <Screen>
-      <TopBar title="Devotion" go={go} back="Devotions" right={<IconButton name={saved ? "heart" : "heart-outline"} color={saved ? C.gold : C.white} onPress={toggle} />} />
+      <TopBar title="Devotion" go={go} back="Devotions" appLanguage={appLanguage} right={<IconButton name={saved ? "heart" : "heart-outline"} color={saved ? C.gold : C.white} onPress={toggle} />} />
       <ScrollView contentContainerStyle={s.scrollPad}>
         <Image source={{ uri: resolveMediaUrl(devotion?.imageUrl || devotion?.image || devotion?.thumbnailUrl || "") || PHASE1_IMAGES.devotion }} style={s.detailImage} />
         <Text style={s.detailTitle}>{devotion?.title}</Text>

@@ -9,14 +9,14 @@ import { TopBar } from "../components/TopBar";
 import { Tabs } from "../components/Tabs";
 import { ActionButton } from "../components/ActionButton";
 
-export function PlatformsScreen({ go, tab, setTab }) {
+export function PlatformsScreen({ go, tab, setTab, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
   const platforms = data.platforms;
   const items = Array.isArray(platforms[tab]) ? platforms[tab] : [];
 
   return (
     <Screen>
-      <TopBar title="Our Platforms" go={go} back="Home" />
+      <TopBar title="Our Platforms" go={go} back="Home" appLanguage={appLanguage} />
       <Tabs tabs={["Web", "TV", "Radio"]} active={tab} setActive={setTab} />
 
       <ScrollView

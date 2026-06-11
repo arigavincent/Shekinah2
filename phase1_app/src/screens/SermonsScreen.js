@@ -14,6 +14,7 @@ import { useContent } from "../providers/ContentProvider";
 
 import { PHASE1_IMAGES } from "../content";
 import { C } from "../constants/theme";
+import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
@@ -137,7 +138,7 @@ function playableClipFromContent(item) {
   };
 }
 
-function SermonRow({ item, openSermon, progressEntry, downloadEntry }) {
+function SermonRow({ item, openSermon, progressEntry, downloadEntry, appLanguage }) {
   const thumbnail = sermonThumbnail(item, PHASE1_IMAGES.sermon);
   const showContinue = hasContinueProgress(progressEntry);
   const progressPercent = Math.max(4, Math.round(progressRatio(progressEntry) * 100));
@@ -163,7 +164,7 @@ function SermonRow({ item, openSermon, progressEntry, downloadEntry }) {
         {showContinue ? (
           <>
             <Text style={s.goldSmall}>
-              Continue · {formatPlaybackTime(progressEntry.positionMs)} / {formatPlaybackTime(progressEntry.durationMs)}
+              {tr(appLanguage, "Continue")} · {formatPlaybackTime(progressEntry.positionMs)} / {formatPlaybackTime(progressEntry.durationMs)}
             </Text>
 
             <View
@@ -188,9 +189,9 @@ function SermonRow({ item, openSermon, progressEntry, downloadEntry }) {
         ) : (
           <Text style={s.goldSmall}>
             {downloaded
-              ? `Downloaded · ${missingAudioFile ? "audio pending" : mediaBadge(item)}`
+              ? `${tr(appLanguage, "Downloaded")} · ${missingAudioFile ? tr(appLanguage, "audio pending") : mediaBadge(item)}`
               : missingAudioFile
-                ? "Audio added · file pending"
+                ? tr(appLanguage, "Audio added · file pending")
                 : mediaBadge(item)}
           </Text>
         )}
@@ -543,7 +544,7 @@ function ClipsView({ items, openSermon }) {
   );
 }
 
-export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
+export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab, appLanguage = "en" }) {
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(null);
   const { data, loading, reload } = useContent();
@@ -612,6 +613,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
         go={go}
         title="Sermons"
         onMenu={openDrawer}
+        appLanguage={appLanguage}
         right={
           <View style={s.rowTight}>
             <IconButton name="download-outline" onPress={() => go("Downloads")} />
@@ -624,13 +626,14 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
         tabs={["Video", "Audio", "Clips", "Categories", "Highlights"]}
         active={tab}
         setActive={handleSetTab}
+        appLanguage={appLanguage}
       />
 
       {tab !== "Categories" || selectedCategory ? (
         <View style={s.pad}>
           <TextInput
             style={s.searchInput}
-            placeholder={`Search ${selectedCategory ? categoryName(selectedCategory) : tab.toLowerCase()}`}
+            placeholder={`${tr(appLanguage, "Search")} ${selectedCategory ? categoryName(selectedCategory) : tr(appLanguage, tab).toLowerCase()}`}
             placeholderTextColor={C.faint}
             value={query}
             onChangeText={setQuery}
@@ -653,7 +656,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
         {tab === "Categories" && !selectedCategory ? (
           categories.length === 0 ? (
             <View style={s.plainCard}>
-              <Text style={s.rowTitle}>No categories found</Text>
+              <Text style={s.rowTitle}>{tr(appLanguage, "No categories found")}</Text>
               <Text style={s.mutedText}>Create sermon categories from backend/admin data.</Text>
             </View>
           ) : (
@@ -687,7 +690,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
                 setQuery("");
               }}
             >
-              <Text style={s.goldSmall}>Back to categories</Text>
+              <Text style={s.goldSmall}>{tr(appLanguage, "Back to categories")}</Text>
               <Text style={s.rowTitle}>{categoryName(selectedCategory)}</Text>
               <Text style={s.mutedText}>
                 {selectedCategoryItems.length} playable sermon{selectedCategoryItems.length === 1 ? "" : "s"}
@@ -696,7 +699,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
 
             {visible.length === 0 ? (
               <View style={s.plainCard}>
-                <Text style={s.rowTitle}>No sermons in this category</Text>
+                <Text style={s.rowTitle}>{tr(appLanguage, "No sermons in this category")}</Text>
                 <Text style={s.mutedText}>Upload or assign sermons to this category.</Text>
               </View>
             ) : (
@@ -706,6 +709,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
                   item={item}
                   downloadEntry={downloads.bySermonId[item.id]}
                   progressEntry={progressMap[item.id]}
+                  appLanguage={appLanguage}
                   openSermon={openSermon}
                 />
               ))
@@ -717,11 +721,11 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
           <HighlightsView items={visible} openSermon={openSermon} />
         ) : visible.length === 0 ? (
           <View style={s.plainCard}>
-            <Text style={s.rowTitle}>No {tab.toLowerCase()} sermons found</Text>
+            <Text style={s.rowTitle}>{`${tr(appLanguage, "No")} ${tr(appLanguage, tab).toLowerCase()} ${tr(appLanguage, "sermons found")}`}</Text>
             <Text style={s.mutedText}>
               {tab === "Audio"
-                ? "Audio sermons from the database will appear here."
-                : "Playable sermon media will appear here."}
+                ? tr(appLanguage, "Audio sermons from the database will appear here.")
+                : tr(appLanguage, "Playable sermon media will appear here.")}
             </Text>
           </View>
         ) : (
@@ -731,6 +735,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
               item={item}
               downloadEntry={downloads.bySermonId[item.id]}
               progressEntry={progressMap[item.id]}
+              appLanguage={appLanguage}
               openSermon={openSermon}
             />
           ))

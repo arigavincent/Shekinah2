@@ -68,7 +68,7 @@ function EventRow({ event, onPress }) {
   );
 }
 
-export function EventsScreen({ go }) {
+export function EventsScreen({ go, appLanguage = "en" }) {
   const [query, setQuery] = useState("");
   const { data, loading, reload } = useContent();
 
@@ -82,7 +82,7 @@ export function EventsScreen({ go }) {
 
   return (
     <Screen>
-      <TopBar title="Events" go={go} back="Home" />
+      <TopBar title="Events" go={go} back="Home" appLanguage={appLanguage} />
 
       <View style={s.pad}>
         <TextInput

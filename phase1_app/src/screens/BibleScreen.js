@@ -6,6 +6,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Asset } from "expo-asset";
 
 import { Screen } from "../components/Screen";
+import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 import {
   DEFAULT_BIBLE_STATE,
@@ -181,7 +182,7 @@ function TestamentLabel({ value }) {
   );
 }
 
-export function BibleScreen({ go }) {
+export function BibleScreen({ go, appLanguage = "en" }) {
   const [db, setDb] = useState(null);
   const [loading, setLoading] = useState(true);
   const [stage, setStage] = useState("books");
@@ -476,7 +477,7 @@ export function BibleScreen({ go }) {
     return (
       <Screen>
         <Header
-          title="Books"
+          title={tr(appLanguage, "Books")}
           onBack={() => go?.("Home")}
           right={
             <Pressable onPress={() => setStage("library")}>
@@ -496,7 +497,7 @@ export function BibleScreen({ go }) {
               style={[styles.tab, tab === key && styles.tabActive]}
               onPress={() => setTab(key)}
             >
-              <Text style={styles.tabText}>{label}</Text>
+              <Text style={styles.tabText}>{tr(appLanguage, label)}</Text>
             </Pressable>
           ))}
         </View>
@@ -529,13 +530,13 @@ export function BibleScreen({ go }) {
     return (
       <Screen>
         <Header
-          title="Version Library"
-          subtitle="Offline bundled versions and saved chapters"
+          title={tr(appLanguage, "Version Library")}
+          subtitle={tr(appLanguage, "Offline bundled versions and saved chapters")}
           onBack={() => setStage("books")}
         />
 
         <ScrollView contentContainerStyle={styles.page}>
-          <Text style={styles.sectionTitle}>Installed Versions</Text>
+          <Text style={styles.sectionTitle}>{tr(appLanguage, "Installed Versions")}</Text>
           {BUNDLED_VERSIONS.map(version => {
             const installed = bibleState.preferences.installedVersions.includes(version.id);
 
@@ -546,22 +547,20 @@ export function BibleScreen({ go }) {
                   <Text style={styles.muted}>{version.source}</Text>
                 </View>
                 <Text style={styles.versionState}>
-                  {installed ? "Installed" : "Unavailable"}
+                  {installed ? tr(appLanguage, "Installed") : tr(appLanguage, "Unavailable")}
                 </Text>
               </View>
             );
           })}
 
           <View style={styles.infoPanel}>
-            <Text style={styles.infoTitle}>Download More Versions</Text>
+            <Text style={styles.infoTitle}>{tr(appLanguage, "Download More Versions")}</Text>
             <Text style={styles.infoText}>
-              Additional Bible versions need a configured source and licensing feed.
-              The reader is ready for them, but this build ships with English and
-              Kiswahili offline.
+              {tr(appLanguage, "Additional Bible versions need a configured source and licensing feed. The reader is ready for them, but this build ships with English and Kiswahili offline.")}
             </Text>
           </View>
 
-          <Text style={styles.sectionTitle}>Recent Chapters</Text>
+          <Text style={styles.sectionTitle}>{tr(appLanguage, "Recent Chapters")}</Text>
           {recentChapters.length ? (
             recentChapters.map(item => (
               <Pressable
@@ -573,16 +572,16 @@ export function BibleScreen({ go }) {
                   <Text style={styles.bookTitle}>
                     {item.book.swahili_name} ~ {item.book.english_name}
                   </Text>
-                  <Text style={styles.muted}>Chapter {item.chapter}</Text>
+                  <Text style={styles.muted}>{tr(appLanguage, "Chapter")} {item.chapter}</Text>
                 </View>
                 <Ionicons name="arrow-forward" size={26} color="#777" />
               </Pressable>
             ))
           ) : (
-            <Text style={styles.emptyText}>Your recent chapters will appear here.</Text>
+            <Text style={styles.emptyText}>{tr(appLanguage, "Your recent chapters will appear here.")}</Text>
           )}
 
-          <Text style={styles.sectionTitle}>Bookmarked Chapters</Text>
+          <Text style={styles.sectionTitle}>{tr(appLanguage, "Bookmarked Chapters")}</Text>
           {bookmarkChapters.length ? (
             bookmarkChapters.map(item => (
               <Pressable
@@ -594,13 +593,13 @@ export function BibleScreen({ go }) {
                   <Text style={styles.bookTitle}>
                     {item.book.swahili_name} ~ {item.book.english_name}
                   </Text>
-                  <Text style={styles.muted}>Chapter {item.chapter}</Text>
+                  <Text style={styles.muted}>{tr(appLanguage, "Chapter")} {item.chapter}</Text>
                 </View>
                 <Ionicons name="heart" size={24} color="#ff5a5f" />
               </Pressable>
             ))
           ) : (
-            <Text style={styles.emptyText}>Saved chapters will appear here.</Text>
+            <Text style={styles.emptyText}>{tr(appLanguage, "Saved chapters will appear here.")}</Text>
           )}
         </ScrollView>
       </Screen>
@@ -621,7 +620,7 @@ export function BibleScreen({ go }) {
         />
 
         <ScrollView contentContainerStyle={styles.page}>
-          <Text style={styles.sectionTitle}>Select a Chapter</Text>
+          <Text style={styles.sectionTitle}>{tr(appLanguage, "Select a Chapter")}</Text>
 
           <View style={styles.grid}>
             {Array.from({ length: chapterCount }, (_, i) => i + 1).map(item => (
@@ -631,7 +630,7 @@ export function BibleScreen({ go }) {
                 onPress={() => openChapter(item)}
               >
                 <Text style={styles.gridNumber}>{item}.</Text>
-                <Text style={styles.gridLabel}>Chapter</Text>
+                <Text style={styles.gridLabel}>{tr(appLanguage, "Chapter")}</Text>
               </Pressable>
             ))}
           </View>
@@ -649,7 +648,7 @@ export function BibleScreen({ go }) {
         />
 
         <ScrollView contentContainerStyle={styles.page}>
-          <Text style={styles.sectionTitle}>Select a Verse</Text>
+          <Text style={styles.sectionTitle}>{tr(appLanguage, "Select a Verse")}</Text>
 
           <View style={styles.grid}>
             {Array.from({ length: verseCount }, (_, i) => i + 1).map(item => (
@@ -659,7 +658,7 @@ export function BibleScreen({ go }) {
                 onPress={() => openReader(item)}
               >
                 <Text style={styles.gridNumber}>{item}.</Text>
-                <Text style={styles.gridLabel}>Verse</Text>
+                <Text style={styles.gridLabel}>{tr(appLanguage, "Verse")}</Text>
               </Pressable>
             ))}
           </View>
@@ -733,7 +732,7 @@ export function BibleScreen({ go }) {
                   readingMode === item.key && styles.modeTextActive
                 ]}
               >
-                {item.label}
+                {tr(appLanguage, item.label)}
               </Text>
             </Pressable>
           ))}
@@ -742,8 +741,8 @@ export function BibleScreen({ go }) {
         {readingMode === "parallel" ? (
           <>
             <View style={styles.readerLabels}>
-              <Text style={styles.readerLabel}>Kiswahili</Text>
-              <Text style={styles.readerLabel}>English</Text>
+              <Text style={styles.readerLabel}>{tr(appLanguage, "Kiswahili")}</Text>
+              <Text style={styles.readerLabel}>{tr(appLanguage, "English")}</Text>
             </View>
 
             <View style={styles.parallel}>

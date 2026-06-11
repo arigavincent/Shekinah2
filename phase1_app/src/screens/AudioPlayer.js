@@ -96,7 +96,7 @@ function PlayerAction({ icon, label, active, disabled, onPress }) {
   );
 }
 
-export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab }) {
+export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLanguage = "en" }) {
   const { data } = useContent();
 
   const [audioState, setAudioState] = useState(getAudioPlaybackState());
@@ -371,7 +371,7 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab }) {
       <Image source={{ uri: thumbnail }} style={s.audioBg} />
       <View style={s.audioShade} />
 
-      <TopBar title="Audio Player" go={go} back="Sermons" />
+      <TopBar title="Audio Player" go={go} back="Sermons" appLanguage={appLanguage} />
 
       <ScrollView contentContainerStyle={s.audioContent}>
         <Image source={{ uri: thumbnail }} style={s.albumLarge} />

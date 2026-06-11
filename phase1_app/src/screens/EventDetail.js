@@ -29,11 +29,11 @@ function eventTime(event) {
   return event?.time || event?.eventTime || "";
 }
 
-export function EventDetail({ event, go }) {
+export function EventDetail({ event, go, appLanguage = "en" }) {
   if (!event) {
     return (
       <Screen>
-        <TopBar title="Event" go={go} back="Events" />
+        <TopBar title="Event" go={go} back="Events" appLanguage={appLanguage} />
         <EmptyState title="No Event Selected" text="Choose an event first." />
       </Screen>
     );
@@ -47,7 +47,7 @@ export function EventDetail({ event, go }) {
 
   return (
     <Screen>
-      <TopBar title="Event" go={go} back="Events" />
+      <TopBar title="Event" go={go} back="Events" appLanguage={appLanguage} />
 
       <ScrollView contentContainerStyle={s.scrollPad}>
         <Image source={{ uri: eventImage(event) }} style={s.detailImage} />
