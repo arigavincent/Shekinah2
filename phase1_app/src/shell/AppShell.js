@@ -29,6 +29,8 @@ import { AboutScreen } from "../screens/AboutScreen";
 import { AudioPlayer } from "../screens/AudioPlayer";
 import { BibleScreen } from "../screens/BibleScreen";
 import { BranchesScreen } from "../screens/BranchesScreen";
+import { ChatScreen } from "../screens/ChatScreen";
+import { CheckInScreen } from "../screens/CheckInScreen";
 import { DevotionDetail } from "../screens/DevotionDetail";
 import { DevotionsScreen } from "../screens/DevotionsScreen";
 import { DownloadsScreen } from "../screens/DownloadsScreen";
@@ -40,9 +42,11 @@ import { LiveScreen } from "../screens/LiveScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { PlatformsScreen } from "../screens/PlatformsScreen";
 import { PrayerScreen } from "../screens/PrayerScreen";
+import { ReadingPlansScreen } from "../screens/ReadingPlansScreen";
 import { SearchScreen } from "../screens/SearchScreen";
 import { SermonsScreen } from "../screens/SermonsScreen";
 import { ServeScreen } from "../screens/ServeScreen";
+import { TestimoniesScreen } from "../screens/TestimoniesScreen";
 import { UpdatesScreen } from "../screens/UpdatesScreen";
 import { VideoDetail } from "../screens/VideoDetail";
 
@@ -61,7 +65,11 @@ const NOTIFICATION_SCREENS = new Set([
   "About",
   "Profile",
   "Notifications",
-  "Downloads"
+  "Downloads",
+  "Chat",
+  "Testimonies",
+  "ReadingPlans",
+  "CheckIn"
 ]);
 
 function notificationTargetScreen(data) {
@@ -380,12 +388,20 @@ useEffect(() => {
         return <LiveScreen go={go} openDrawer={openDrawer} openSermon={openSermon} appLanguage={appLanguage} />;
       case "Downloads":
         return <DownloadsScreen go={go} tab={downloadsTab} setTab={setDownloadsTab} appLanguage={appLanguage} />;
+      case "Chat":
+        return <ChatScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
+      case "Testimonies":
+        return <TestimoniesScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
       case "Branches":
         return <BranchesScreen go={go} appLanguage={appLanguage} />;
       case "Profile":
         return <AuthProfileScreen go={go} appLanguage={appLanguage} setAppLanguage={setAppLanguage} />;
       case "Bible":
         return <BibleScreen go={go} appLanguage={appLanguage} />;
+      case "ReadingPlans":
+        return <ReadingPlansScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
+      case "CheckIn":
+        return <CheckInScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
       case "Events":
         return <EventsScreen go={go} appLanguage={appLanguage} />;
       case "EventDetail":

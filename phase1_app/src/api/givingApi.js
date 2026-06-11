@@ -7,6 +7,13 @@ export function startMpesaGiving(payload) {
   });
 }
 
+export function startCardGiving(payload) {
+  return request("/api/v1/giving/card/checkout", {
+    method: "POST",
+    body: payload
+  });
+}
+
 export function getGivingTransaction(id) {
   return request(`/api/v1/giving/transactions/${id}`);
 }

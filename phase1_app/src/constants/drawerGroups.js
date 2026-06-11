@@ -13,7 +13,8 @@ export const DRAWER_GROUPS = [
     [
       ["Downloads", "Downloads"],
       ["Our Platforms", "Platforms"],
-      ["Chat", "Prayer"]
+      ["Chat", "Chat"],
+      ["Testimonies", "Testimonies"]
     ]
   ],
 
@@ -24,7 +25,9 @@ export const DRAWER_GROUPS = [
       ["Branches", "Branches"],
       ["Serve", "Serve"],
       ["Prayer Request", "Prayer"],
-      ["Bible", "Bible"]
+      ["Bible", "Bible"],
+      ["Reading Plans", "ReadingPlans"],
+      ["QR Check-In", "CheckIn"]
     ]
   ],
 

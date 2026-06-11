@@ -15,6 +15,9 @@ import { GivingPage } from "./pages/GivingPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { PrayersPage } from "./pages/PrayersPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
+import { CommunityPage } from "./pages/CommunityPage";
+import { TestimoniesPage } from "./pages/TestimoniesPage";
+import { CheckInPage } from "./pages/CheckInPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const token = getToken();
@@ -64,6 +67,9 @@ export default function App() {
         <Route path="branches" element={<BranchesPage />} />
         <Route path="live" element={<LiveConfigPage />} />
         <Route path="prayers" element={<PrayersPage />} />
+        <Route path="community" element={<CommunityPage />} />
+        <Route path="testimonies" element={<TestimoniesPage />} />
+        <Route path="checkins" element={<CheckInPage />} />
         <Route path="giving" element={<GivingPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
 

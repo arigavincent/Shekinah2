@@ -41,7 +41,7 @@ type Version struct {
 }
 
 var titlePattern = regexp.MustCompile(`(?is)<h1[^>]*>(.*?)</h1>`)
-var hrefPattern = regexp.MustCompile(`href=["']([^"']+_vpl\.zip)["']`)
+var hrefPattern = regexp.MustCompile(`href=["']([^"']+_vpl\.txt)["']`)
 
 func NewHandler(db *pgxpool.Pool, cfg config.Config) Handler {
 	return Handler{
@@ -64,9 +64,9 @@ func localCatalog() []Version {
 			License:             "Public Domain",
 			Attribution:         "Berean Bible Translation Committee",
 			Provider:            "eBible mirror",
-			DownloadURL:         "https://ebible.org/Scriptures/engmsb_vpl.zip",
+			DownloadURL:         "https://ebible.org/Scriptures/engmsb_vpl.txt",
 			FallbackDownloadURL: "/api/v1/bible/versions/engmsb/download",
-			FileType:            "vpl-zip",
+			FileType:            "vpl-text",
 		},
 		{
 			ID:                  "swhonen",
@@ -77,9 +77,9 @@ func localCatalog() []Version {
 			License:             "CC BY-SA 4.0",
 			Attribution:         "Biblica, Inc.",
 			Provider:            "eBible mirror",
-			DownloadURL:         "https://ebible.org/Scriptures/swhonen_vpl.zip",
+			DownloadURL:         "https://ebible.org/Scriptures/swhonen_vpl.txt",
 			FallbackDownloadURL: "/api/v1/bible/versions/swhonen/download",
-			FileType:            "vpl-zip",
+			FileType:            "vpl-text",
 		},
 	}
 }
@@ -87,9 +87,9 @@ func localCatalog() []Version {
 func sampleFilePath(versionID string) string {
 	switch versionID {
 	case "engmsb":
-		return filepath.Join("..", "phase1_app", "tmp", "bible-source", "engmsb_vpl.zip")
+		return filepath.Join("..", "phase1_app", "tmp", "bible-source", "engmsb_vpl.txt")
 	case "swhonen":
-		return filepath.Join("..", "phase1_app", "tmp", "bible-source", "swhonen_vpl.zip")
+		return filepath.Join("..", "phase1_app", "tmp", "bible-source", "swhonen_vpl.txt")
 	default:
 		return ""
 	}
@@ -122,7 +122,7 @@ func parseCatalogFromHTML(body string) []Version {
 		}
 
 		base := filepath.Base(absolute)
-		id := strings.TrimSuffix(base, "_vpl.zip")
+		id := strings.TrimSuffix(base, "_vpl.txt")
 		if id == "" || seen[id] {
 			continue
 		}
@@ -148,7 +148,7 @@ func parseCatalogFromHTML(body string) []Version {
 			Attribution:  "eBible.org",
 			Provider:     "eBible.org",
 			DownloadURL:  absolute,
-			FileType:     "vpl-zip",
+			FileType:     "vpl-text",
 		})
 	}
 
@@ -208,8 +208,8 @@ func (h Handler) Download(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", `attachment; filename="`+versionID+`_vpl.zip"`)
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.Header("Content-Disposition", `attachment; filename="`+versionID+`_vpl.txt"`)
 	c.File(path)
 }
 

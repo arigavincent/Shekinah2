@@ -1,34 +1,35 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BackHandler, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  BackHandler,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { openDatabaseAsync } from "expo-sqlite";
-import * as FileSystem from "expo-file-system/legacy";
-import { Asset } from "expo-asset";
 
 import { Screen } from "../components/Screen";
 import { tr } from "../i18n/labels";
-import { s } from "../styles/appStyles";
+import { listBibleVersions } from "../api/bibleVersionsApi";
 import {
   DEFAULT_BIBLE_STATE,
   loadBibleState,
   saveBibleState
 } from "../services/bibleStorage";
-
-const DB_NAME = "bible.db";
-const DB_ASSET = require("../../assets/bible/bible.db");
+import {
+  BUNDLED_VERSION_IDS,
+  getVersionChapterVerses,
+  installBibleVersion,
+  listInstalledBibleVersions,
+  openBibleDb,
+  removeBibleVersion
+} from "../services/bibleVersionInstaller";
 
 const ENGLISH = "eng_msb";
 const SWAHILI = "swh_neno";
 const FONT_SCALES = [0.85, 1, 1.15, 1.3];
-const VIEW_MODES = [
-  { key: "parallel", label: "Parallel" },
-  { key: SWAHILI, label: "Kiswahili" },
-  { key: ENGLISH, label: "English" }
-];
-const BUNDLED_VERSIONS = [
-  { id: ENGLISH, name: "English (KJV style)", source: "Bundled offline" },
-  { id: SWAHILI, name: "Kiswahili", source: "Bundled offline" }
-];
 
 function chapterRef(bookId, chapter) {
   return `${bookId}:${chapter}`;
@@ -36,29 +37,6 @@ function chapterRef(bookId, chapter) {
 
 function recentKey(bookId, chapter) {
   return `${bookId}:${chapter}`;
-}
-
-async function ensureBibleDb() {
-  const dir = `${FileSystem.documentDirectory}SQLite`;
-  const target = `${dir}/${DB_NAME}`;
-
-  const info = await FileSystem.getInfoAsync(target);
-  if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-
-    const asset = Asset.fromModule(DB_ASSET);
-    await asset.downloadAsync();
-
-    await FileSystem.copyAsync({
-      from: asset.localUri || asset.uri,
-      to: target
-    });
-  }
-}
-
-async function openBibleDb() {
-  await ensureBibleDb();
-  return openDatabaseAsync(DB_NAME);
 }
 
 async function getBooks(db) {
@@ -188,11 +166,17 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   const [stage, setStage] = useState("books");
   const [tab, setTab] = useState("ALL");
   const [books, setBooks] = useState([]);
+  const [installedVersions, setInstalledVersions] = useState([]);
+  const [catalogVersions, setCatalogVersions] = useState([]);
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [installingVersionId, setInstallingVersionId] = useState("");
   const [book, setBook] = useState(null);
   const [chapter, setChapter] = useState(1);
   const [chapterCount, setChapterCount] = useState(1);
   const [verseCount, setVerseCount] = useState(1);
-  const [verses, setVerses] = useState([]);
+  const [parallelVerses, setParallelVerses] = useState([]);
+  const [singleVersionVerses, setSingleVersionVerses] = useState([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
@@ -211,20 +195,61 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     DEFAULT_BIBLE_STATE.preferences.readingMode
   );
 
+  async function persistBibleState(nextState) {
+    setBibleState(nextState);
+    await saveBibleState(nextState);
+  }
+
+  async function syncInstalled(database, stateOverride) {
+    const state = stateOverride || bibleState;
+    const rows = await listInstalledBibleVersions(database);
+    const installedIds = rows.map(item => item.id);
+    setInstalledVersions(rows);
+
+    const nextReadingMode =
+      state.preferences.readingMode !== "parallel" &&
+      !installedIds.includes(state.preferences.readingMode)
+        ? "parallel"
+        : state.preferences.readingMode;
+
+    setReadingMode(nextReadingMode);
+
+    const nextState = {
+      ...state,
+      preferences: {
+        ...state.preferences,
+        installedVersions: installedIds,
+        readingMode: nextReadingMode,
+        selectedVersionId:
+          nextReadingMode === "parallel"
+            ? state.preferences.selectedVersionId
+            : nextReadingMode
+      }
+    };
+
+    await persistBibleState(nextState);
+    return rows;
+  }
+
   useEffect(() => {
     let alive = true;
 
     Promise.all([openBibleDb(), loadBibleState()])
       .then(async ([database, savedState]) => {
         if (!alive) return;
+
         setDb(database);
         setBibleState(savedState);
         setFontScaleIndex(savedState.preferences.fontScaleIndex);
         setReadingMode(savedState.preferences.readingMode);
 
-        const rows = await getBooks(database);
+        const [nextBooks] = await Promise.all([
+          getBooks(database),
+          syncInstalled(database, savedState)
+        ]);
+
         if (!alive) return;
-        setBooks(rows);
+        setBooks(nextBooks);
       })
       .finally(() => alive && setLoading(false));
 
@@ -239,7 +264,8 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     let alive = true;
     setChapterCount(0);
     setVerseCount(0);
-    setVerses([]);
+    setParallelVerses([]);
+    setSingleVersionVerses([]);
 
     getChapterCount(db, book.id).then(total => {
       if (!alive) return;
@@ -256,7 +282,8 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
     let alive = true;
     setVerseCount(0);
-    setVerses([]);
+    setParallelVerses([]);
+    setSingleVersionVerses([]);
 
     Promise.all([
       getVerseCount(db, book.id, chapter),
@@ -264,13 +291,30 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     ]).then(([count, rows]) => {
       if (!alive) return;
       setVerseCount(count);
-      setVerses(rows);
+      setParallelVerses(rows);
     });
 
     return () => {
       alive = false;
     };
   }, [db, book?.id, chapter]);
+
+  useEffect(() => {
+    if (!db || !book || readingMode === "parallel") {
+      setSingleVersionVerses([]);
+      return;
+    }
+
+    let alive = true;
+    getVersionChapterVerses(db, readingMode, book.id, chapter).then(rows => {
+      if (!alive) return;
+      setSingleVersionVerses(Array.isArray(rows) ? rows : []);
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [db, book?.id, chapter, readingMode]);
 
   useEffect(() => {
     if (!db || !query.trim()) {
@@ -284,6 +328,35 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
     return () => clearTimeout(timer);
   }, [db, query]);
+
+  useEffect(() => {
+    if (stage !== "library") return;
+
+    let alive = true;
+    setCatalogLoading(true);
+
+    const timer = setTimeout(() => {
+      listBibleVersions(catalogQuery)
+        .then(response => {
+          if (!alive) return;
+          const installed = new Set(installedVersions.map(item => item.id));
+          setCatalogVersions(
+            (response?.versions || []).filter(item => !installed.has(item.id))
+          );
+        })
+        .catch(() => {
+          if (alive) setCatalogVersions([]);
+        })
+        .finally(() => {
+          if (alive) setCatalogLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [stage, catalogQuery, installedVersions]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -362,23 +435,39 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     [bibleState.bookmarks, books]
   );
 
+  const viewModes = useMemo(() => {
+    return [
+      { key: "parallel", label: "Parallel" },
+      ...installedVersions.map(version => ({
+        key: version.id,
+        label:
+          version.id === ENGLISH
+            ? "English"
+            : version.id === SWAHILI
+              ? "Kiswahili"
+              : version.short_label || version.abbreviation || version.name
+      }))
+    ];
+  }, [installedVersions]);
+
+  const activeVersionMeta = useMemo(
+    () => installedVersions.find(item => item.id === readingMode) || null,
+    [installedVersions, readingMode]
+  );
+
   function openBook(nextBook) {
     setBook(nextBook);
     setChapter(1);
     setChapterCount(0);
     setVerseCount(0);
-    setVerses([]);
+    setParallelVerses([]);
+    setSingleVersionVerses([]);
     setStage("chapters");
   }
 
   function openChapter(nextChapter) {
     setChapter(nextChapter);
     setStage("verses");
-  }
-
-  async function persistBibleState(nextState) {
-    setBibleState(nextState);
-    await saveBibleState(nextState);
   }
 
   async function rememberRecent(nextBook, nextChapter) {
@@ -391,12 +480,11 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     await persistBibleState(nextState);
   }
 
-  function openReader(nextVerse = 1) {
+  function openReader() {
     setStage("reader");
     if (book) {
       void rememberRecent(book, chapter);
     }
-    setTimeout(() => {}, nextVerse);
   }
 
   function openSavedChapter(nextBook, nextChapter) {
@@ -415,12 +503,11 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     const nextBookmarks = favoriteRefs.has(currentRef)
       ? bibleState.bookmarks.filter(ref => ref !== currentRef)
       : [...bibleState.bookmarks, currentRef];
-    const nextState = {
+
+    await persistBibleState({
       ...bibleState,
       bookmarks: nextBookmarks
-    };
-
-    await persistBibleState(nextState);
+    });
   }
 
   function cycleFontSize() {
@@ -431,7 +518,11 @@ export function BibleScreen({ go, appLanguage = "en" }) {
       preferences: {
         ...bibleState.preferences,
         fontScaleIndex: nextIndex,
-        readingMode
+        readingMode,
+        selectedVersionId:
+          readingMode === "parallel"
+            ? bibleState.preferences.selectedVersionId
+            : readingMode
       }
     });
   }
@@ -443,7 +534,11 @@ export function BibleScreen({ go, appLanguage = "en" }) {
       preferences: {
         ...bibleState.preferences,
         fontScaleIndex,
-        readingMode: nextMode
+        readingMode: nextMode,
+        selectedVersionId:
+          nextMode === "parallel"
+            ? bibleState.preferences.selectedVersionId
+            : nextMode
       }
     });
   }
@@ -459,6 +554,55 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     setShowSearch(false);
     setStage("reader");
     void rememberRecent(nextBook, item.chapter);
+  }
+
+  async function handleInstallVersion(version) {
+    setInstallingVersionId(version.id);
+
+    try {
+      const installed = await installBibleVersion(version);
+      const nextState = {
+        ...bibleState,
+        preferences: {
+          ...bibleState.preferences,
+          readingMode: installed.id,
+          selectedVersionId: installed.id
+        }
+      };
+      await syncInstalled(db, nextState);
+      setReadingMode(installed.id);
+      Alert.alert("Bible Downloaded", `${installed.name} is now available offline.`);
+    } catch (error) {
+      Alert.alert(
+        "Bible Download Failed",
+        error instanceof Error ? error.message : "Unable to install this Bible version."
+      );
+    } finally {
+      setInstallingVersionId("");
+    }
+  }
+
+  async function handleRemoveVersion(versionId) {
+    try {
+      await removeBibleVersion(versionId);
+      const nextState = {
+        ...bibleState,
+        preferences: {
+          ...bibleState.preferences,
+          readingMode:
+            bibleState.preferences.readingMode === versionId
+              ? "parallel"
+              : bibleState.preferences.readingMode
+        }
+      };
+      await syncInstalled(db, nextState);
+      Alert.alert("Removed", "The Bible version was removed from this device.");
+    } catch (error) {
+      Alert.alert(
+        "Remove Failed",
+        error instanceof Error ? error.message : "Unable to remove this Bible version."
+      );
+    }
   }
 
   const fontScale = FONT_SCALES[fontScaleIndex];
@@ -504,11 +648,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
         <ScrollView contentContainerStyle={styles.page}>
           {visibleBooks.map(item => (
-            <Pressable
-              key={item.id}
-              style={styles.bookCard}
-              onPress={() => openBook(item)}
-            >
+            <Pressable key={item.id} style={styles.bookCard} onPress={() => openBook(item)}>
               <Ionicons name="book" size={36} color="#b2223a" />
 
               <View style={styles.bookMeta}>
@@ -537,28 +677,64 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
         <ScrollView contentContainerStyle={styles.page}>
           <Text style={styles.sectionTitle}>{tr(appLanguage, "Installed Versions")}</Text>
-          {BUNDLED_VERSIONS.map(version => {
-            const installed = bibleState.preferences.installedVersions.includes(version.id);
+          {installedVersions.map(version => {
+            const removable = !BUNDLED_VERSION_IDS.includes(version.id);
 
             return (
               <View key={version.id} style={styles.versionCard}>
                 <View style={styles.versionMeta}>
                   <Text style={styles.versionTitle}>{version.name}</Text>
-                  <Text style={styles.muted}>{version.source}</Text>
+                  <Text style={styles.muted}>{version.license || tr(appLanguage, "Bundled offline")}</Text>
                 </View>
-                <Text style={styles.versionState}>
-                  {installed ? tr(appLanguage, "Installed") : tr(appLanguage, "Unavailable")}
-                </Text>
+
+                <View style={{ alignItems: "flex-end", gap: 8 }}>
+                  <Text style={styles.versionState}>{tr(appLanguage, "Installed")}</Text>
+                  {removable ? (
+                    <Pressable onPress={() => handleRemoveVersion(version.id)}>
+                      <Text style={[styles.versionState, { color: "#f87171" }]}>Remove</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               </View>
             );
           })}
 
           <View style={styles.infoPanel}>
             <Text style={styles.infoTitle}>{tr(appLanguage, "Download More Versions")}</Text>
+            <TextInput
+              value={catalogQuery}
+              onChangeText={setCatalogQuery}
+              placeholder="Search version or language..."
+              placeholderTextColor="#888"
+              style={[styles.searchInput, { marginBottom: 10 }]}
+            />
             <Text style={styles.infoText}>
-              {tr(appLanguage, "Additional Bible versions need a configured source and licensing feed. The reader is ready for them, but this build ships with English and Kiswahili offline.")}
+              Direct provider catalog with offline install to this device.
             </Text>
           </View>
+
+          {catalogLoading ? (
+            <Text style={styles.emptyText}>Loading available versions...</Text>
+          ) : catalogVersions.length ? (
+            catalogVersions.slice(0, 30).map(version => (
+              <View key={version.id} style={styles.versionCard}>
+                <View style={styles.versionMeta}>
+                  <Text style={styles.versionTitle}>{version.name}</Text>
+                  <Text style={styles.muted}>
+                    {version.languageName || version.languageCode || version.provider}
+                  </Text>
+                </View>
+
+                <Pressable disabled={installingVersionId === version.id} onPress={() => handleInstallVersion(version)}>
+                  <Text style={styles.versionState}>
+                    {installingVersionId === version.id ? "Installing..." : tr(appLanguage, "Download")}
+                  </Text>
+                </Pressable>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>No additional versions found for that search.</Text>
+          )}
 
           <Text style={styles.sectionTitle}>{tr(appLanguage, "Recent Chapters")}</Text>
           {recentChapters.length ? (
@@ -624,11 +800,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
           <View style={styles.grid}>
             {Array.from({ length: chapterCount }, (_, i) => i + 1).map(item => (
-              <Pressable
-                key={item}
-                style={styles.gridCell}
-                onPress={() => openChapter(item)}
-              >
+              <Pressable key={item} style={styles.gridCell} onPress={() => openChapter(item)}>
                 <Text style={styles.gridNumber}>{item}.</Text>
                 <Text style={styles.gridLabel}>{tr(appLanguage, "Chapter")}</Text>
               </Pressable>
@@ -652,11 +824,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
           <View style={styles.grid}>
             {Array.from({ length: verseCount }, (_, i) => i + 1).map(item => (
-              <Pressable
-                key={item}
-                style={styles.gridCell}
-                onPress={() => openReader(item)}
-              >
+              <Pressable key={item} style={styles.gridCell} onPress={() => openReader(item)}>
                 <Text style={styles.gridNumber}>{item}.</Text>
                 <Text style={styles.gridLabel}>{tr(appLanguage, "Verse")}</Text>
               </Pressable>
@@ -699,7 +867,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Search English or Kiswahili..."
+              placeholder="Search installed Bible versions..."
               placeholderTextColor="#888"
               style={styles.searchInput}
               autoFocus
@@ -719,19 +887,15 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             ))}
           </View>
         )}
+
         <View style={styles.modeRow}>
-          {VIEW_MODES.map(item => (
+          {viewModes.map(item => (
             <Pressable
               key={item.key}
               style={[styles.modePill, readingMode === item.key && styles.modePillActive]}
               onPress={() => selectReadingMode(item.key)}
             >
-              <Text
-                style={[
-                  styles.modeText,
-                  readingMode === item.key && styles.modeTextActive
-                ]}
-              >
+              <Text style={[styles.modeText, readingMode === item.key && styles.modeTextActive]}>
                 {tr(appLanguage, item.label)}
               </Text>
             </Pressable>
@@ -748,7 +912,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             <View style={styles.parallel}>
               <View style={styles.column}>
                 <Text style={styles.chapterHeading}>{book?.swahili_name}</Text>
-                {verses.map(item => (
+                {parallelVerses.map(item => (
                   <Text
                     key={`sw-${item.verse}`}
                     style={[
@@ -763,7 +927,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
               </View>
 
               <View style={styles.column}>
-                {verses.map(item => (
+                {parallelVerses.map(item => (
                   <Text
                     key={`en-${item.verse}`}
                     style={[
@@ -781,9 +945,9 @@ export function BibleScreen({ go, appLanguage = "en" }) {
         ) : (
           <View style={styles.singleColumn}>
             <Text style={styles.chapterHeading}>
-              {readingMode === SWAHILI ? book?.swahili_name : book?.english_name}
+              {activeVersionMeta?.name || book?.english_name}
             </Text>
-            {verses.map(item => (
+            {singleVersionVerses.map(item => (
               <Text
                 key={`${readingMode}-${item.verse}`}
                 style={[
@@ -792,9 +956,12 @@ export function BibleScreen({ go, appLanguage = "en" }) {
                 ]}
               >
                 <Text style={styles.verseNo}>{item.verse} </Text>
-                {readingMode === SWAHILI ? item.swahili_text : item.english_text}
+                {item.text}
               </Text>
             ))}
+            {!singleVersionVerses.length ? (
+              <Text style={styles.emptyText}>No verses are available for this version in the selected chapter.</Text>
+            ) : null}
           </View>
         )}
       </ScrollView>

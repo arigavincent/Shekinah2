@@ -12,6 +12,9 @@ const navItems = [
   { label: "Branches", to: "/branches" },
   { label: "Live", to: "/live" },
   { label: "Prayer", to: "/prayers" },
+  { label: "Chat", to: "/community" },
+  { label: "Testimonies", to: "/testimonies" },
+  { label: "Check-In", to: "/checkins" },
   { label: "Giving", to: "/giving" },
   { label: "Notifications", to: "/notifications" }
 ];

@@ -10,7 +10,8 @@ export const DEFAULT_BIBLE_STATE = {
   preferences: {
     readingMode: "parallel",
     fontScaleIndex: 1,
-    installedVersions: ["eng_msb", "swh_neno"]
+    installedVersions: ["eng_msb", "swh_neno"],
+    selectedVersionId: "eng_msb"
   }
 };
 
@@ -31,7 +32,12 @@ function normalizeBibleState(value) {
             ...value.preferences,
             installedVersions: Array.isArray(value.preferences.installedVersions)
               ? value.preferences.installedVersions
-              : DEFAULT_BIBLE_STATE.preferences.installedVersions
+              : DEFAULT_BIBLE_STATE.preferences.installedVersions,
+            selectedVersionId:
+              typeof value.preferences.selectedVersionId === "string" &&
+              value.preferences.selectedVersionId.trim()
+                ? value.preferences.selectedVersionId.trim()
+                : DEFAULT_BIBLE_STATE.preferences.selectedVersionId
           }
         : DEFAULT_BIBLE_STATE.preferences
   };

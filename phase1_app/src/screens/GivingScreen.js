@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,6 +18,7 @@ import { TopBar } from "../components/TopBar";
 import { Tabs } from "../components/Tabs";
 import {
   getGivingTransaction,
+  startCardGiving,
   startMpesaGiving
 } from "../api/givingApi";
 import {
@@ -28,6 +30,7 @@ import {
 
 const CATEGORIES = ["Tithe", "Offering", "Thanksgiving", "Project", "Special Seed"];
 const QUICK_AMOUNTS = [100, 500, 1000, 2000, 5000, 10000];
+const METHODS = ["M-Pesa", "Card"];
 
 function normalizePhone(value) {
   return String(value || "").replace(/[\s-]+/g, "");
@@ -156,8 +159,11 @@ function GivingTransactionCard({ item, onRefresh, refreshing }) {
 }
 
 export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
+  const [method, setMethod] = useState("M-Pesa");
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [category, setCategory] = useState("Tithe");
   const [note, setNote] = useState("");
   const [transactions, setTransactions] = useState([]);
@@ -172,8 +178,6 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
   }, []);
 
   function validate() {
-    const cleanPhone = normalizePhone(phone);
-
     if (!cleanAmount || cleanAmount <= 0) {
       return "Enter a valid amount greater than zero.";
     }
@@ -182,8 +186,21 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
       return "Amount exceeds supported M-Pesa limit.";
     }
 
-    if (!/^(?:\+254|254|0)?[17]\d{8}$/.test(cleanPhone)) {
-      return "Use a valid Kenyan M-Pesa number, for example 0712345678 or +254712345678.";
+    if (method === "M-Pesa") {
+      const cleanPhone = normalizePhone(phone);
+      if (!/^(?:\+254|254|0)?[17]\d{8}$/.test(cleanPhone)) {
+        return "Use a valid Kenyan M-Pesa number, for example 0712345678 or +254712345678.";
+      }
+    }
+
+    if (method === "Card") {
+      if (!String(fullName || "").trim()) {
+        return "Enter the card payer's full name.";
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim())) {
+        return "Enter a valid email address for the card checkout.";
+      }
     }
 
     return "";
@@ -200,12 +217,22 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
     setSubmitting(true);
 
     try {
-      const response = await startMpesaGiving({
-        category,
-        phone: normalizePhone(phone),
-        amount: cleanAmount,
-        note: note.trim()
-      });
+      const response =
+        method === "M-Pesa"
+          ? await startMpesaGiving({
+              category,
+              phone: normalizePhone(phone),
+              amount: cleanAmount,
+              note: note.trim()
+            })
+          : await startCardGiving({
+              category,
+              amount: cleanAmount,
+              phone: normalizePhone(phone),
+              email: email.trim().toLowerCase(),
+              name: fullName.trim(),
+              note: note.trim()
+            });
 
       const transaction = response?.transaction;
 
@@ -220,16 +247,31 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
 
       setAmount("");
       setNote("");
+      if (method === "Card") {
+        setEmail("");
+        setFullName("");
+      }
       setTab("Give History");
 
-      Alert.alert(
-        "M-Pesa Request Sent",
-        "Check your phone and enter your M-Pesa PIN to complete the giving transaction."
-      );
+      if (method === "M-Pesa") {
+        Alert.alert(
+          "M-Pesa Request Sent",
+          "Check your phone and enter your M-Pesa PIN to complete the giving transaction."
+        );
+      } else {
+        if (transaction.checkoutUrl) {
+          await Linking.openURL(transaction.checkoutUrl);
+        }
+
+        Alert.alert(
+          "Card Checkout Ready",
+          "A secure card checkout page has been opened. Complete the payment there, then refresh Giving History."
+        );
+      }
     } catch (error) {
       Alert.alert(
         "Giving Failed",
-        error instanceof Error ? error.message : "Unable to start M-Pesa giving."
+        error instanceof Error ? error.message : "Unable to start the giving flow."
       );
     } finally {
       setSubmitting(false);
@@ -330,13 +372,25 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
         {tab === "Give Now" ? (
           <>
             <View style={s.plainCard}>
-              <Text style={[s.goldSmall, { color: C.gold }]}>M-Pesa Giving</Text>
+              <Text style={[s.goldSmall, { color: C.gold }]}>
+                {method === "M-Pesa" ? "M-Pesa Giving" : "Visa / Mastercard"}
+              </Text>
               <Text style={[s.detailTitle, { color: C.white }]}>
                 Give to Shekinah Sons Global
               </Text>
               <Text style={[s.mutedText, { color: C.muted }]}>
-                An STK push will be sent to your phone. Enter your M-Pesa PIN to complete.
+                {method === "M-Pesa"
+                  ? "An STK push will be sent to your phone. Enter your M-Pesa PIN to complete."
+                  : "Card giving opens a secure hosted checkout. Complete the payment and return to refresh history."}
               </Text>
+            </View>
+
+            <Text style={[s.sectionTitle, { marginBottom: 8 }]}>Payment Method</Text>
+
+            <View style={s.tabsCompact}>
+              {METHODS.map(item => (
+                <Chip key={item} label={item} active={method === item} onPress={() => setMethod(item)} />
+              ))}
             </View>
 
             <Text style={[s.sectionTitle, { marginBottom: 8 }]}>Giving Type</Text>
@@ -381,7 +435,7 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
               ))}
             </View>
 
-            <Text style={s.inputLabel}>M-Pesa Phone Number</Text>
+            <Text style={s.inputLabel}>{method === "M-Pesa" ? "M-Pesa Phone Number" : "Phone Number"}</Text>
             <TextInput
               style={[
                 s.searchInput,
@@ -398,6 +452,32 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
               value={phone}
               onChangeText={setPhone}
             />
+
+            {method === "Card" ? (
+              <>
+                <Text style={s.inputLabel}>Full Name</Text>
+                <TextInput
+                  style={[s.searchInput, { color: C.white, fontWeight: "800" }]}
+                  placeholder="Card payer full name"
+                  placeholderTextColor={C.muted}
+                  selectionColor={C.gold}
+                  value={fullName}
+                  onChangeText={setFullName}
+                />
+
+                <Text style={s.inputLabel}>Email Address</Text>
+                <TextInput
+                  style={[s.searchInput, { color: C.white, fontWeight: "800" }]}
+                  placeholder="name@example.com"
+                  placeholderTextColor={C.muted}
+                  selectionColor={C.gold}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </>
+            ) : null}
 
             <Text style={s.inputLabel}>Optional Note</Text>
             <TextInput
@@ -423,7 +503,9 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
             <View style={s.formNote}>
               <Ionicons name="information-circle-outline" size={20} color={C.gold} />
               <Text style={s.formNoteText}>
-                If Daraja credentials are not configured yet, the app will show the backend configuration error.
+                {method === "M-Pesa"
+                  ? "If Daraja credentials are not configured yet, the app will show the backend configuration error."
+                  : "Card giving uses a hosted checkout flow. In local development, the backend can open a mock sandbox page if live provider keys are not configured."}
               </Text>
             </View>
 
@@ -433,7 +515,13 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
               disabled={submitting}
             >
               <Text style={s.primaryText}>
-                {submitting ? "Sending STK Push..." : "Give with M-Pesa"}
+                {submitting
+                  ? method === "M-Pesa"
+                    ? "Sending STK Push..."
+                    : "Opening Checkout..."
+                  : method === "M-Pesa"
+                    ? "Give with M-Pesa"
+                    : "Pay with Card"}
               </Text>
             </Pressable>
           </>
