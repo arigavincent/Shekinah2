@@ -20,6 +20,7 @@ import { TopBar } from "../components/TopBar";
 import { IconButton } from "../components/IconButton";
 import { Tabs } from "../components/Tabs";
 import { ClipCard } from "../components/Cards";
+import { useDownloadsMap } from "../hooks/useDownloadsMap";
 import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
 import {
   formatPlaybackTime,
@@ -136,11 +137,12 @@ function playableClipFromContent(item) {
   };
 }
 
-function SermonRow({ item, openSermon, progressEntry }) {
+function SermonRow({ item, openSermon, progressEntry, downloadEntry }) {
   const thumbnail = sermonThumbnail(item, PHASE1_IMAGES.sermon);
   const showContinue = hasContinueProgress(progressEntry);
   const progressPercent = Math.max(4, Math.round(progressRatio(progressEntry) * 100));
   const missingAudioFile = item?.type === "audio" && !hasValidMediaUrl(item);
+  const downloaded = Boolean(downloadEntry?.localUri);
 
   return (
     <Pressable
@@ -185,7 +187,11 @@ function SermonRow({ item, openSermon, progressEntry }) {
           </>
         ) : (
           <Text style={s.goldSmall}>
-            {missingAudioFile ? "Audio added · file pending" : mediaBadge(item)}
+            {downloaded
+              ? `Downloaded · ${missingAudioFile ? "audio pending" : mediaBadge(item)}`
+              : missingAudioFile
+                ? "Audio added · file pending"
+                : mediaBadge(item)}
           </Text>
         )}
       </View>
@@ -542,6 +548,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const { data, loading, reload } = useContent();
   const progressMap = usePlaybackProgressMap();
+  const downloads = useDownloadsMap();
 
   const sermons = Array.isArray(data.sermons) ? data.sermons : [];
   const categories = Array.isArray(data.categories) ? data.categories : [];
@@ -697,6 +704,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
                 <SermonRow
                   key={item.id}
                   item={item}
+                  downloadEntry={downloads.bySermonId[item.id]}
                   progressEntry={progressMap[item.id]}
                   openSermon={openSermon}
                 />
@@ -721,6 +729,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
             <SermonRow
               key={item.id}
               item={item}
+              downloadEntry={downloads.bySermonId[item.id]}
               progressEntry={progressMap[item.id]}
               openSermon={openSermon}
             />

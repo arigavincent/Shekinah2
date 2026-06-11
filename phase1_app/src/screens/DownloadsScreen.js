@@ -23,6 +23,8 @@ import {
   listDownloads
 } from "../services/downloadsStore";
 
+const STORAGE_LIMIT_BYTES = 5 * 1024 * 1024 * 1024;
+
 function DownloadRow({ item, onOpen, onDelete }) {
   const isAudio = item.type === DOWNLOAD_TYPES.SERMON_AUDIO;
   const isVideo = item.type === DOWNLOAD_TYPES.SERMON_VIDEO;
@@ -110,6 +112,8 @@ export function DownloadsScreen({ go, tab, setTab }) {
   const usedBytes = useMemo(() => {
     return items.reduce((total, item) => total + Number(item.sizeBytes || 0), 0);
   }, [items]);
+  const usagePercent = Math.max(0, Math.min(100, Math.round((usedBytes / STORAGE_LIMIT_BYTES) * 100)));
+  const usageBarWidth = usedBytes > 0 ? Math.max(4, usagePercent) : 0;
 
   async function load() {
     setLoading(true);
@@ -197,10 +201,18 @@ export function DownloadsScreen({ go, tab, setTab }) {
         <View style={s.plainCard}>
           <Text style={[s.goldSmall, { color: C.gold }]}>Device Storage</Text>
           <Text style={[s.rowTitle, { color: C.white }]}>
-            {formatBytes(usedBytes)} downloaded
+            Using {formatBytes(usedBytes)} of {formatBytes(STORAGE_LIMIT_BYTES)}
           </Text>
           <Text style={[s.mutedText, { color: C.muted }]}>
-            Downloads are stored locally on this device.
+            {sermonDownloads.length} sermon download{sermonDownloads.length === 1 ? "" : "s"} stored locally on this device.
+          </Text>
+
+          <View style={[s.storage, { marginTop: 12 }]}>
+            <View style={[s.storageFill, { width: `${usageBarWidth}%` }]} />
+          </View>
+
+          <Text style={[s.goldSmall, { color: C.gold, marginTop: 0 }]}>
+            {usagePercent}% used
           </Text>
         </View>
 

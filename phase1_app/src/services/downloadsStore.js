@@ -3,6 +3,7 @@ import * as FileSystem from "expo-file-system/legacy";
 const FILE_ROOT = FileSystem.documentDirectory || FileSystem.cacheDirectory || "";
 const ROOT_DIR = `${FILE_ROOT}shekinah-downloads/`;
 const MANIFEST_URI = `${ROOT_DIR}manifest.json`;
+const listeners = new Set();
 
 export const DOWNLOAD_TYPES = {
   SERMON_AUDIO: "sermon_audio",
@@ -58,6 +59,14 @@ async function writeManifest(items) {
       2
     )
   );
+
+  emit(items);
+}
+
+function emit(items) {
+  for (const listener of listeners) {
+    listener(Array.isArray(items) ? items : []);
+  }
 }
 
 export async function listDownloads() {
@@ -118,6 +127,18 @@ export async function deleteDownload(id) {
   await writeManifest(next);
 
   return next;
+}
+
+export function subscribeDownloads(listener) {
+  listeners.add(listener);
+
+  listDownloads()
+    .then(items => listener(items))
+    .catch(() => listener([]));
+
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function formatBytes(bytes) {

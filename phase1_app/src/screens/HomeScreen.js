@@ -24,6 +24,7 @@ import {
   ClipCard,
   EventMiniCard
 } from "../components/Cards";
+import { useDownloadsMap } from "../hooks/useDownloadsMap";
 import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
 import {
   formatPlaybackTime,
@@ -235,13 +236,14 @@ function QuickActions({ go }) {
   );
 }
 
-function FeaturedMediaCard({ item, onPress, progressEntry }) {
+function FeaturedMediaCard({ item, onPress, progressEntry, downloadEntry }) {
   if (!item) return null;
 
   const thumbnail = sermonThumbnail(item, PHASE1_IMAGES.sermon);
   const isAudio = item.type === "audio";
   const showContinue = hasContinueProgress(progressEntry);
   const progressPercent = Math.max(4, Math.round(progressRatio(progressEntry) * 100));
+  const downloaded = Boolean(downloadEntry?.localUri);
 
   return (
     <Pressable
@@ -304,6 +306,12 @@ function FeaturedMediaCard({ item, onPress, progressEntry }) {
           <Text style={{ color: C.muted, fontSize: 12, fontWeight: "800", marginTop: 5 }} numberOfLines={1}>
             {item.speaker || item.category || "Sermon"} · {item.date || item.sermonDate || ""}
           </Text>
+
+          {downloaded ? (
+            <Text style={{ color: C.gold, fontSize: 12, fontWeight: "900", marginTop: 8 }}>
+              Downloaded for offline use
+            </Text>
+          ) : null}
 
           {showContinue ? (
             <>
@@ -385,6 +393,7 @@ function UpdateRow({ item, go }) {
 export function HomeScreen({ go, openDrawer, openSermon }) {
   const { data, loading, reload } = useContent();
   const progressMap = usePlaybackProgressMap();
+  const downloads = useDownloadsMap();
 
   const sermons = Array.isArray(data.sermons) ? data.sermons : [];
   const devotions = Array.isArray(data.devotions) ? data.devotions : [];
@@ -450,6 +459,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
                 <FeaturedMediaCard
                   key={item.id}
                   item={item}
+                  downloadEntry={downloads.bySermonId[item.id]}
                   progressEntry={progressMap[item.id]}
                   onPress={() => openSermon(item)}
                 />
@@ -463,6 +473,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
           {featuredVideo ? (
             <FeaturedMediaCard
               item={featuredVideo}
+              downloadEntry={downloads.bySermonId[featuredVideo.id]}
               progressEntry={progressMap[featuredVideo.id]}
               onPress={() => openSermon(featuredVideo)}
             />
@@ -471,6 +482,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
           {featuredAudio ? (
             <FeaturedMediaCard
               item={featuredAudio}
+              downloadEntry={downloads.bySermonId[featuredAudio.id]}
               progressEntry={progressMap[featuredAudio.id]}
               onPress={() => openSermon(featuredAudio)}
             />
@@ -480,6 +492,7 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
             <FeaturedMediaCard
               key={item.id}
               item={item}
+              downloadEntry={downloads.bySermonId[item.id]}
               progressEntry={progressMap[item.id]}
               onPress={() => openSermon(item)}
             />
