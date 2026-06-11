@@ -1,12 +1,16 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 type Config struct {
-	AppEnv      string
-	HTTPAddr    string
-	DatabaseURL string
-	JWTSecret   string
+	AppEnv         string
+	HTTPAddr       string
+	DatabaseURL    string
+	JWTSecret      string
+	AllowedOrigins []string
 }
 
 func Load() Config {
@@ -15,6 +19,10 @@ func Load() Config {
 		HTTPAddr:    httpAddr(),
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://shekinah:shekinah@localhost:5432/shekinah?sslmode=disable"),
 		JWTSecret:   getEnv("JWT_SECRET", "dev-only-change-this-secret"),
+		AllowedOrigins: splitCSV(getEnv(
+			"ALLOWED_ORIGINS",
+			"http://localhost:5173,http://127.0.0.1:5173",
+		)),
 	}
 }
 
@@ -37,4 +45,19 @@ func getEnv(key string, fallback string) string {
 	}
 
 	return value
+}
+
+func splitCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	clean := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+		clean = append(clean, item)
+	}
+
+	return clean
 }

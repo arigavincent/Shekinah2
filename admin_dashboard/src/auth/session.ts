@@ -7,6 +7,7 @@ export type AdminUser = {
   email: string;
   role: "member" | "admin" | "super_admin";
   isActive: boolean;
+  passwordResetRequired?: boolean;
   createdAt: string;
 };
 

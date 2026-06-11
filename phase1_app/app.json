@@ -3,6 +3,7 @@
     "name": "Shekinah Sons Global",
     "slug": "shekinah-sons-global",
     "version": "1.0.0",
+    "scheme": "shekinahsons",
     "orientation": "default",
     "icon": "./assets/branding/icon.png",
     "userInterfaceStyle": "dark",
@@ -17,6 +18,10 @@
     "android": {
       "package": "com.shekinahsons.globalapp",
       "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/branding/adaptive-icon.png",
         "backgroundColor": "#000000"

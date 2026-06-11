@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import {
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -16,7 +17,6 @@ import { C } from "../constants/theme";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
-import { IconButton } from "../components/IconButton";
 import { Tabs } from "../components/Tabs";
 import { EmptyState } from "../components/Cards";
 
@@ -99,7 +99,7 @@ export function DevotionsScreen({
   setFavorites
 }) {
   const [query, setQuery] = useState("");
-  const { data, source, loading, reload } = useContent();
+  const { data, loading, reload } = useContent();
 
   const devotions = Array.isArray(data.devotions) ? data.devotions : [];
 
@@ -125,7 +125,6 @@ export function DevotionsScreen({
         title="Devotions"
         go={go}
         onMenu={openDrawer}
-        right={<IconButton name="refresh-outline" onPress={reload} />}
       />
 
       <Tabs
@@ -133,20 +132,6 @@ export function DevotionsScreen({
         active={tab}
         setActive={handleSetTab}
       />
-
-      <View style={s.contentSourceRow}>
-        <Text style={s.contentSourceText}>
-          {loading
-            ? "Loading backend devotions..."
-            : source === "api"
-              ? `Devotions from backend · ${latest.length} latest · ${favoriteDevotions.length} saved`
-              : "Devotions from local fallback"}
-        </Text>
-
-        <Pressable onPress={reload}>
-          <Text style={s.contentReloadText}>Refresh</Text>
-        </Pressable>
-      </View>
 
       <View style={s.pad}>
         <TextInput
@@ -158,14 +143,25 @@ export function DevotionsScreen({
         />
       </View>
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
+      <ScrollView
+        contentContainerStyle={s.scrollPad}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={reload}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
+      >
         {visible.length === 0 ? (
           <EmptyState
             title={tab === "Favourites" ? "No Favourites" : "No Devotions"}
             text={
               tab === "Favourites"
                 ? "Tap the heart icon on a devotion to save it here."
-                : "Create devotions in the admin dashboard, then refresh."
+                : "New devotions will appear here."
             }
           />
         ) : (

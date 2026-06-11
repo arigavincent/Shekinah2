@@ -22,3 +22,15 @@ export function me(token: string) {
     token
   });
 }
+
+export function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string
+) {
+  return apiRequest<LoginResponse>("/api/v1/auth/password", {
+    method: "PATCH",
+    token,
+    body: { currentPassword, newPassword }
+  });
+}

@@ -105,6 +105,12 @@ func RequireRole(service Service, allowedRoles ...string) gin.HandlerFunc {
 			return
 		}
 
+		if user.PasswordResetRequired {
+			httpx.Error(c, http.StatusForbidden, "password_reset_required", "password reset required before admin access")
+			c.Abort()
+			return
+		}
+
 		c.Set(contextUserIDKey, userID)
 		c.Set("auth_user_role", user.Role)
 

@@ -10,6 +10,7 @@ import {
   updateBranch
 } from "../api/adminBranchesApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { isValidAssetReference, isValidPhone } from "../lib/validation";
 
 type BranchForm = {
   name: string;
@@ -137,6 +138,10 @@ export function BranchesPage() {
     if (!form.address.trim()) return "Address is required.";
     if (!form.services.trim()) return "Services are required.";
     if (!form.phone.trim()) return "Phone is required.";
+    if (!isValidPhone(form.phone)) return "Phone number is invalid.";
+    if (!isValidAssetReference(form.imageUrl)) {
+      return "Branch image must be an uploaded file path or a valid http(s) URL.";
+    }
 
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
       return "Latitude must be between -90 and 90.";

@@ -10,6 +10,7 @@ import {
   updateDevotion
 } from "../api/adminDevotionsApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { isValidAssetReference, isValidDateString, hasMinLength } from "../lib/validation";
 
 const emptyForm: DevotionPayload = {
   title: "",
@@ -105,10 +106,13 @@ export function DevotionsPage() {
   function validate() {
     if (!form.title.trim()) return "Title is required.";
     if (!form.excerpt.trim()) return "Excerpt is required.";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.devotionDate)) {
-      return "Date must be YYYY-MM-DD.";
+    if (!isValidDateString(form.devotionDate)) {
+      return "Date must be a real YYYY-MM-DD date.";
     }
-    if (!form.body.trim()) return "Body is required.";
+    if (!isValidAssetReference(form.imageUrl)) {
+      return "Cover image must be an uploaded file path or a valid http(s) URL.";
+    }
+    if (!hasMinLength(form.body, 40)) return "Body must be at least 40 characters.";
 
     return "";
   }

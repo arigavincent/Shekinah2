@@ -392,7 +392,7 @@ func (r Repository) Platforms(ctx context.Context) (map[string][]Platform, error
 
 func (r Repository) Clips(ctx context.Context) ([]Clip, error) {
 	const query = `
-		SELECT id, title, image_url
+		SELECT id, title, image_url, media_url, duration
 		FROM clips
 		ORDER BY created_at ASC
 	`
@@ -408,7 +408,7 @@ func (r Repository) Clips(ctx context.Context) ([]Clip, error) {
 	for rows.Next() {
 		var item Clip
 
-		if err := rows.Scan(&item.ID, &item.Title, &item.Image); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.Image, &item.MediaURL, &item.Duration); err != nil {
 			return nil, fmt.Errorf("scan clip: %w", err)
 		}
 
@@ -456,9 +456,21 @@ func (r Repository) Downloads(ctx context.Context) ([]Download, error) {
 
 func (r Repository) Prayers(ctx context.Context) ([]Prayer, error) {
 	const query = `
-		SELECT id, name, text, prayer_date, count
+		SELECT
+			id,
+			name,
+			text,
+			CASE
+				WHEN created_at::date = CURRENT_DATE THEN 'Today'
+				WHEN created_at::date = CURRENT_DATE - INTERVAL '1 day' THEN 'Yesterday'
+				ELSE to_char(created_at, 'FMMonth FMDD, YYYY')
+			END AS prayer_date,
+			count,
+			category,
+			is_public
 		FROM prayers
-		ORDER BY created_at ASC
+		WHERE is_public = TRUE
+		ORDER BY created_at DESC
 	`
 
 	rows, err := r.db.Query(ctx, query)
@@ -472,7 +484,15 @@ func (r Repository) Prayers(ctx context.Context) ([]Prayer, error) {
 	for rows.Next() {
 		var item Prayer
 
-		if err := rows.Scan(&item.ID, &item.Name, &item.Text, &item.Date, &item.Count); err != nil {
+		if err := rows.Scan(
+			&item.ID,
+			&item.Name,
+			&item.Text,
+			&item.Date,
+			&item.Count,
+			&item.Category,
+			&item.IsPublic,
+		); err != nil {
 			return nil, fmt.Errorf("scan prayer: %w", err)
 		}
 

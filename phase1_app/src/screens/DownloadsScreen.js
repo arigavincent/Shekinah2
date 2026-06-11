@@ -3,6 +3,7 @@ import {
   Alert,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View
@@ -173,11 +174,6 @@ export function DownloadsScreen({ go, tab, setTab }) {
         title="Downloads"
         go={go}
         back="Home"
-        right={
-          <Pressable onPress={load}>
-            <Ionicons name="refresh-outline" size={22} color={C.white} />
-          </Pressable>
-        }
       />
 
       <Tabs
@@ -186,7 +182,18 @@ export function DownloadsScreen({ go, tab, setTab }) {
         setActive={setTab}
       />
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
+      <ScrollView
+        contentContainerStyle={s.scrollPad}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={load}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
+      >
         <View style={s.plainCard}>
           <Text style={[s.goldSmall, { color: C.gold }]}>Device Storage</Text>
           <Text style={[s.rowTitle, { color: C.white }]}>

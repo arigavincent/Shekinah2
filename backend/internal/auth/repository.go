@@ -27,7 +27,7 @@ func (r Repository) CreateUser(ctx context.Context, name string, email string, p
 	const query = `
 		INSERT INTO users (name, email, password_hash)
 		VALUES ($1, $2, $3)
-		RETURNING id::text, name, email, password_hash, role, is_active, created_at, updated_at
+		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
 	`
 
 	var user User
@@ -39,6 +39,7 @@ func (r Repository) CreateUser(ctx context.Context, name string, email string, p
 		&user.PasswordHash,
 		&user.Role,
 		&user.IsActive,
+		&user.PasswordResetRequired,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -57,7 +58,7 @@ func (r Repository) CreateUser(ctx context.Context, name string, email string, p
 
 func (r Repository) FindByEmail(ctx context.Context, email string) (User, error) {
 	const query = `
-		SELECT id::text, name, email, password_hash, role, is_active, created_at, updated_at
+		SELECT id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
 		FROM users
 		WHERE email = $1
 		LIMIT 1
@@ -72,6 +73,7 @@ func (r Repository) FindByEmail(ctx context.Context, email string) (User, error)
 		&user.PasswordHash,
 		&user.Role,
 		&user.IsActive,
+		&user.PasswordResetRequired,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -88,7 +90,7 @@ func (r Repository) FindByEmail(ctx context.Context, email string) (User, error)
 
 func (r Repository) FindByID(ctx context.Context, id string) (User, error) {
 	const query = `
-		SELECT id::text, name, email, password_hash, role, is_active, created_at, updated_at
+		SELECT id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
 		FROM users
 		WHERE id = $1
 		LIMIT 1
@@ -103,6 +105,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (User, error) {
 		&user.PasswordHash,
 		&user.Role,
 		&user.IsActive,
+		&user.PasswordResetRequired,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -112,6 +115,40 @@ func (r Repository) FindByID(ctx context.Context, id string) (User, error) {
 		}
 
 		return User{}, fmt.Errorf("find user by id: %w", err)
+	}
+
+	return user, nil
+}
+
+func (r Repository) UpdatePassword(ctx context.Context, userID string, passwordHash string) (User, error) {
+	const query = `
+		UPDATE users
+		SET password_hash = $2,
+		    password_reset_required = false,
+		    updated_at = now()
+		WHERE id = $1
+		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
+	`
+
+	var user User
+
+	err := r.db.QueryRow(ctx, query, userID, passwordHash).Scan(
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.PasswordHash,
+		&user.Role,
+		&user.IsActive,
+		&user.PasswordResetRequired,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrUserNotFound
+		}
+
+		return User{}, fmt.Errorf("update user password: %w", err)
 	}
 
 	return user, nil

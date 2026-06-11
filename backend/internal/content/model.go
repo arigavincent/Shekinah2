@@ -100,9 +100,11 @@ type Platform struct {
 }
 
 type Clip struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Image string `json:"image"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Image    string `json:"image"`
+	MediaURL string `json:"mediaUrl,omitempty"`
+	Duration string `json:"duration,omitempty"`
 }
 
 type Download struct {
@@ -113,11 +115,13 @@ type Download struct {
 }
 
 type Prayer struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Text  string `json:"text"`
-	Date  string `json:"date"`
-	Count int    `json:"count"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Text     string `json:"text"`
+	Date     string `json:"date"`
+	Count    int    `json:"count"`
+	Category string `json:"category,omitempty"`
+	IsPublic bool   `json:"isPublic,omitempty"`
 }
 
 type About struct {

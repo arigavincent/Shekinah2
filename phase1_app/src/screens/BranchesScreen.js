@@ -3,6 +3,7 @@ import {
   Image,
   Linking,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -108,7 +109,7 @@ function BranchAction({ icon, label, disabled, onPress }) {
 
 export function BranchesScreen({ go }) {
   const [query, setQuery] = useState("");
-  const { data, source, loading, reload } = useContent();
+  const { data, loading, reload } = useContent();
 
   const branches = Array.isArray(data.branches) ? data.branches : [];
 
@@ -122,20 +123,6 @@ export function BranchesScreen({ go }) {
     <Screen>
       <TopBar title="Branches" go={go} back="Home" />
 
-      <View style={s.contentSourceRow}>
-        <Text style={s.contentSourceText}>
-          {loading
-            ? "Loading backend branches..."
-            : source === "api"
-              ? `Branches from backend · ${branches.length}`
-              : "Branches from local fallback"}
-        </Text>
-
-        <Pressable onPress={reload}>
-          <Text style={s.contentReloadText}>Refresh</Text>
-        </Pressable>
-      </View>
-
       <View style={s.pad}>
         <TextInput
           style={s.searchInput}
@@ -146,11 +133,22 @@ export function BranchesScreen({ go }) {
         />
       </View>
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
+      <ScrollView
+        contentContainerStyle={s.scrollPad}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={reload}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
+      >
         {visible.length === 0 ? (
           <View style={s.plainCard}>
             <Text style={s.rowTitle}>No branches found</Text>
-            <Text style={s.mutedText}>Create branches in the admin dashboard, then refresh.</Text>
+            <Text style={s.mutedText}>Church branch locations will appear here.</Text>
           </View>
         ) : (
           visible.map(branch => {

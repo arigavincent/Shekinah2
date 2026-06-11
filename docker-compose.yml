@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: shekinah-postgres
+    environment:
+      POSTGRES_DB: shekinah
+      POSTGRES_USER: shekinah
+      POSTGRES_PASSWORD: shekinah
+    ports:
+      - "55432:5432"
+    volumes:
+      - shekinah-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shekinah -d shekinah"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  shekinah-postgres-data:

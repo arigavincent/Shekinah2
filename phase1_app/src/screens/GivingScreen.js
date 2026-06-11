@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -145,7 +146,7 @@ function GivingTransactionCard({ item, onRefresh, refreshing }) {
         onPress={onRefresh}
         disabled={refreshing}
       >
-        <Ionicons name="refresh-outline" size={18} color={C.gold} />
+        <Ionicons name="shield-checkmark-outline" size={18} color={C.gold} />
         <Text style={[s.secondaryText, { color: C.gold }]}>
           {refreshing ? "Checking..." : "Check Status"}
         </Text>
@@ -162,6 +163,7 @@ export function GivingScreen({ go, tab, setTab }) {
   const [transactions, setTransactions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [refreshingId, setRefreshingId] = useState("");
+  const [historyRefreshing, setHistoryRefreshing] = useState(false);
 
   const cleanAmount = useMemo(() => normalizeAmount(amount), [amount]);
 
@@ -260,20 +262,25 @@ export function GivingScreen({ go, tab, setTab }) {
   }
 
   async function refreshAll() {
+    setHistoryRefreshing(true);
     const current = await listGivingHistory();
     const next = [];
 
-    for (const item of current) {
-      try {
-        const response = await getGivingTransaction(item.id);
-        next.push(response.transaction || item);
-      } catch {
-        next.push(item);
+    try {
+      for (const item of current) {
+        try {
+          const response = await getGivingTransaction(item.id);
+          next.push(response.transaction || item);
+        } catch {
+          next.push(item);
+        }
       }
-    }
 
-    await saveGivingHistory(next);
-    setTransactions(next);
+      await saveGivingHistory(next);
+      setTransactions(next);
+    } finally {
+      setHistoryRefreshing(false);
+    }
   }
 
   async function clearHistory() {
@@ -300,13 +307,6 @@ export function GivingScreen({ go, tab, setTab }) {
         title="Giving"
         go={go}
         back="Home"
-        right={
-          tab === "Give History" ? (
-            <Pressable onPress={refreshAll}>
-              <Ionicons name="refresh-outline" size={22} color={C.white} />
-            </Pressable>
-          ) : null
-        }
       />
 
       <Tabs tabs={["Give Now", "Give History"]} active={tab} setActive={setTab} />
@@ -315,6 +315,17 @@ export function GivingScreen({ go, tab, setTab }) {
         contentContainerStyle={s.scrollPad}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        refreshControl={
+          tab === "Give History" ? (
+            <RefreshControl
+              refreshing={historyRefreshing}
+              onRefresh={refreshAll}
+              tintColor={C.gold}
+              colors={[C.gold]}
+              progressBackgroundColor={C.surface2}
+            />
+          ) : undefined
+        }
       >
         {tab === "Give Now" ? (
           <>

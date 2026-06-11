@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
-  Linking,
   Text,
   TextInput,
   View
@@ -17,17 +17,41 @@ import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { Tabs } from "../components/Tabs";
 import { EmptyState } from "../components/Cards";
-import { createPrayerRequest } from "../api/prayerRequestsApi";
+import { loadSavedSession } from "../features/profile/authSession";
+import {
+  createPrayerRequest,
+  listMyPrayerRequests,
+  listPublicPrayerRequests,
+  prayForRequest
+} from "../api/prayerRequestsApi";
 
-const PRAYER_AUTHORITY_WHATSAPP = "254700000000";
+const CATEGORIES = ["Personal", "Family", "Healing", "Provision", "Salvation", "Thanksgiving"];
 
-function normalizePhone(value) {
-  return String(value || "").replace(/\s+/g, "");
+const INITIAL_FORM = {
+  category: "Personal",
+  text: "",
+  isPublic: true,
+  anonymous: false
+};
+
+function visibilityLabel(prayer) {
+  return prayer?.isPublic ? "Public" : "Private";
 }
 
-function PrayerCard({ prayer, prayedCount, onPray }) {
-  const count = Number(prayer?.count || 0) + Number(prayedCount || 0);
+function prayerStatusLabel(prayer) {
+  switch (prayer?.status) {
+    case "reviewed":
+      return "Reviewed";
+    case "prayed_for":
+      return "Prayed For";
+    case "contacted":
+      return "Contacted";
+    default:
+      return "New";
+  }
+}
 
+function PrayerCard({ prayer, onPray, disabled }) {
   return (
     <View style={s.plainCard}>
       <View style={s.rowTight}>
@@ -52,7 +76,7 @@ function PrayerCard({ prayer, prayedCount, onPray }) {
           </Text>
 
           <Text style={[s.goldSmall, { color: C.gold }]}>
-            {prayer?.date || "Today"}
+            {prayer?.date || "Today"} · {prayer?.category || "Prayer"}
           </Text>
         </View>
       </View>
@@ -63,28 +87,29 @@ function PrayerCard({ prayer, prayedCount, onPray }) {
 
       <Pressable
         onPress={onPray}
+        disabled={disabled}
         style={{
           marginTop: 14,
           minHeight: 46,
           borderRadius: 999,
-          backgroundColor: "rgba(212, 175, 55, 0.12)",
+          backgroundColor: disabled ? C.surface2 : "rgba(212, 175, 55, 0.12)",
           borderWidth: 1,
-          borderColor: C.gold,
+          borderColor: disabled ? C.line : C.gold,
           alignItems: "center",
           justifyContent: "center",
           flexDirection: "row",
           gap: 8
         }}
       >
-        <Ionicons name="flame-outline" size={18} color={C.gold} />
+        <Ionicons name="flame-outline" size={18} color={disabled ? C.muted : C.gold} />
         <Text
           style={{
-            color: C.gold,
+            color: disabled ? C.muted : C.gold,
             fontSize: 13,
             fontWeight: "900"
           }}
         >
-          I Prayed · {count}
+          {disabled ? "Sign in to pray" : `Praying · ${Number(prayer?.count || 0)}`}
         </Text>
       </Pressable>
     </View>
@@ -94,36 +119,100 @@ function PrayerCard({ prayer, prayedCount, onPray }) {
 function MyRequestCard({ request }) {
   return (
     <View style={s.plainCard}>
-      <Text style={[s.rowTitle, { color: C.white }]}>{request.name}</Text>
-      <Text style={[s.goldSmall, { color: C.gold }]}>{request.category}</Text>
+      <View style={s.rowTight}>
+        <Text style={[s.rowTitle, { color: C.white, flex: 1 }]} numberOfLines={1}>
+          {request?.category || "Prayer"}
+        </Text>
+
+        <Text style={[s.goldSmall, { color: C.gold }]}>
+          {visibilityLabel(request)}
+        </Text>
+      </View>
+
       <Text style={[s.detailBody, { color: C.white, marginTop: 8 }]}>
-        {request.text}
+        {request?.text}
       </Text>
-      <Text style={[s.mutedText, { color: C.muted }]}>Submitted locally</Text>
+
+      <Text style={[s.mutedText, { color: C.muted, marginTop: 10 }]}>
+        {request?.date || "Today"} · {Number(request?.count || 0)} praying
+      </Text>
+
+      <Text style={[s.goldSmall, { color: C.gold, marginTop: 8 }]}>
+        Status · {prayerStatusLabel(request)}
+      </Text>
+    </View>
+  );
+}
+
+function SignedOutNotice({ go }) {
+  return (
+    <View style={s.formSection}>
+      <Text style={s.formSectionTitle}>Member Access</Text>
+      <Text style={s.formHelp}>
+        Sign in to post your own prayer requests, choose public or private visibility, and support others with Praying.
+      </Text>
+
+      <Pressable style={s.primaryBtn} onPress={() => go("Profile")}>
+        <Text style={s.primaryText}>Sign In</Text>
+      </Pressable>
     </View>
   );
 }
 
 export function PrayerScreen({ go, tab, setTab }) {
-  const { data, source, loading, reload } = useContent();
+  const { data, reload } = useContent();
+  const fallbackPrayers = Array.isArray(data.prayers) ? data.prayers : [];
 
-  const [localPrays, setLocalPrays] = useState({});
+  const [session, setSession] = useState({ token: null, user: null });
+  const [publicPrayers, setPublicPrayers] = useState(fallbackPrayers);
   const [myRequests, setMyRequests] = useState([]);
-  const [form, setForm] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    category: "Personal",
-    text: ""
-  });
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState(INITIAL_FORM);
 
-  const prayers = Array.isArray(data.prayers) ? data.prayers : [];
-
-  const categories = ["Personal", "Family", "Healing", "Provision", "Salvation", "Thanksgiving"];
+  const signedIn = Boolean(session?.token && session?.user);
+  const showStickySubmit = signedIn && tab === "My Requests";
 
   const visiblePrayers = useMemo(() => {
-    return prayers.filter(item => item?.id && item?.text);
-  }, [prayers]);
+    return publicPrayers.filter(item => item?.id && item?.text);
+  }, [publicPrayers]);
+
+  const visibleMine = useMemo(() => {
+    return myRequests.filter(item => item?.id && item?.text);
+  }, [myRequests]);
+
+  async function loadPrayerWall() {
+    setLoading(true);
+
+    try {
+      const savedSession = await loadSavedSession().catch(() => ({
+        token: null,
+        user: null
+      }));
+
+      setSession(savedSession);
+
+      const publicResponse = await listPublicPrayerRequests().catch(() => null);
+      if (publicResponse?.prayers) {
+        setPublicPrayers(publicResponse.prayers);
+      } else {
+        setPublicPrayers(fallbackPrayers);
+      }
+
+      if (savedSession?.token) {
+        const mineResponse = await listMyPrayerRequests().catch(() => null);
+        setMyRequests(Array.isArray(mineResponse?.prayers) ? mineResponse.prayers : []);
+      } else {
+        setMyRequests([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPrayerWall();
+  }, []);
 
   function updateField(key, value) {
     setForm(current => ({
@@ -132,102 +221,96 @@ export function PrayerScreen({ go, tab, setTab }) {
     }));
   }
 
-  function handlePray(prayer) {
-    if (!prayer?.id) return;
+  function mergePrayer(list, prayer) {
+    const next = Array.isArray(list) ? [...list] : [];
+    const index = next.findIndex(item => item.id === prayer.id);
 
-    setLocalPrays(current => ({
-      ...current,
-      [prayer.id]: (current[prayer.id] || 0) + 1
-    }));
+    if (index >= 0) {
+      next[index] = prayer;
+      return next;
+    }
+
+    return [prayer, ...next];
   }
 
-  function validate(cleaned) {
-    if (!cleaned.name) return "Name is required. Use Anonymous if you prefer.";
-    if (!cleaned.phone) return "Phone number is required.";
-    if (!cleaned.email) return "Email is required.";
-    if (!cleaned.text) return "Prayer request is required.";
-
-    if (!/^(?:\+254|254|0)?[17]\d{8}$/.test(cleaned.phone)) {
-      return "Use a valid Kenyan phone number, for example 0712345678 or +254712345678.";
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned.email)) {
-      return "Enter a valid email address.";
-    }
-
-    if (cleaned.text.length < 10) {
-      return "Prayer request should be at least 10 characters.";
-    }
-
-    return "";
-  }
-
-  async function submitPrayerRequest() {
-    const cleaned = {
-      name: form.name.trim(),
-      phone: normalizePhone(form.phone),
-      email: form.email.trim(),
-      category: form.category.trim(),
-      text: form.text.trim()
-    };
-
-    const validationError = validate(cleaned);
-
-    if (validationError) {
-      Alert.alert("Check Prayer Request", validationError);
+  async function handlePray(prayer) {
+    if (!signedIn) {
+      Alert.alert("Sign In Required", "Sign in first to support prayer requests.");
+      go("Profile");
       return;
     }
 
-    const message = [
-      "Prayer Request - Shekinah Sons Global",
-      "",
-      `Name: ${cleaned.name}`,
-      `Phone: ${cleaned.phone}`,
-      `Email: ${cleaned.email}`,
-      `Category: ${cleaned.category}`,
-      "",
-      cleaned.text
-    ].join("\n");
+    try {
+      const response = await prayForRequest(prayer.id);
+
+      if (response?.prayer) {
+        setPublicPrayers(current => mergePrayer(current, response.prayer));
+      }
+
+      if (response?.prayed === false) {
+        Alert.alert("Already Prayed", "You have already marked this prayer request as prayed for.");
+      }
+    } catch (error) {
+      Alert.alert(
+        "Prayer Support Failed",
+        error instanceof Error ? error.message : "Could not record your prayer support."
+      );
+    }
+  }
+
+  async function submitPrayerRequest() {
+    if (!signedIn) {
+      Alert.alert("Sign In Required", "Sign in first to post your prayer request.");
+      go("Profile");
+      return;
+    }
+
+    const text = form.text.trim();
+    if (text.length < 10) {
+      Alert.alert("Check Prayer Request", "Prayer request should be at least 10 characters.");
+      return;
+    }
+
+    setSubmitting(true);
 
     try {
-      const response = await createPrayerRequest(cleaned);
-
-      setMyRequests(current => [
-        {
-          id: response?.prayer?.id || `local-${Date.now()}`,
-          ...cleaned
-        },
-        ...current
-      ]);
-
-      await reload();
-
-      setForm({
-        name: "",
-        phone: "",
-        email: "",
-        category: "Personal",
-        text: ""
+      const response = await createPrayerRequest({
+        category: form.category,
+        text,
+        isPublic: form.isPublic,
+        anonymous: form.anonymous
       });
 
-      const whatsappUrl = `https://wa.me/${PRAYER_AUTHORITY_WHATSAPP}?text=${encodeURIComponent(message)}`;
-      await Linking.openURL(whatsappUrl);
+      if (response?.prayer) {
+        setMyRequests(current => mergePrayer(current, response.prayer));
+
+        if (response.prayer.isPublic) {
+          setPublicPrayers(current => mergePrayer(current, response.prayer));
+        }
+      }
+
+      setForm(INITIAL_FORM);
+      await reload().catch(() => {});
 
       Alert.alert(
         "Prayer Request Submitted",
-        "Your prayer request has been saved and WhatsApp has opened for sharing with the prayer team."
+        form.isPublic
+          ? "Your prayer request is now visible on the Prayer Wall."
+          : "Your private prayer request has been saved to My Requests and is available to the church team in admin review."
       );
     } catch (error) {
       Alert.alert(
         "Submission Failed",
         error instanceof Error ? error.message : "Could not submit prayer request."
       );
+    } finally {
+      setSubmitting(false);
     }
   }
 
   return (
     <Screen>
-      <TopBar title="Prayer Request" go={go} back="Home" />
+      <TopBar title="Prayer Wall" go={go} back="Home" />
 
       <Tabs
         tabs={["All Prayers", "My Requests"]}
@@ -235,131 +318,200 @@ export function PrayerScreen({ go, tab, setTab }) {
         setActive={setTab}
       />
 
-      <View style={s.contentSourceRow}>
-        <Text style={[s.contentSourceText, { color: C.muted }]}>
-          {loading
-            ? "Loading prayer wall..."
-            : source === "api"
-              ? `Prayer wall from backend · ${visiblePrayers.length}`
-              : "Prayer wall from local fallback"}
-        </Text>
-
-        <Pressable onPress={reload}>
-          <Text style={[s.contentReloadText, { color: C.gold }]}>Refresh</Text>
-        </Pressable>
-      </View>
-
       <ScrollView
-        contentContainerStyle={s.scrollPad}
+        contentContainerStyle={[s.scrollPad, { paddingBottom: showStickySubmit ? 320 : 210 }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={loadPrayerWall}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
       >
         {tab === "All Prayers" ? (
           visiblePrayers.length === 0 ? (
             <EmptyState
               title="No Prayer Requests"
-              text="Prayer requests will appear here."
+              text="Public prayer requests will appear here."
             />
           ) : (
             visiblePrayers.map(prayer => (
               <PrayerCard
                 key={prayer.id}
                 prayer={prayer}
-                prayedCount={localPrays[prayer.id] || 0}
                 onPray={() => handlePray(prayer)}
+                disabled={!signedIn}
               />
             ))
           )
         ) : (
           <>
-            <View style={s.formSection}>
-              <Text style={s.formSectionTitle}>Submit A Prayer Request</Text>
-              <Text style={s.formHelp}>
-                Your request will be prepared for sending through your phone share menu.
-              </Text>
+            {!signedIn ? <SignedOutNotice go={go} /> : null}
 
-              <Text style={s.inputLabel}>Name</Text>
-              <TextInput
-                style={s.formInput}
-                placeholder="Anonymous or your name"
-                placeholderTextColor={C.faint}
-                value={form.name}
-                onChangeText={value => updateField("name", value)}
-              />
+            {signedIn ? (
+              <View style={s.formSection}>
+                <Text style={s.formSectionTitle}>Submit A Prayer Request</Text>
+                <Text style={s.formHelp}>
+                  Public requests appear on the wall for everyone. Private requests stay off the wall and can be reviewed by the church team in admin.
+                </Text>
 
-              <Text style={s.inputLabel}>Phone Number</Text>
-              <TextInput
-                style={s.formInput}
-                placeholder="0712345678"
-                placeholderTextColor={C.faint}
-                keyboardType="phone-pad"
-                value={form.phone}
-                onChangeText={value => updateField("phone", value)}
-              />
+                <Text style={s.inputLabel}>Category</Text>
+                <View style={s.ministryGrid}>
+                  {CATEGORIES.map(category => {
+                    const active = form.category === category;
 
-              <Text style={s.inputLabel}>Email Address</Text>
-              <TextInput
-                style={s.formInput}
-                placeholder="name@example.com"
-                placeholderTextColor={C.faint}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={form.email}
-                onChangeText={value => updateField("email", value)}
-              />
+                    return (
+                      <Pressable
+                        key={category}
+                        style={[s.ministryChip, active && s.ministryChipActive]}
+                        onPress={() => updateField("category", category)}
+                      >
+                        <Ionicons
+                          name={active ? "checkmark-circle" : "ellipse-outline"}
+                          size={17}
+                          color={active ? C.black : C.gold}
+                        />
+                        <Text
+                          style={[
+                            s.ministryChipText,
+                            active && s.ministryChipTextActive
+                          ]}
+                        >
+                          {category}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
 
-              <Text style={s.inputLabel}>Category</Text>
-              <View style={s.ministryGrid}>
-                {categories.map(category => {
-                  const active = form.category === category;
+                <Text style={s.inputLabel}>Visibility</Text>
+                <View style={s.rowTight}>
+                  {[
+                    { label: "Public", value: true },
+                    { label: "Private", value: false }
+                  ].map(option => {
+                    const active = form.isPublic === option.value;
 
-                  return (
-                    <Pressable
-                      key={category}
-                      style={[s.ministryChip, active && s.ministryChipActive]}
-                      onPress={() => updateField("category", category)}
-                    >
-                      <Ionicons
-                        name={active ? "checkmark-circle" : "ellipse-outline"}
-                        size={17}
-                        color={active ? C.black : C.gold}
-                      />
+                    return (
+                      <Pressable
+                        key={option.label}
+                        style={[
+                          s.compactChipBtn,
+                          active && s.activeChip
+                        ]}
+                        onPress={() => updateField("isPublic", option.value)}
+                      >
+                        <Text
+                          style={[
+                            s.compactChipText,
+                            active && { color: C.black }
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
 
-                      <Text style={[s.ministryChipText, active && s.ministryChipTextActive]}>
-                        {category}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                <Text style={s.inputLabel}>Display Name</Text>
+                <View style={s.rowTight}>
+                  {[
+                    { label: "My Name", value: false },
+                    { label: "Anonymous", value: true }
+                  ].map(option => {
+                    const active = form.anonymous === option.value;
+
+                    return (
+                      <Pressable
+                        key={option.label}
+                        style={[
+                          s.compactChipBtn,
+                          active && s.activeChip
+                        ]}
+                        onPress={() => updateField("anonymous", option.value)}
+                      >
+                        <Text
+                          style={[
+                            s.compactChipText,
+                            active && { color: C.black }
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={s.inputLabel}>Prayer Request</Text>
+                <TextInput
+                  style={[
+                    s.formInput,
+                    {
+                      minHeight: 116,
+                      textAlignVertical: "top",
+                      paddingTop: 12
+                    }
+                  ]}
+                  placeholder="Share what you would like the church to pray with you about."
+                  placeholderTextColor={C.faint}
+                  multiline
+                  value={form.text}
+                  onChangeText={value => updateField("text", value)}
+                />
+
               </View>
-
-              <Text style={s.inputLabel}>Prayer Request</Text>
-              <TextInput
-                style={[s.formInput, { minHeight: 120, textAlignVertical: "top" }]}
-                placeholder="Write your prayer request..."
-                placeholderTextColor={C.faint}
-                multiline
-                value={form.text}
-                onChangeText={value => updateField("text", value)}
-              />
-
-              <Pressable style={s.primaryBtn} onPress={submitPrayerRequest}>
-                <Text style={s.primaryText}>Submit Prayer Request</Text>
-              </Pressable>
-            </View>
-
-            {myRequests.length > 0 ? (
-              <>
-                <Text style={[s.sectionTitle, { marginTop: 12 }]}>My Local Requests</Text>
-
-                {myRequests.map(request => (
-                  <MyRequestCard key={request.id} request={request} />
-                ))}
-              </>
             ) : null}
+
+            {signedIn && visibleMine.length === 0 ? (
+              <EmptyState
+                title="No Requests Yet"
+                text="Your public and private prayer requests will appear here."
+              />
+            ) : null}
+
+            {signedIn
+              ? visibleMine.map(request => (
+                  <MyRequestCard key={request.id} request={request} />
+                ))
+              : null}
           </>
         )}
       </ScrollView>
+
+      {showStickySubmit ? (
+        <View
+          style={{
+            position: "absolute",
+            left: 16,
+            right: 16,
+            bottom: 132
+          }}
+        >
+          <Pressable
+            style={[
+              s.primaryBtn,
+              {
+                marginTop: 0,
+                borderRadius: 18,
+                minHeight: 54
+              },
+              submitting && { opacity: 0.65 }
+            ]}
+            onPress={submitPrayerRequest}
+            disabled={submitting}
+          >
+            <Text style={s.primaryText}>
+              {submitting ? "Submitting..." : "Submit Prayer Request"}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </Screen>
   );
 }

@@ -10,6 +10,7 @@ import {
   updateSermon
 } from "../api/adminSermonsApi";
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
+import { isValidAssetReference, isValidDateString } from "../lib/validation";
 
 const categories = [
   { id: "cat-1", name: "Faith" },
@@ -123,12 +124,21 @@ export function SermonsPage() {
   function validate() {
     if (!form.title.trim()) return "Title is required.";
     if (!form.speaker.trim()) return "Speaker is required.";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.sermonDate)) return "Date must be YYYY-MM-DD.";
+    if (!isValidDateString(form.sermonDate)) return "Date must be a real YYYY-MM-DD date.";
+    if (!isValidAssetReference(form.thumbnailUrl)) {
+      return "Thumbnail must be an uploaded file path or a valid http(s) URL.";
+    }
     if (!form.description.trim()) return "Description is required.";
 
     const mediaUrl = form.mediaUrl.trim().toLowerCase();
     if (!mediaUrl) return "Media URL is required. Upload audio/video or paste a YouTube/direct media URL.";
     if (["none", "null", "undefined"].includes(mediaUrl)) return "Media URL is invalid.";
+    if (!isValidAssetReference(form.mediaUrl)) {
+      return "Media URL must be an uploaded file path or a valid http(s) URL.";
+    }
+    if (form.duration.trim() && !/^\d{1,3}:\d{2}(:\d{2})?$/.test(form.duration.trim())) {
+      return "Duration must look like 54:20 or 1:04:20.";
+    }
 
     return "";
   }

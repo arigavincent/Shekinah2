@@ -9,6 +9,7 @@ import {
   type UpdatePayload,
   updateUpdate
 } from "../api/adminUpdatesApi";
+import { isValidAssetReference, isValidDateString } from "../lib/validation";
 
 const emptyForm: UpdatePayload = {
   title: "",
@@ -85,8 +86,11 @@ export function UpdatesPage() {
   function validate() {
     if (!form.title.trim()) return "Title is required.";
     if (!form.excerpt.trim()) return "Excerpt is required.";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.updateDate)) {
-      return "Date must be YYYY-MM-DD.";
+    if (!isValidDateString(form.updateDate)) {
+      return "Date must be a real YYYY-MM-DD date.";
+    }
+    if (!isValidAssetReference(form.imageUrl)) {
+      return "Update image must be an uploaded file path or a valid http(s) URL.";
     }
 
     return "";

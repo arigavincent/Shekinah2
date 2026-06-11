@@ -1,20 +1,32 @@
 import React from "react";
-import { Image, ScrollView, Text, View } from "react-native";
+import { Image, RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { useContent } from "../providers/ContentProvider";
+import { C } from "../constants/theme";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 
 export function UpdatesScreen({ go }) {
-  const { data } = useContent();
+  const { data, loading, reload } = useContent();
   const updates = data.updates;
 
   return (
     <Screen>
       <TopBar title="Updates" go={go} back="Home" />
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
+      <ScrollView
+        contentContainerStyle={s.scrollPad}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={reload}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
+      >
         {updates.map(item => (
           <View key={item.id} style={s.listRow}>
             <Image source={{ uri: item.image }} style={s.rowImage} />

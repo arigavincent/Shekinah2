@@ -8,8 +8,8 @@ import { saveSession } from "../auth/session";
 export function LoginPage() {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("vincent@example.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -28,7 +28,7 @@ export function LoginPage() {
       }
 
       saveSession(response.token, response.user);
-      navigate("/");
+      navigate(response.user.passwordResetRequired ? "/reset-password" : "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

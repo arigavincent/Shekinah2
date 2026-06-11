@@ -28,23 +28,22 @@ function projectId() {
   );
 }
 
-export async function getStoredExpoPushToken() {
-  return AsyncStorage.getItem(PUSH_TOKEN_KEY);
+function isExpoGoAndroid() {
+  return Constants.appOwnership === "expo" && Platform.OS === "android";
 }
 
-export async function clearStoredExpoPushToken() {
-  await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
-}
-
-export async function registerForPushNotifications(preferences) {
-  if (Constants.appOwnership === "expo" && Platform.OS === "android") {
-    throw new Error(
-      "Remote push notifications cannot be tested in Expo Go on Android. Build and install the development APK, then open the app with Expo Dev Client."
-    );
+async function ensureNotificationPermissions() {
+  if (!Device.isDevice) {
+    throw new Error("Notifications require a physical device.");
   }
 
-  if (!Device.isDevice) {
-    throw new Error("Push notifications require a physical device.");
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("default", {
+      name: "Default",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#D4AF37"
+    });
   }
 
   const existing = await Notifications.getPermissionsAsync();
@@ -58,6 +57,24 @@ export async function registerForPushNotifications(preferences) {
   if (status !== "granted") {
     throw new Error("Notification permission was not granted.");
   }
+}
+
+export async function getStoredExpoPushToken() {
+  return AsyncStorage.getItem(PUSH_TOKEN_KEY);
+}
+
+export async function clearStoredExpoPushToken() {
+  await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
+}
+
+export async function registerForPushNotifications(preferences) {
+  await ensureNotificationPermissions();
+
+  if (isExpoGoAndroid()) {
+    throw new Error(
+      "Remote push notifications are not available in Expo Go on Android. Test local notifications in Expo Go, or use a development build for real push registration."
+    );
+  }
 
   const id = projectId();
 
@@ -66,15 +83,6 @@ export async function registerForPushNotifications(preferences) {
     : await Notifications.getExpoPushTokenAsync();
 
   const expoPushToken = tokenResponse.data;
-
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "Default",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#D4AF37"
-    });
-  }
 
   await registerNotificationDevice({
     expoPushToken,
@@ -87,6 +95,32 @@ export async function registerForPushNotifications(preferences) {
   await AsyncStorage.setItem(PUSH_TOKEN_KEY, expoPushToken);
 
   return expoPushToken;
+}
+
+export async function scheduleLocalTestNotification({
+  title = "Shekinah Sons Global",
+  body = "This is a local notification test from Expo Go.",
+  screen = "Live"
+} = {}) {
+  await ensureNotificationPermissions();
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      data: {
+        screen
+      }
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: 1
+    }
+  });
+
+  return {
+    mode: isExpoGoAndroid() ? "local-expo-go" : "local-device"
+  };
 }
 
 export async function syncPushPreferences(preferences, enabled = true) {

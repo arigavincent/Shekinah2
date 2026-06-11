@@ -37,9 +37,9 @@ const C = {
 
 export function AuthProfileScreen({ go }) {
   const [mode, setMode] = useState("Login");
-  const [name, setName] = useState("Vincent Ariga");
-  const [email, setEmail] = useState("vincent@example.com");
-  const [password, setPassword] = useState("password123");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [session, setSession] = useState({ token: null, user: null });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -241,7 +241,7 @@ function SignedOutView({
             <Text style={s.inputLabel}>Full Name</Text>
             <TextInput
               style={s.input}
-              placeholder="Vincent Ariga"
+              placeholder="Full name"
               placeholderTextColor={C.faint}
               value={name}
               onChangeText={setName}
@@ -252,7 +252,7 @@ function SignedOutView({
         <Text style={s.inputLabel}>Email</Text>
         <TextInput
           style={s.input}
-          placeholder="vincent@example.com"
+          placeholder="name@example.com"
           placeholderTextColor={C.faint}
           keyboardType="email-address"
           autoCapitalize="none"
@@ -263,7 +263,7 @@ function SignedOutView({
         <Text style={s.inputLabel}>Password</Text>
         <TextInput
           style={s.input}
-          placeholder="password123"
+          placeholder="Minimum 8 characters"
           placeholderTextColor={C.faint}
           secureTextEntry
           value={password}

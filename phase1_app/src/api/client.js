@@ -1,4 +1,5 @@
 import { API_CONFIG } from "../config/apiConfig";
+import { getAuthToken } from "../storage/authTokenStorage";
 
 class ApiError extends Error {
   constructor(message, { status, payload } = {}) {
@@ -65,6 +66,24 @@ export async function request(path, options = {}) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function requestWithAuth(path, options = {}) {
+  const token = options.token || (await getAuthToken());
+
+  if (!token) {
+    throw new ApiError("Sign in is required", {
+      status: 401
+    });
+  }
+
+  return request(path, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`
+    }
+  });
 }
 
 export { ApiError };

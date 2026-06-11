@@ -11,7 +11,9 @@ const navItems = [
   { label: "Updates", to: "/updates" },
   { label: "Branches", to: "/branches" },
   { label: "Live", to: "/live" },
-  { label: "Giving", to: "/giving" }
+  { label: "Prayer", to: "/prayers" },
+  { label: "Giving", to: "/giving" },
+  { label: "Notifications", to: "/notifications" }
 ];
 
 export function AdminLayout() {

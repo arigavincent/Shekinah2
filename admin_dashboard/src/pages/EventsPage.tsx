@@ -10,6 +10,7 @@ import {
   updateEvent
 } from "../api/adminEventsApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { isValidAssetReference, isValidDateString, hasMinLength } from "../lib/validation";
 
 const emptyForm: EventPayload = {
   title: "",
@@ -106,12 +107,15 @@ export function EventsPage() {
 
   function validate() {
     if (!form.title.trim()) return "Title is required.";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.eventDate)) {
-      return "Date must be YYYY-MM-DD.";
+    if (!isValidDateString(form.eventDate)) {
+      return "Date must be a real YYYY-MM-DD date.";
     }
     if (!form.eventTime.trim()) return "Event time is required.";
     if (!form.location.trim()) return "Location is required.";
-    if (!form.description.trim()) return "Description is required.";
+    if (!isValidAssetReference(form.imageUrl)) {
+      return "Event image must be an uploaded file path or a valid http(s) URL.";
+    }
+    if (!hasMinLength(form.description, 30)) return "Description must be at least 30 characters.";
 
     return "";
   }

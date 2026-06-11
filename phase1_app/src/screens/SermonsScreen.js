@@ -3,6 +3,7 @@ import {
   Image,
   ImageBackground,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -18,6 +19,13 @@ import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { IconButton } from "../components/IconButton";
 import { Tabs } from "../components/Tabs";
+import { ClipCard } from "../components/Cards";
+import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
+import {
+  formatPlaybackTime,
+  hasContinueProgress,
+  progressRatio
+} from "../services/playbackProgressStore";
 import {
   extractYouTubeId,
   isAudioUrl,
@@ -53,6 +61,10 @@ function isPlayableAudioSermon(item) {
   if (!hasValidMediaUrl(item)) return false;
 
   return isAudioUrl(sermonMediaUrl(item));
+}
+
+function isAudioSermon(item) {
+  return item?.type === "audio";
 }
 
 function isPlayableSermon(item) {
@@ -102,13 +114,33 @@ function sermonBelongsToCategory(sermon, category) {
 }
 
 function mediaBadge(item) {
+  if (item.category === "Clips") return "Clip";
   if (item.type === "audio") return "Audio";
   if (extractYouTubeId(sermonMediaUrl(item))) return "YouTube";
   return "Video";
 }
 
-function SermonRow({ item, openSermon }) {
+function playableClipFromContent(item) {
+  const mediaUrl = sermonMediaUrl(item);
+
+  return {
+    ...item,
+    type: "video",
+    speaker: item?.speaker || "Shekinah Sons Global",
+    category: item?.category || "Clips",
+    date: item?.date || item?.duration || "YouTube Clip",
+    thumbnail: item?.thumbnail || item?.image,
+    image: item?.image || item?.thumbnail,
+    description: item?.description || "Short clip from Shekinah Sons Global.",
+    mediaUrl
+  };
+}
+
+function SermonRow({ item, openSermon, progressEntry }) {
   const thumbnail = sermonThumbnail(item, PHASE1_IMAGES.sermon);
+  const showContinue = hasContinueProgress(progressEntry);
+  const progressPercent = Math.max(4, Math.round(progressRatio(progressEntry) * 100));
+  const missingAudioFile = item?.type === "audio" && !hasValidMediaUrl(item);
 
   return (
     <Pressable
@@ -125,14 +157,50 @@ function SermonRow({ item, openSermon }) {
         </Text>
 
         <Text style={s.mutedText}>{sermonMeta(item)}</Text>
-        <Text style={s.goldSmall}>{mediaBadge(item)}</Text>
+
+        {showContinue ? (
+          <>
+            <Text style={s.goldSmall}>
+              Continue · {formatPlaybackTime(progressEntry.positionMs)} / {formatPlaybackTime(progressEntry.durationMs)}
+            </Text>
+
+            <View
+              style={{
+                marginTop: 8,
+                height: 4,
+                borderRadius: 999,
+                backgroundColor: C.surface2,
+                overflow: "hidden"
+              }}
+            >
+              <View
+                style={{
+                  width: `${progressPercent}%`,
+                  height: "100%",
+                  borderRadius: 999,
+                  backgroundColor: C.gold
+                }}
+              />
+            </View>
+          </>
+        ) : (
+          <Text style={s.goldSmall}>
+            {missingAudioFile ? "Audio added · file pending" : mediaBadge(item)}
+          </Text>
+        )}
       </View>
 
       <View style={s.playDot}>
         <Ionicons
-          name={item.type === "audio" ? "musical-notes-outline" : "play-outline"}
+          name={
+            missingAudioFile
+              ? "alert-circle-outline"
+              : item.type === "audio"
+                ? "musical-notes-outline"
+                : "play-outline"
+          }
           size={18}
-          color={C.white}
+          color={missingAudioFile ? C.gold : C.white}
         />
       </View>
     </Pressable>
@@ -430,10 +498,50 @@ function HighlightsView({ items, openSermon }) {
   );
 }
 
+function ClipsView({ items, openSermon }) {
+  if (items.length === 0) {
+    return (
+      <View style={s.plainCard}>
+        <Text style={s.rowTitle}>No clips found</Text>
+        <Text style={s.mutedText}>
+          Playable clips will appear here.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        justifyContent: "space-between"
+      }}
+    >
+      {items.map(item => (
+        <View
+          key={item.id}
+          style={{
+            width: "48%",
+            marginBottom: 14
+          }}
+        >
+          <ClipCard
+            item={item}
+            onPress={() => openSermon(item)}
+            style={{ width: "100%", height: 168 }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const { data, source, loading, reload } = useContent();
+  const { data, loading, reload } = useContent();
+  const progressMap = usePlaybackProgressMap();
 
   const sermons = Array.isArray(data.sermons) ? data.sermons : [];
   const categories = Array.isArray(data.categories) ? data.categories : [];
@@ -447,8 +555,19 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
   }, [sermons]);
 
   const audio = useMemo(() => {
-    return sermons.filter(isPlayableAudioSermon);
+    return sermons.filter(isAudioSermon);
   }, [sermons]);
+
+  const clips = useMemo(() => {
+    const sourceClips = Array.isArray(data.clips) ? data.clips : [];
+
+    return sourceClips
+      .map(playableClipFromContent)
+      .filter(item => {
+        const mediaUrl = sermonMediaUrl(item);
+        return Boolean(extractYouTubeId(mediaUrl) || isVideoUrl(mediaUrl));
+      });
+  }, [data.clips]);
 
   const highlights = useMemo(() => {
     return playable.slice(0, 10);
@@ -464,11 +583,13 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
       ? videos
       : tab === "Audio"
         ? audio
-        : tab === "Highlights"
-          ? highlights
-          : tab === "Categories" && selectedCategory
-            ? selectedCategoryItems
-            : [];
+        : tab === "Clips"
+          ? clips
+          : tab === "Highlights"
+            ? highlights
+            : tab === "Categories" && selectedCategory
+              ? selectedCategoryItems
+              : [];
 
   const visible = items.filter(item => matchesQuery(item, query));
 
@@ -493,24 +614,10 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
       />
 
       <Tabs
-        tabs={["Video", "Audio", "Categories", "Highlights"]}
+        tabs={["Video", "Audio", "Clips", "Categories", "Highlights"]}
         active={tab}
         setActive={handleSetTab}
       />
-
-      <View style={s.contentSourceRow}>
-        <Text style={s.contentSourceText}>
-          {loading
-            ? "Loading backend sermons..."
-            : source === "api"
-              ? `Sermons from backend · ${videos.length} video · ${audio.length} audio`
-              : "Sermons from local fallback"}
-        </Text>
-
-        <Pressable onPress={reload}>
-          <Text style={s.contentReloadText}>Refresh</Text>
-        </Pressable>
-      </View>
 
       {tab !== "Categories" || selectedCategory ? (
         <View style={s.pad}>
@@ -524,7 +631,18 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
         </View>
       ) : null}
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
+      <ScrollView
+        contentContainerStyle={s.scrollPad}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={reload}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
+      >
         {tab === "Categories" && !selectedCategory ? (
           categories.length === 0 ? (
             <View style={s.plainCard}>
@@ -576,22 +694,36 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab }) {
               </View>
             ) : (
               visible.map(item => (
-                <SermonRow key={item.id} item={item} openSermon={openSermon} />
+                <SermonRow
+                  key={item.id}
+                  item={item}
+                  progressEntry={progressMap[item.id]}
+                  openSermon={openSermon}
+                />
               ))
             )}
           </>
+        ) : tab === "Clips" ? (
+          <ClipsView items={visible} openSermon={openSermon} />
         ) : tab === "Highlights" ? (
           <HighlightsView items={visible} openSermon={openSermon} />
         ) : visible.length === 0 ? (
           <View style={s.plainCard}>
             <Text style={s.rowTitle}>No {tab.toLowerCase()} sermons found</Text>
             <Text style={s.mutedText}>
-              Upload valid media from the admin dashboard, then refresh.
+              {tab === "Audio"
+                ? "Audio sermons from the database will appear here."
+                : "Playable sermon media will appear here."}
             </Text>
           </View>
         ) : (
           visible.map(item => (
-            <SermonRow key={item.id} item={item} openSermon={openSermon} />
+            <SermonRow
+              key={item.id}
+              item={item}
+              progressEntry={progressMap[item.id]}
+              openSermon={openSermon}
+            />
           ))
         )}
       </ScrollView>

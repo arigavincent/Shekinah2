@@ -3,6 +3,7 @@ import {
   ImageBackground,
   Linking,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View
@@ -225,7 +226,7 @@ function PlatformCard({ item }) {
 }
 
 export function AboutScreen({ go }) {
-  const { data } = useContent();
+  const { data, loading, reload } = useContent();
 
   const branches = Array.isArray(data.branches) ? data.branches : [];
   const platforms = Array.isArray(data.platforms) ? data.platforms : [];
@@ -249,7 +250,18 @@ export function AboutScreen({ go }) {
     <Screen>
       <TopBar title="About & Contact" go={go} back="Home" />
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
+      <ScrollView
+        contentContainerStyle={s.scrollPad}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={reload}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
+      >
         <ImageBackground
           source={{ uri: PHASE1_IMAGES.crowd }}
           style={{

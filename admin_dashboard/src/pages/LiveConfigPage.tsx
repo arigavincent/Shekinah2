@@ -7,6 +7,7 @@ import {
   type LiveConfigPayload,
   updateLiveConfig
 } from "../api/adminLiveConfigApi";
+import { isValidYouTubeId } from "../lib/validation";
 
 const emptyForm: LiveConfigPayload = {
   isLive: false,
@@ -66,6 +67,7 @@ export function LiveConfigPage() {
     if (!form.title.trim()) return "Live title is required.";
     if (!form.nextService.trim()) return "Next service is required.";
     if (!form.youtubeId.trim()) return "YouTube video/live ID is required.";
+    if (!isValidYouTubeId(form.youtubeId)) return "YouTube video/live ID is invalid.";
 
     return "";
   }

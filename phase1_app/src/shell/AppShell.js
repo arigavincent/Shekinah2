@@ -5,6 +5,7 @@ import {
   StatusBar
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
 
 import { AuthProfileScreen } from "../features/profile/AuthProfileScreen";
 
@@ -43,6 +44,48 @@ import { SermonsScreen } from "../screens/SermonsScreen";
 import { ServeScreen } from "../screens/ServeScreen";
 import { UpdatesScreen } from "../screens/UpdatesScreen";
 import { VideoDetail } from "../screens/VideoDetail";
+
+const NOTIFICATION_SCREENS = new Set([
+  "Home",
+  "Sermons",
+  "Devotions",
+  "Live",
+  "Events",
+  "Prayer",
+  "Giving",
+  "Branches",
+  "Bible",
+  "Platforms",
+  "Updates",
+  "About",
+  "Profile",
+  "Notifications",
+  "Downloads"
+]);
+
+function notificationTargetScreen(data) {
+  if (!data || typeof data !== "object") return "";
+
+  const rawScreen = typeof data.screen === "string" ? data.screen.trim() : "";
+  if (NOTIFICATION_SCREENS.has(rawScreen)) return rawScreen;
+
+  const rawCategory = typeof data.category === "string" ? data.category.trim().toLowerCase() : "";
+
+  switch (rawCategory) {
+    case "sermons":
+      return "Sermons";
+    case "devotions":
+      return "Devotions";
+    case "live":
+      return "Live";
+    case "events":
+      return "Events";
+    case "prayer":
+      return "Prayer";
+    default:
+      return "";
+  }
+}
 
 function App() {
   const [screen, setScreen] = useState("Home");
@@ -210,6 +253,30 @@ useEffect(() => {
   };
 }, [drawerOpen, history, screen]);
 
+useEffect(() => {
+  function openFromNotification(data) {
+    const target = notificationTargetScreen(data);
+    if (!target) return;
+
+    setDrawerOpen(false);
+    setDetail(null);
+    setScreen(target);
+  }
+
+  const lastResponse = Notifications.getLastNotificationResponse();
+  if (lastResponse?.notification?.request?.content?.data) {
+    openFromNotification(lastResponse.notification.request.content.data);
+  }
+
+  const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+    openFromNotification(response?.notification?.request?.content?.data);
+  });
+
+  return () => {
+    subscription.remove();
+  };
+}, []);
+
   const openSermon = sermon => {
     if (sermon.type === "audio") {
       setMiniPlayer(sermon);
@@ -265,7 +332,7 @@ useEffect(() => {
       case "DevotionDetail":
         return <DevotionDetail devotion={detail} favorites={favorites} setFavorites={setFavorites} go={go} />;
       case "Live":
-        return <LiveScreen go={go} openDrawer={openDrawer} />;
+        return <LiveScreen go={go} openDrawer={openDrawer} openSermon={openSermon} />;
       case "Downloads":
         return <DownloadsScreen go={go} tab={downloadsTab} setTab={setDownloadsTab} />;
       case "Branches":

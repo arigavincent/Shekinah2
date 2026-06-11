@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import {
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -69,7 +70,7 @@ function EventRow({ event, onPress }) {
 
 export function EventsScreen({ go }) {
   const [query, setQuery] = useState("");
-  const { data, source, loading, reload } = useContent();
+  const { data, loading, reload } = useContent();
 
   const events = Array.isArray(data.events) ? data.events : [];
 
@@ -83,20 +84,6 @@ export function EventsScreen({ go }) {
     <Screen>
       <TopBar title="Events" go={go} back="Home" />
 
-      <View style={s.contentSourceRow}>
-        <Text style={s.contentSourceText}>
-          {loading
-            ? "Loading backend events..."
-            : source === "api"
-              ? `Events from backend · ${validEvents.length}`
-              : "Events from local fallback"}
-        </Text>
-
-        <Pressable onPress={reload}>
-          <Text style={[s.contentReloadText, { color: C.gold }]}>Refresh</Text>
-        </Pressable>
-      </View>
-
       <View style={s.pad}>
         <TextInput
           style={s.searchInput}
@@ -107,11 +94,22 @@ export function EventsScreen({ go }) {
         />
       </View>
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
+      <ScrollView
+        contentContainerStyle={s.scrollPad}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={reload}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
+      >
         {visible.length === 0 ? (
           <EmptyState
             title="No Events"
-            text="Create events in the admin dashboard, then refresh."
+            text="Upcoming church events will appear here."
           />
         ) : (
           visible.map(event => (

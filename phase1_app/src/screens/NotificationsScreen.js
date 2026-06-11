@@ -20,6 +20,7 @@ import { TopBar } from "../components/TopBar";
 import { Setting } from "../components/Setting";
 import {
   registerForPushNotifications,
+  scheduleLocalTestNotification,
   syncPushPreferences
 } from "../services/pushNotifications";
 
@@ -63,7 +64,7 @@ function NotificationSummary({ preferences }) {
             {count} of {total} enabled
           </Text>
           <Text style={[s.goldSmall, { color: C.gold }]}>
-            Saved locally on this device
+            Device preferences are ready
           </Text>
         </View>
       </View>
@@ -155,6 +156,26 @@ export function NotificationsScreen({ go, preferences, setPreferences }) {
     }
   }
 
+  async function sendLocalTestNotification() {
+    try {
+      await scheduleLocalTestNotification({
+        title: "Live Service Alert",
+        body: "Tap this alert to open the Live screen.",
+        screen: "Live"
+      });
+
+      Alert.alert(
+        "Local Notification Scheduled",
+        "A test notification will appear in about one second. Tap it to open the Live screen."
+      );
+    } catch (error) {
+      Alert.alert(
+        "Local Test Failed",
+        error instanceof Error ? error.message : "Unable to schedule a local notification."
+      );
+    }
+  }
+
   function openDeviceSettings() {
     Linking.openSettings().catch(() => {
       Alert.alert("Settings unavailable", "Open your phone settings manually.");
@@ -195,9 +216,16 @@ export function NotificationsScreen({ go, preferences, setPreferences }) {
 
         <ActionCard
           icon="notifications-outline"
-          title="Allow Push Notifications"
-          text="Prepare this device for sermon, devotion, event, live, and prayer alerts."
+          title="Register Remote Push"
+          text="Use this on a development build or release app to register this device for backend broadcasts."
           onPress={requestPushPermission}
+        />
+
+        <ActionCard
+          icon="flash-outline"
+          title="Send Local Test"
+          text="Works in Expo Go on Android. Tapping the notification should open the Live screen."
+          onPress={sendLocalTestNotification}
         />
 
         <ActionCard
@@ -225,7 +253,7 @@ export function NotificationsScreen({ go, preferences, setPreferences }) {
         <View style={s.formNote}>
           <Ionicons name="information-circle-outline" size={20} color={C.gold} />
           <Text style={s.formNoteText}>
-            Preferences persist locally now. Real push delivery will be connected after backend notification tokens and broadcast sending are added.
+            Expo Go on Android can test local notifications, but remote push registration and admin broadcasts require a development build or release app.
           </Text>
         </View>
       </ScrollView>

@@ -26,14 +26,17 @@ export function AudioCard({ item, onPress }) {
   );
 }
 
-export function ClipCard({ item }) {
+export function ClipCard({ item, onPress, style }) {
+  const image = item.image || item.thumbnail;
+
   return (
-    <View style={s.clipCard}>
-      <Image source={{ uri: item.image }} style={s.clipImage} />
+    <Pressable style={[s.clipCard, style]} onPress={onPress}>
+      <Image source={{ uri: image }} style={s.clipImage} />
       <View style={s.clipOverlay}>
+        {item.duration ? <Text style={s.goldSmall}>{item.duration}</Text> : null}
         <Text style={s.clipText}>{item.title}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

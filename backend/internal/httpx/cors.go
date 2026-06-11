@@ -6,10 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func CORS() gin.HandlerFunc {
-	allowedOrigins := map[string]bool{
-		"http://localhost:5173": true,
-		"http://127.0.0.1:5173": true,
+func CORS(origins []string) gin.HandlerFunc {
+	allowedOrigins := make(map[string]bool, len(origins))
+
+	for _, origin := range origins {
+		allowedOrigins[origin] = true
 	}
 
 	return func(c *gin.Context) {

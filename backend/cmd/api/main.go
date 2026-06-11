@@ -27,6 +27,10 @@ func main() {
 	}
 	defer db.Close()
 
+	if err := database.RunMigrations(ctx, db, "migrations"); err != nil {
+		log.Fatalf("database migration failed: %v", err)
+	}
+
 	app := server.New(cfg, db)
 
 	httpServer := &http.Server{

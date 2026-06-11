@@ -15,6 +15,8 @@ var (
 	ErrInvalidInput       = errors.New("invalid input")
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInactiveUser       = errors.New("inactive user")
+	ErrWeakPassword       = errors.New("weak password")
+	ErrPasswordReused     = errors.New("password reused")
 )
 
 type Service struct {
@@ -109,6 +111,56 @@ func (s Service) Me(ctx context.Context, userID string) (PublicUser, error) {
 	}
 
 	return ToPublicUser(user), nil
+}
+
+func (s Service) ChangePassword(ctx context.Context, userID string, req ChangePasswordRequest) (AuthResponse, error) {
+	currentPassword := strings.TrimSpace(req.CurrentPassword)
+	newPassword := strings.TrimSpace(req.NewPassword)
+
+	if currentPassword == "" || newPassword == "" {
+		return AuthResponse{}, ErrInvalidInput
+	}
+
+	if len(newPassword) < 12 {
+		return AuthResponse{}, ErrWeakPassword
+	}
+
+	if currentPassword == newPassword {
+		return AuthResponse{}, ErrPasswordReused
+	}
+
+	user, err := s.repository.FindByID(ctx, userID)
+	if err != nil {
+		return AuthResponse{}, err
+	}
+
+	if !user.IsActive {
+		return AuthResponse{}, ErrInactiveUser
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(currentPassword)); err != nil {
+		return AuthResponse{}, ErrInvalidCredentials
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("hash password: %w", err)
+	}
+
+	updatedUser, err := s.repository.UpdatePassword(ctx, userID, string(hash))
+	if err != nil {
+		return AuthResponse{}, err
+	}
+
+	token, err := s.issueToken(updatedUser)
+	if err != nil {
+		return AuthResponse{}, err
+	}
+
+	return AuthResponse{
+		Token: token,
+		User:  ToPublicUser(updatedUser),
+	}, nil
 }
 
 func (s Service) ParseToken(tokenString string) (string, error) {

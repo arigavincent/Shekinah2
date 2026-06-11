@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Image,
   ImageBackground,
   Pressable,
+  RefreshControl,
   ScrollView,
   Share,
   Text,
@@ -23,6 +24,12 @@ import {
   ClipCard,
   EventMiniCard
 } from "../components/Cards";
+import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
+import {
+  formatPlaybackTime,
+  hasContinueProgress,
+  progressRatio
+} from "../services/playbackProgressStore";
 import {
   extractYouTubeId,
   isAudioUrl,
@@ -82,6 +89,22 @@ function devotionImage(devotion) {
 
 function contentImage(item, fallback) {
   return imageUrl(item?.imageUrl || item?.image || item?.thumbnailUrl || item?.thumbnail, fallback);
+}
+
+function playableClipFromContent(item) {
+  const mediaUrl = sermonMediaUrl(item);
+
+  return {
+    ...item,
+    type: "video",
+    speaker: item?.speaker || "Shekinah Sons Global",
+    category: item?.category || "Clips",
+    date: item?.date || item?.duration || "YouTube Clip",
+    thumbnail: item?.thumbnail || item?.image,
+    image: item?.image || item?.thumbnail,
+    description: item?.description || "Short clip from Shekinah Sons Global.",
+    mediaUrl
+  };
 }
 
 function HomeHero({ live, featuredVideo, go }) {
@@ -212,11 +235,13 @@ function QuickActions({ go }) {
   );
 }
 
-function FeaturedMediaCard({ item, onPress }) {
+function FeaturedMediaCard({ item, onPress, progressEntry }) {
   if (!item) return null;
 
   const thumbnail = sermonThumbnail(item, PHASE1_IMAGES.sermon);
   const isAudio = item.type === "audio";
+  const showContinue = hasContinueProgress(progressEntry);
+  const progressPercent = Math.max(4, Math.round(progressRatio(progressEntry) * 100));
 
   return (
     <Pressable
@@ -279,6 +304,33 @@ function FeaturedMediaCard({ item, onPress }) {
           <Text style={{ color: C.muted, fontSize: 12, fontWeight: "800", marginTop: 5 }} numberOfLines={1}>
             {item.speaker || item.category || "Sermon"} · {item.date || item.sermonDate || ""}
           </Text>
+
+          {showContinue ? (
+            <>
+              <Text style={{ color: C.gold, fontSize: 12, fontWeight: "900", marginTop: 8 }}>
+                Continue · {formatPlaybackTime(progressEntry.positionMs)} / {formatPlaybackTime(progressEntry.durationMs)}
+              </Text>
+
+              <View
+                style={{
+                  marginTop: 8,
+                  height: 4,
+                  borderRadius: 999,
+                  backgroundColor: "rgba(255,255,255,0.15)",
+                  overflow: "hidden"
+                }}
+              >
+                <View
+                  style={{
+                    width: `${progressPercent}%`,
+                    height: "100%",
+                    borderRadius: 999,
+                    backgroundColor: C.gold
+                  }}
+                />
+              </View>
+            </>
+          ) : null}
         </View>
       </ImageBackground>
     </Pressable>
@@ -331,7 +383,8 @@ function UpdateRow({ item, go }) {
 }
 
 export function HomeScreen({ go, openDrawer, openSermon }) {
-  const { data, source, loading, reload } = useContent();
+  const { data, loading, reload } = useContent();
+  const progressMap = usePlaybackProgressMap();
 
   const sermons = Array.isArray(data.sermons) ? data.sermons : [];
   const devotions = Array.isArray(data.devotions) ? data.devotions : [];
@@ -341,9 +394,25 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
 
   const videos = sermons.filter(isPlayableVideoSermon);
   const audio = sermons.filter(isPlayableAudioSermon);
+  const playableClips = clips
+    .map(playableClipFromContent)
+    .filter(item => {
+      const mediaUrl = sermonMediaUrl(item);
+      return Boolean(extractYouTubeId(mediaUrl) || isVideoUrl(mediaUrl));
+    });
   const featuredVideo = videos[0] || null;
   const featuredAudio = audio[0] || null;
   const todayDevotion = devotions[0] || null;
+  const continuingSermons = useMemo(() => {
+    return sermons
+      .filter(item => hasContinueProgress(progressMap[item.id]))
+      .sort((left, right) => {
+        const leftUpdated = new Date(progressMap[left.id]?.updatedAt || 0).getTime();
+        const rightUpdated = new Date(progressMap[right.id]?.updatedAt || 0).getTime();
+        return rightUpdated - leftUpdated;
+      })
+      .slice(0, 6);
+  }, [sermons, progressMap]);
 
   return (
     <Screen>
@@ -353,21 +422,18 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
         right={<IconButton name="search-outline" onPress={() => go("Search")} />}
       />
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
-        <View style={s.contentSourceRow}>
-          <Text style={s.contentSourceText}>
-            {loading
-              ? "Loading home content..."
-              : source === "api"
-                ? "Home from backend"
-                : "Home from local fallback"}
-          </Text>
-
-          <Pressable onPress={reload}>
-            <Text style={s.contentReloadText}>Refresh</Text>
-          </Pressable>
-        </View>
-
+      <ScrollView
+        contentContainerStyle={s.scrollPad}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={reload}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
+      >
         <HomeHero live={data.live} featuredVideo={featuredVideo} go={go} />
 
         <QuickActions go={go} />
@@ -376,26 +442,61 @@ export function HomeScreen({ go, openDrawer, openSermon }) {
 
         <ScriptureCard scripture={data.scripture} />
 
+        {continuingSermons.length > 0 ? (
+          <>
+            <SectionHeader title="Continue Listening" onPress={() => go("Sermons")} />
+            <Horizontal>
+              {continuingSermons.map(item => (
+                <FeaturedMediaCard
+                  key={item.id}
+                  item={item}
+                  progressEntry={progressMap[item.id]}
+                  onPress={() => openSermon(item)}
+                />
+              ))}
+            </Horizontal>
+          </>
+        ) : null}
+
         <SectionHeader title="Featured Sermons" onPress={() => go("Sermons")} />
         <Horizontal>
           {featuredVideo ? (
-            <FeaturedMediaCard item={featuredVideo} onPress={() => openSermon(featuredVideo)} />
+            <FeaturedMediaCard
+              item={featuredVideo}
+              progressEntry={progressMap[featuredVideo.id]}
+              onPress={() => openSermon(featuredVideo)}
+            />
           ) : null}
 
           {featuredAudio ? (
-            <FeaturedMediaCard item={featuredAudio} onPress={() => openSermon(featuredAudio)} />
+            <FeaturedMediaCard
+              item={featuredAudio}
+              progressEntry={progressMap[featuredAudio.id]}
+              onPress={() => openSermon(featuredAudio)}
+            />
           ) : null}
 
           {videos.slice(1, 4).map(item => (
-            <FeaturedMediaCard key={item.id} item={item} onPress={() => openSermon(item)} />
+            <FeaturedMediaCard
+              key={item.id}
+              item={item}
+              progressEntry={progressMap[item.id]}
+              onPress={() => openSermon(item)}
+            />
           ))}
         </Horizontal>
 
-        {clips.length > 0 ? (
+        {playableClips.length > 0 ? (
           <>
             <SectionHeader title="Short Clips" />
             <Horizontal>
-              {clips.slice(0, 6).map(item => <ClipCard key={item.id} item={item} />)}
+              {playableClips.slice(0, 6).map(item => (
+                <ClipCard
+                  key={item.id}
+                  item={item}
+                  onPress={() => openSermon(item)}
+                />
+              ))}
             </Horizontal>
           </>
         ) : null}

@@ -1,7 +1,8 @@
 import React from "react";
-import { Linking, ScrollView, Text, View } from "react-native";
+import { Linking, RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { useContent } from "../providers/ContentProvider";
+import { C } from "../constants/theme";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
@@ -9,7 +10,7 @@ import { Tabs } from "../components/Tabs";
 import { ActionButton } from "../components/ActionButton";
 
 export function PlatformsScreen({ go, tab, setTab }) {
-  const { data } = useContent();
+  const { data, loading, reload } = useContent();
   const platforms = data.platforms;
   const items = Array.isArray(platforms[tab]) ? platforms[tab] : [];
 
@@ -18,7 +19,18 @@ export function PlatformsScreen({ go, tab, setTab }) {
       <TopBar title="Our Platforms" go={go} back="Home" />
       <Tabs tabs={["Web", "TV", "Radio"]} active={tab} setActive={setTab} />
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
+      <ScrollView
+        contentContainerStyle={s.scrollPad}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={reload}
+            tintColor={C.gold}
+            colors={[C.gold]}
+            progressBackgroundColor={C.surface2}
+          />
+        }
+      >
         {items.map(item => (
           <View key={item.id} style={s.plainCard}>
             <Text style={s.rowTitle}>{item.name}</Text>

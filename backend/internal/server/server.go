@@ -7,6 +7,7 @@ import (
 	adminevents "github.com/ariga/shekinah-backend/internal/admin/events"
 	adminliveconfig "github.com/ariga/shekinah-backend/internal/admin/liveconfig"
 	adminmedia "github.com/ariga/shekinah-backend/internal/admin/media"
+	adminprayers "github.com/ariga/shekinah-backend/internal/admin/prayers"
 	adminsermons "github.com/ariga/shekinah-backend/internal/admin/sermons"
 	adminupdates "github.com/ariga/shekinah-backend/internal/admin/updates"
 	"github.com/ariga/shekinah-backend/internal/auth"
@@ -27,7 +28,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	}
 
 	r := gin.New()
-	r.Use(httpx.CORS())
+	r.Use(httpx.CORS(cfg.AllowedOrigins))
 
 	r.Use(httpx.RequestID())
 	r.Use(httpx.Logger())
@@ -65,6 +66,9 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	adminLiveConfigRepository := adminliveconfig.NewRepository(db)
 	adminLiveConfigService := adminliveconfig.NewService(adminLiveConfigRepository)
 	adminLiveConfigHandler := adminliveconfig.NewHandler(adminLiveConfigService)
+	adminPrayerRepository := adminprayers.NewRepository(db)
+	adminPrayerService := adminprayers.NewService(adminPrayerRepository)
+	adminPrayerHandler := adminprayers.NewHandler(adminPrayerService)
 	adminMediaHandler := adminmedia.NewHandler()
 	givingHandler := giving.NewHandler(db)
 	notificationHandler := notifications.NewHandler(db)
@@ -82,13 +86,17 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/giving/transactions/:id", givingHandler.GetTransaction)
 		api.POST("/notifications/register", notificationHandler.RegisterDevice)
 		api.PATCH("/notifications/preferences", notificationHandler.UpdatePreferences)
-		api.POST("/prayer-requests", prayerHandler.Create)
+		api.GET("/prayer-requests", prayerHandler.ListPublic)
+		api.POST("/prayer-requests", auth.RequireAuth(authService), prayerHandler.Create)
+		api.GET("/prayer-requests/mine", auth.RequireAuth(authService), prayerHandler.ListMine)
+		api.POST("/prayer-requests/:id/pray", auth.RequireAuth(authService), prayerHandler.Pray)
 
 		authGroup := api.Group("/auth")
 		{
 			authGroup.POST("/register", authHandler.Register)
 			authGroup.POST("/login", authHandler.Login)
 			authGroup.GET("/me", auth.RequireAuth(authService), authHandler.Me)
+			authGroup.PATCH("/password", auth.RequireAuth(authService), authHandler.ChangePassword)
 		}
 
 		adminGroup := api.Group("/admin")
@@ -123,6 +131,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 
 			adminGroup.GET("/live-config", adminLiveConfigHandler.Get)
 			adminGroup.PATCH("/live-config", adminLiveConfigHandler.Update)
+			adminGroup.GET("/prayers", adminPrayerHandler.List)
+			adminGroup.PATCH("/prayers/:id", adminPrayerHandler.Update)
 			adminGroup.POST("/media", adminMediaHandler.Upload)
 			adminGroup.GET("/giving/transactions", givingHandler.ListTransactions)
 			adminGroup.GET("/notifications/messages", notificationHandler.ListMessages)

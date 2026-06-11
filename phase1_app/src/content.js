@@ -8,6 +8,222 @@ export const PHASE1_IMAGES = {
   clip: "https://images.unsplash.com/photo-1445232867465-97891f9b5294?q=80&w=700"
 };
 
+export const YOUTUBE_SERMONS = [
+  {
+    id: "yt-asQFM1unI8Q",
+    type: "video",
+    title: "WHY JESUS CHRIST CAME AND DIED",
+    speaker: "Sir Joseph Mash",
+    date: "June 1, 2026",
+    category: "Teachings",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/asQFM1unI8Q/hqdefault.jpg",
+    duration: "22:47",
+    mediaUrl: "https://www.youtube.com/watch?v=asQFM1unI8Q",
+    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+  },
+  {
+    id: "yt-zQvxJFkFXC8",
+    type: "video",
+    title: "TAKE RESPONSIBILITY!",
+    speaker: "Sir Joseph Mash",
+    date: "May 31, 2026",
+    category: "Teachings",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/zQvxJFkFXC8/hqdefault.jpg",
+    duration: "20:52",
+    mediaUrl: "https://www.youtube.com/watch?v=zQvxJFkFXC8",
+    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+  },
+  {
+    id: "yt-AFIkyeAcRwE",
+    type: "video",
+    title: "THE SIMPLICITY IN CHRIST JESUS",
+    speaker: "Sir Joseph Mash",
+    date: "May 30, 2026",
+    category: "Teachings",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/AFIkyeAcRwE/hqdefault.jpg",
+    duration: "12:11",
+    mediaUrl: "https://www.youtube.com/watch?v=AFIkyeAcRwE",
+    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+  },
+  {
+    id: "yt-NDC2E4YkHEM",
+    type: "video",
+    title: "2 DAYS OF LIGHT",
+    speaker: "Sir Joseph Mash & Prophet Josphiah",
+    date: "May 29, 2026",
+    category: "Teachings",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/NDC2E4YkHEM/hqdefault.jpg",
+    duration: "11:21",
+    mediaUrl: "https://www.youtube.com/watch?v=NDC2E4YkHEM",
+    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+  },
+  {
+    id: "yt-kyUeStQaaRM",
+    type: "video",
+    title: "WHAT YOU ARE MADE OF",
+    speaker: "Sir Joseph Mash",
+    date: "May 28, 2026",
+    category: "Teachings",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/kyUeStQaaRM/hqdefault.jpg",
+    duration: "21:18",
+    mediaUrl: "https://www.youtube.com/watch?v=kyUeStQaaRM",
+    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+  },
+  {
+    id: "yt-LKZTLv7VEwo",
+    type: "video",
+    title: "THE HOPE OF OUR CALLING",
+    speaker: "Sir Joseph Mash",
+    date: "May 27, 2026",
+    category: "Teachings",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/LKZTLv7VEwo/hqdefault.jpg",
+    duration: "21:00",
+    mediaUrl: "https://www.youtube.com/watch?v=LKZTLv7VEwo",
+    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+  },
+  {
+    id: "yt-CjddPxMCCDk",
+    type: "video",
+    title: "THE LIFE OF FAITH",
+    speaker: "Shekinah Sons Global",
+    date: "May 26, 2026",
+    category: "Faith",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/CjddPxMCCDk/hqdefault.jpg",
+    duration: "11:01",
+    mediaUrl: "https://www.youtube.com/watch?v=CjddPxMCCDk",
+    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+  },
+  {
+    id: "yt-IN_seTRPh9o",
+    type: "video",
+    title: "REDEEMED FUTURE SERIES",
+    speaker: "Shekinah Sons Global",
+    date: "May 25, 2026",
+    category: "Sonship",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/IN_seTRPh9o/hqdefault.jpg",
+    duration: "19:05",
+    mediaUrl: "https://www.youtube.com/watch?v=IN_seTRPh9o",
+    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+  },
+  {
+    id: "yt-xndGDMTco7U",
+    type: "video",
+    title: "LIFE AS A SON OF GOD RECAP",
+    speaker: "Shekinah Sons Global",
+    date: "May 24, 2026",
+    category: "Sonship",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/xndGDMTco7U/hqdefault.jpg",
+    duration: "8:21",
+    mediaUrl: "https://www.youtube.com/watch?v=xndGDMTco7U",
+    description: "A Shekinah Sons Global teaching recap from the official YouTube channel."
+  },
+  {
+    id: "yt-jxRTo57d4zY",
+    type: "video",
+    title: "Small Things Matters Recap",
+    speaker: "Sir Joseph Mash",
+    date: "November 6, 2025",
+    category: "Teachings",
+    live: false,
+    thumbnail: "https://i.ytimg.com/vi/jxRTo57d4zY/hqdefault.jpg",
+    duration: "9:57",
+    mediaUrl: "https://www.youtube.com/watch?v=jxRTo57d4zY",
+    description: "A Shekinah Sons Global teaching recap from the official YouTube channel."
+  }
+];
+
+export const YOUTUBE_CLIPS = [
+  {
+    id: "clip-zXKCTnNFgwU",
+    title: "2025 Highlight",
+    image: "https://i.ytimg.com/vi/zXKCTnNFgwU/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/zXKCTnNFgwU/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=zXKCTnNFgwU",
+    duration: "1:15"
+  },
+  {
+    id: "clip-zMKSJPNeIdc",
+    title: "Generation Gather - November Edition",
+    image: "https://i.ytimg.com/vi/zMKSJPNeIdc/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/zMKSJPNeIdc/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=zMKSJPNeIdc",
+    duration: "1:31"
+  },
+  {
+    id: "clip-xndGDMTco7U",
+    title: "Life As A Son Of God Recap",
+    image: "https://i.ytimg.com/vi/xndGDMTco7U/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/xndGDMTco7U/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=xndGDMTco7U",
+    duration: "8:21"
+  },
+  {
+    id: "clip-5aPZqmTNCAU",
+    title: "November Endmonth Event Invitation",
+    image: "https://i.ytimg.com/vi/5aPZqmTNCAU/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/5aPZqmTNCAU/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=5aPZqmTNCAU",
+    duration: "1:13"
+  },
+  {
+    id: "clip-jxRTo57d4zY",
+    title: "Small Things Matters Recap",
+    image: "https://i.ytimg.com/vi/jxRTo57d4zY/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/jxRTo57d4zY/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=jxRTo57d4zY",
+    duration: "9:57"
+  },
+  {
+    id: "clip-ax6Qu4Ok2uY",
+    title: "Jesus 006 - The Person Of The Holy Spirit",
+    image: "https://i.ytimg.com/vi/ax6Qu4Ok2uY/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/ax6Qu4Ok2uY/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=ax6Qu4Ok2uY",
+    duration: "13:50"
+  },
+  {
+    id: "clip--3pSs4zM8u4",
+    title: "Shekinah Sons 6th Anniversary Recap",
+    image: "https://i.ytimg.com/vi/-3pSs4zM8u4/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/-3pSs4zM8u4/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=-3pSs4zM8u4",
+    duration: "11:33"
+  },
+  {
+    id: "clip-L0Df46lo8mI",
+    title: "Redeemed Future Highlights",
+    image: "https://i.ytimg.com/vi/L0Df46lo8mI/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/L0Df46lo8mI/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=L0Df46lo8mI",
+    duration: "1:38"
+  },
+  {
+    id: "clip-Pb2UWuJfiWE",
+    title: "Being Committed To Become",
+    image: "https://i.ytimg.com/vi/Pb2UWuJfiWE/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/Pb2UWuJfiWE/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=Pb2UWuJfiWE",
+    duration: "8:21"
+  },
+  {
+    id: "clip-XMlKSE-07Ak",
+    title: "The Message Of Sonship Of 2025",
+    image: "https://i.ytimg.com/vi/XMlKSE-07Ak/hqdefault.jpg",
+    thumbnail: "https://i.ytimg.com/vi/XMlKSE-07Ak/hqdefault.jpg",
+    mediaUrl: "https://www.youtube.com/watch?v=XMlKSE-07Ak",
+    duration: "11:47"
+  }
+];
+
 // Phase 1 uses backend-shaped local sample content.
 // Phase 2 should return this same shape from the Go API + PostgreSQL,
 // so screens can migrate from local imports to API data with minimal changes.
@@ -56,103 +272,30 @@ export const DATA = {
     }
   ],
 
-  sermons: [
-    {
-      id: "ser-1",
-      type: "video",
-      title: "The Power Of A Consecrated Life",
-      speaker: "Shekinah Sons Global",
-      date: "June 2, 2026",
-      category: "Faith",
-      live: true,
-      thumbnail: PHASE1_IMAGES.sermon,
-      description:
-        "A message on living set apart for God, carrying spiritual discipline into daily life, and building a consistent walk with Christ."
-    },
-    {
-      id: "ser-2",
-      type: "video",
-      title: "Building Altars Of Prayer",
-      speaker: "Shekinah Sons Global",
-      date: "May 29, 2026",
-      category: "Prayer",
-      live: false,
-      thumbnail: "https://images.unsplash.com/photo-1519682337058-a94d519337bc?q=80&w=900",
-      description:
-        "A teaching on prayer, consistency, and creating a life that hosts the presence of God."
-    },
-    {
-      id: "ser-3",
-      type: "audio",
-      title: "Grace For The New Season",
-      speaker: "Shekinah Sons Global",
-      date: "May 26, 2026",
-      category: "Grace",
-      live: false,
-      thumbnail: PHASE1_IMAGES.audio,
-      duration: "54:20",
-      description:
-        "An audio sermon on discerning seasons and moving with the wisdom of God."
-    },
-    {
-      id: "ser-4",
-      type: "audio",
-      title: "The Sound Of Revival",
-      speaker: "Shekinah Sons Global",
-      date: "May 20, 2026",
-      category: "Revival",
-      live: false,
-      thumbnail: "https://images.unsplash.com/photo-1507874457470-272b3c8d8ee2?q=80&w=900",
-      duration: "47:08",
-      description:
-        "A stirring message on hunger, worship, and the move of God among His people."
-    }
-  ],
+  sermons: YOUTUBE_SERMONS,
 
   categories: [
     {
+      id: "cat-youtube-teachings",
+      name: "Teachings",
+      count: 7,
+      image: "https://i.ytimg.com/vi/asQFM1unI8Q/hqdefault.jpg"
+    },
+    {
+      id: "cat-youtube-sonship",
+      name: "Sonship",
+      count: 2,
+      image: "https://i.ytimg.com/vi/xndGDMTco7U/hqdefault.jpg"
+    },
+    {
       id: "cat-1",
       name: "Faith",
-      count: 42,
-      image: PHASE1_IMAGES.sermon
-    },
-    {
-      id: "cat-2",
-      name: "Prayer",
-      count: 31,
-      image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=700"
-    },
-    {
-      id: "cat-3",
-      name: "Grace",
-      count: 28,
-      image: PHASE1_IMAGES.audio
-    },
-    {
-      id: "cat-4",
-      name: "Revival",
-      count: 16,
-      image: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=700"
+      count: 1,
+      image: "https://i.ytimg.com/vi/CjddPxMCCDk/hqdefault.jpg"
     }
   ],
 
-  clips: [
-    {
-      id: "clip-1",
-      title: "Faith Speaks Before It Sees",
-      image: PHASE1_IMAGES.clip
-    },
-    {
-      id: "clip-2",
-      title: "Prayer Changes Atmospheres",
-      image: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?q=80&w=700"
-    },
-    {
-      id: "clip-3",
-      title: "Carry The Fire Daily",
-      image: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=700"
-    }
-  ],
+  clips: YOUTUBE_CLIPS,
 
   events: [
     {

@@ -63,8 +63,20 @@ Original Gradle output:
 
 ```bash
 cd /home/ariga/shekinah_final/phase1_app
-npm run start
+npm run start:lan
 ```
+
+## API Environment Profiles
+
+Use one of the checked-in examples as the source for your local `.env`:
+
+```text
+.env.development.example
+.env.staging.example
+.env.production.example
+```
+
+For Expo Go on a physical phone, `EXPO_PUBLIC_API_BASE_URL` must use your laptop LAN IP, not `localhost`.
 
 ## Build Debug APK
 
@@ -75,15 +87,24 @@ cd /home/ariga/shekinah_final/phase1_app/android
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH ./gradlew :app:assembleDebug --no-daemon --console=plain
 ```
 
-## Current Phase 1 Limitations
+## EAS Release Builds
 
-- Uses local sample content only.
-- Sermon/devotion/event images are backend placeholders.
-- Branch details, service times, phone numbers, About text, and Vision text are backend placeholders.
-- Remote images are loaded from external URLs.
-- No real backend yet.
-- No real M-Pesa STK Push yet.
-- No real OneSignal push setup yet.
-- No real offline downloads yet.
-- No production signing keystore yet.
-- The APK is a debug APK, suitable for testing, not Play Store release.
+Preview APK:
+
+```bash
+npm run build:android:preview
+```
+
+Production Play Store bundle:
+
+```bash
+npm run build:android:production
+```
+
+Before production builds, copy `.env.production.example` to `.env` and set `EXPO_PUBLIC_API_BASE_URL` to the production backend.
+
+## Remaining Production Work
+
+- Replace placeholder backend content with approved church content.
+- Configure real M-Pesa, push notification, media storage, maps, and Bible provider credentials.
+- Create the production signing keystore before Play Store release.
