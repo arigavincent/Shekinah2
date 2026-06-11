@@ -6,7 +6,12 @@ export const DEFAULT_BIBLE_STATE = {
   bookmarks: [],
   highlights: [],
   notes: {},
-  recent: []
+  recent: [],
+  preferences: {
+    readingMode: "parallel",
+    fontScaleIndex: 1,
+    installedVersions: ["eng_msb", "swh_neno"]
+  }
 };
 
 function normalizeBibleState(value) {
@@ -18,7 +23,17 @@ function normalizeBibleState(value) {
     bookmarks: Array.isArray(value.bookmarks) ? value.bookmarks : [],
     highlights: Array.isArray(value.highlights) ? value.highlights : [],
     notes: value.notes && typeof value.notes === "object" ? value.notes : {},
-    recent: Array.isArray(value.recent) ? value.recent : []
+    recent: Array.isArray(value.recent) ? value.recent : [],
+    preferences:
+      value.preferences && typeof value.preferences === "object"
+        ? {
+            ...DEFAULT_BIBLE_STATE.preferences,
+            ...value.preferences,
+            installedVersions: Array.isArray(value.preferences.installedVersions)
+              ? value.preferences.installedVersions
+              : DEFAULT_BIBLE_STATE.preferences.installedVersions
+          }
+        : DEFAULT_BIBLE_STATE.preferences
   };
 }
 

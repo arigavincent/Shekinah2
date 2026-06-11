@@ -4,18 +4,38 @@ import { Ionicons } from "@expo/vector-icons";
 import { openDatabaseAsync } from "expo-sqlite";
 import * as FileSystem from "expo-file-system/legacy";
 import { Asset } from "expo-asset";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { Screen } from "../components/Screen";
 import { s } from "../styles/appStyles";
+import {
+  DEFAULT_BIBLE_STATE,
+  loadBibleState,
+  saveBibleState
+} from "../services/bibleStorage";
 
 const DB_NAME = "bible.db";
 const DB_ASSET = require("../../assets/bible/bible.db");
 
 const ENGLISH = "eng_msb";
 const SWAHILI = "swh_neno";
-const FAVORITES_KEY = "@shekinah_bible_favorites_v1";
 const FONT_SCALES = [0.85, 1, 1.15, 1.3];
+const VIEW_MODES = [
+  { key: "parallel", label: "Parallel" },
+  { key: SWAHILI, label: "Kiswahili" },
+  { key: ENGLISH, label: "English" }
+];
+const BUNDLED_VERSIONS = [
+  { id: ENGLISH, name: "English (KJV style)", source: "Bundled offline" },
+  { id: SWAHILI, name: "Kiswahili", source: "Bundled offline" }
+];
+
+function chapterRef(bookId, chapter) {
+  return `${bookId}:${chapter}`;
+}
+
+function recentKey(bookId, chapter) {
+  return `${bookId}:${chapter}`;
+}
 
 async function ensureBibleDb() {
   const dir = `${FileSystem.documentDirectory}SQLite`;
@@ -175,20 +195,34 @@ export function BibleScreen({ go }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
-  const [favoriteRefs, setFavoriteRefs] = useState(new Set());
-  const [fontScaleIndex, setFontScaleIndex] = useState(1);
+  const [bibleState, setBibleState] = useState(() => ({
+    ...DEFAULT_BIBLE_STATE,
+    bookmarks: [...DEFAULT_BIBLE_STATE.bookmarks],
+    highlights: [...DEFAULT_BIBLE_STATE.highlights],
+    notes: { ...DEFAULT_BIBLE_STATE.notes },
+    recent: [...DEFAULT_BIBLE_STATE.recent],
+    preferences: { ...DEFAULT_BIBLE_STATE.preferences }
+  }));
+  const [fontScaleIndex, setFontScaleIndex] = useState(
+    DEFAULT_BIBLE_STATE.preferences.fontScaleIndex
+  );
+  const [readingMode, setReadingMode] = useState(
+    DEFAULT_BIBLE_STATE.preferences.readingMode
+  );
 
   useEffect(() => {
     let alive = true;
 
-    openBibleDb()
-      .then(database => {
+    Promise.all([openBibleDb(), loadBibleState()])
+      .then(async ([database, savedState]) => {
         if (!alive) return;
         setDb(database);
-        return getBooks(database);
-      })
-      .then(rows => {
-        if (!alive || !rows) return;
+        setBibleState(savedState);
+        setFontScaleIndex(savedState.preferences.fontScaleIndex);
+        setReadingMode(savedState.preferences.readingMode);
+
+        const rows = await getBooks(database);
+        if (!alive) return;
         setBooks(rows);
       })
       .finally(() => alive && setLoading(false));
@@ -196,16 +230,6 @@ export function BibleScreen({ go }) {
     return () => {
       alive = false;
     };
-  }, []);
-
-  useEffect(() => {
-    AsyncStorage.getItem(FAVORITES_KEY)
-      .then(raw => {
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setFavoriteRefs(new Set(parsed));
-      })
-      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -262,6 +286,11 @@ export function BibleScreen({ go }) {
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (stage === "library") {
+        setStage("books");
+        return true;
+      }
+
       if (stage === "reader") {
         setStage("verses");
         return true;
@@ -289,6 +318,49 @@ export function BibleScreen({ go }) {
     return books;
   }, [books, tab]);
 
+  const favoriteRefs = useMemo(
+    () => new Set(bibleState.bookmarks),
+    [bibleState.bookmarks]
+  );
+
+  const recentChapters = useMemo(
+    () =>
+      bibleState.recent
+        .map(ref => {
+          const [bookId, chapterValue] = ref.split(":");
+          const nextBook = books.find(item => item.id === bookId);
+
+          if (!nextBook) return null;
+
+          return {
+            ref,
+            book: nextBook,
+            chapter: Number(chapterValue || 1)
+          };
+        })
+        .filter(Boolean),
+    [bibleState.recent, books]
+  );
+
+  const bookmarkChapters = useMemo(
+    () =>
+      bibleState.bookmarks
+        .map(ref => {
+          const [bookId, chapterValue] = ref.split(":");
+          const nextBook = books.find(item => item.id === bookId);
+
+          if (!nextBook) return null;
+
+          return {
+            ref,
+            book: nextBook,
+            chapter: Number(chapterValue || 1)
+          };
+        })
+        .filter(Boolean),
+    [bibleState.bookmarks, books]
+  );
+
   function openBook(nextBook) {
     setBook(nextBook);
     setChapter(1);
@@ -303,27 +375,76 @@ export function BibleScreen({ go }) {
     setStage("verses");
   }
 
+  async function persistBibleState(nextState) {
+    setBibleState(nextState);
+    await saveBibleState(nextState);
+  }
+
+  async function rememberRecent(nextBook, nextChapter) {
+    const nextRef = recentKey(nextBook.id, nextChapter);
+    const nextState = {
+      ...bibleState,
+      recent: [nextRef, ...bibleState.recent.filter(ref => ref !== nextRef)].slice(0, 12)
+    };
+
+    await persistBibleState(nextState);
+  }
+
   function openReader(nextVerse = 1) {
     setStage("reader");
+    if (book) {
+      void rememberRecent(book, chapter);
+    }
     setTimeout(() => {}, nextVerse);
   }
 
-  const currentRef = book ? `${book.id}:${chapter}` : "";
+  function openSavedChapter(nextBook, nextChapter) {
+    setBook(nextBook);
+    setChapter(nextChapter);
+    setStage("reader");
+    void rememberRecent(nextBook, nextChapter);
+  }
+
+  const currentRef = book ? chapterRef(book.id, chapter) : "";
   const isFavorite = currentRef ? favoriteRefs.has(currentRef) : false;
 
   async function toggleFavorite() {
     if (!currentRef) return;
 
-    const next = new Set(favoriteRefs);
-    if (next.has(currentRef)) next.delete(currentRef);
-    else next.add(currentRef);
+    const nextBookmarks = favoriteRefs.has(currentRef)
+      ? bibleState.bookmarks.filter(ref => ref !== currentRef)
+      : [...bibleState.bookmarks, currentRef];
+    const nextState = {
+      ...bibleState,
+      bookmarks: nextBookmarks
+    };
 
-    setFavoriteRefs(next);
-    await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify([...next]));
+    await persistBibleState(nextState);
   }
 
   function cycleFontSize() {
-    setFontScaleIndex(i => (i + 1) % FONT_SCALES.length);
+    const nextIndex = (fontScaleIndex + 1) % FONT_SCALES.length;
+    setFontScaleIndex(nextIndex);
+    void persistBibleState({
+      ...bibleState,
+      preferences: {
+        ...bibleState.preferences,
+        fontScaleIndex: nextIndex,
+        readingMode
+      }
+    });
+  }
+
+  function selectReadingMode(nextMode) {
+    setReadingMode(nextMode);
+    void persistBibleState({
+      ...bibleState,
+      preferences: {
+        ...bibleState.preferences,
+        fontScaleIndex,
+        readingMode: nextMode
+      }
+    });
   }
 
   function openSearchResult(item) {
@@ -336,6 +457,7 @@ export function BibleScreen({ go }) {
     setResults([]);
     setShowSearch(false);
     setStage("reader");
+    void rememberRecent(nextBook, item.chapter);
   }
 
   const fontScale = FONT_SCALES[fontScaleIndex];
@@ -357,10 +479,9 @@ export function BibleScreen({ go }) {
           title="Books"
           onBack={() => go?.("Home")}
           right={
-            <>
-              <Ionicons name="search" size={28} color="#fff" />
-              <Ionicons name="heart-outline" size={30} color="#fff" />
-            </>
+            <Pressable onPress={() => setStage("library")}>
+              <Ionicons name="library-outline" size={28} color="#fff" />
+            </Pressable>
           }
         />
 
@@ -404,6 +525,88 @@ export function BibleScreen({ go }) {
     );
   }
 
+  if (stage === "library") {
+    return (
+      <Screen>
+        <Header
+          title="Version Library"
+          subtitle="Offline bundled versions and saved chapters"
+          onBack={() => setStage("books")}
+        />
+
+        <ScrollView contentContainerStyle={styles.page}>
+          <Text style={styles.sectionTitle}>Installed Versions</Text>
+          {BUNDLED_VERSIONS.map(version => {
+            const installed = bibleState.preferences.installedVersions.includes(version.id);
+
+            return (
+              <View key={version.id} style={styles.versionCard}>
+                <View style={styles.versionMeta}>
+                  <Text style={styles.versionTitle}>{version.name}</Text>
+                  <Text style={styles.muted}>{version.source}</Text>
+                </View>
+                <Text style={styles.versionState}>
+                  {installed ? "Installed" : "Unavailable"}
+                </Text>
+              </View>
+            );
+          })}
+
+          <View style={styles.infoPanel}>
+            <Text style={styles.infoTitle}>Download More Versions</Text>
+            <Text style={styles.infoText}>
+              Additional Bible versions need a configured source and licensing feed.
+              The reader is ready for them, but this build ships with English and
+              Kiswahili offline.
+            </Text>
+          </View>
+
+          <Text style={styles.sectionTitle}>Recent Chapters</Text>
+          {recentChapters.length ? (
+            recentChapters.map(item => (
+              <Pressable
+                key={item.ref}
+                style={styles.savedChapterCard}
+                onPress={() => openSavedChapter(item.book, item.chapter)}
+              >
+                <View style={styles.bookMeta}>
+                  <Text style={styles.bookTitle}>
+                    {item.book.swahili_name} ~ {item.book.english_name}
+                  </Text>
+                  <Text style={styles.muted}>Chapter {item.chapter}</Text>
+                </View>
+                <Ionicons name="arrow-forward" size={26} color="#777" />
+              </Pressable>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>Your recent chapters will appear here.</Text>
+          )}
+
+          <Text style={styles.sectionTitle}>Bookmarked Chapters</Text>
+          {bookmarkChapters.length ? (
+            bookmarkChapters.map(item => (
+              <Pressable
+                key={item.ref}
+                style={styles.savedChapterCard}
+                onPress={() => openSavedChapter(item.book, item.chapter)}
+              >
+                <View style={styles.bookMeta}>
+                  <Text style={styles.bookTitle}>
+                    {item.book.swahili_name} ~ {item.book.english_name}
+                  </Text>
+                  <Text style={styles.muted}>Chapter {item.chapter}</Text>
+                </View>
+                <Ionicons name="heart" size={24} color="#ff5a5f" />
+              </Pressable>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>Saved chapters will appear here.</Text>
+          )}
+        </ScrollView>
+      </Screen>
+    );
+  }
+
   if (stage === "chapters") {
     return (
       <Screen>
@@ -411,10 +614,9 @@ export function BibleScreen({ go }) {
           title={`${book?.swahili_name} ~ ${book?.english_name}`}
           onBack={() => setStage("books")}
           right={
-            <>
-              <Ionicons name="search" size={28} color="#fff" />
-              <Ionicons name="heart-outline" size={30} color="#fff" />
-            </>
+            <Pressable onPress={() => setStage("library")}>
+              <Ionicons name="library-outline" size={28} color="#fff" />
+            </Pressable>
           }
         />
 
@@ -518,43 +720,84 @@ export function BibleScreen({ go }) {
             ))}
           </View>
         )}
-        <View style={styles.readerLabels}>
-          <Text style={styles.readerLabel}>Kiswahili</Text>
-          <Text style={styles.readerLabel}>English</Text>
+        <View style={styles.modeRow}>
+          {VIEW_MODES.map(item => (
+            <Pressable
+              key={item.key}
+              style={[styles.modePill, readingMode === item.key && styles.modePillActive]}
+              onPress={() => selectReadingMode(item.key)}
+            >
+              <Text
+                style={[
+                  styles.modeText,
+                  readingMode === item.key && styles.modeTextActive
+                ]}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          ))}
         </View>
 
-        <View style={styles.parallel}>
-          <View style={styles.column}>
-            <Text style={styles.chapterHeading}>{book?.swahili_name}</Text>
+        {readingMode === "parallel" ? (
+          <>
+            <View style={styles.readerLabels}>
+              <Text style={styles.readerLabel}>Kiswahili</Text>
+              <Text style={styles.readerLabel}>English</Text>
+            </View>
+
+            <View style={styles.parallel}>
+              <View style={styles.column}>
+                <Text style={styles.chapterHeading}>{book?.swahili_name}</Text>
+                {verses.map(item => (
+                  <Text
+                    key={`sw-${item.verse}`}
+                    style={[
+                      styles.verseText,
+                      { fontSize: 26 * fontScale, lineHeight: 42 * fontScale }
+                    ]}
+                  >
+                    <Text style={styles.verseNo}>{item.verse} </Text>
+                    {item.swahili_text}
+                  </Text>
+                ))}
+              </View>
+
+              <View style={styles.column}>
+                {verses.map(item => (
+                  <Text
+                    key={`en-${item.verse}`}
+                    style={[
+                      styles.verseText,
+                      { fontSize: 26 * fontScale, lineHeight: 42 * fontScale }
+                    ]}
+                  >
+                    <Text style={styles.verseNo}>{item.verse} </Text>
+                    {item.english_text}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          </>
+        ) : (
+          <View style={styles.singleColumn}>
+            <Text style={styles.chapterHeading}>
+              {readingMode === SWAHILI ? book?.swahili_name : book?.english_name}
+            </Text>
             {verses.map(item => (
               <Text
-                key={`sw-${item.verse}`}
+                key={`${readingMode}-${item.verse}`}
                 style={[
                   styles.verseText,
-                  { fontSize: 26 * fontScale, lineHeight: 42 * fontScale }
+                  { fontSize: 28 * fontScale, lineHeight: 44 * fontScale }
                 ]}
               >
                 <Text style={styles.verseNo}>{item.verse} </Text>
-                {item.swahili_text}
+                {readingMode === SWAHILI ? item.swahili_text : item.english_text}
               </Text>
             ))}
           </View>
-
-          <View style={styles.column}>
-            {verses.map(item => (
-              <Text
-                key={`en-${item.verse}`}
-                style={[
-                  styles.verseText,
-                  { fontSize: 26 * fontScale, lineHeight: 42 * fontScale }
-                ]}
-              >
-                <Text style={styles.verseNo}>{item.verse} </Text>
-                {item.english_text}
-              </Text>
-            ))}
-          </View>
-        </View>
+        )}
       </ScrollView>
     </Screen>
   );
@@ -688,9 +931,37 @@ const styles = {
     paddingHorizontal: 14,
     paddingBottom: 120
   },
+  modeRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 16,
+    marginBottom: 18,
+    flexWrap: "wrap"
+  },
+  modePill: {
+    minHeight: 38,
+    paddingHorizontal: 14,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: "#444",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#111"
+  },
+  modePillActive: {
+    borderColor: "#f4c542",
+    backgroundColor: "#2a2312"
+  },
+  modeText: {
+    color: "#bbb",
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  modeTextActive: {
+    color: "#f4c542"
+  },
   readerLabels: {
     flexDirection: "row",
-    paddingTop: 16,
     marginBottom: 20
   },
   readerLabel: {
@@ -702,6 +973,9 @@ const styles = {
   parallel: {
     flexDirection: "row",
     gap: 24
+  },
+  singleColumn: {
+    paddingBottom: 12
   },
   column: {
     flex: 1
@@ -768,5 +1042,67 @@ const styles = {
     color: "#ddd",
     fontSize: 15,
     lineHeight: 22
+  },
+  versionCard: {
+    minHeight: 86,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#333",
+    borderRadius: 10,
+    backgroundColor: "#141414",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16
+  },
+  versionMeta: {
+    flex: 1
+  },
+  versionTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800"
+  },
+  versionState: {
+    color: "#f4c542",
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  infoPanel: {
+    marginBottom: 28,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2d3699",
+    backgroundColor: "#11162f"
+  },
+  infoTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 8
+  },
+  infoText: {
+    color: "#c6cee8",
+    fontSize: 14,
+    lineHeight: 22
+  },
+  savedChapterCard: {
+    minHeight: 86,
+    paddingHorizontal: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#333",
+    borderRadius: 10,
+    backgroundColor: "#141414",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16
+  },
+  emptyText: {
+    color: "#888",
+    fontSize: 15,
+    marginBottom: 26
   }
 };
