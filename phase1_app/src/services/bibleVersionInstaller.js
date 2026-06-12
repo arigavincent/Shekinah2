@@ -8,6 +8,7 @@ import { getBibleVersionDownloadUrl, getBibleVersionFallbackUrl, recordBibleVers
 const DB_NAME = "bible.db";
 const DB_ASSET = require("../../assets/bible/bible.db");
 const LABEL_SOURCE_VERSION = "eng_msb";
+const INSERT_BATCH_SIZE = 150;
 
 export const BUNDLED_VERSION_IDS = ["eng_msb", "swh_neno"];
 
@@ -182,6 +183,34 @@ function parseAlternativeVPL(text, bookCodeMap) {
   return parsed;
 }
 
+function sanitizeParsedVerses(verses) {
+  return verses.filter(item => {
+    if (!item || !item.bookId) return false;
+    if (!Number.isInteger(item.chapter) || item.chapter <= 0) return false;
+    if (!Number.isInteger(item.verse) || item.verse <= 0) return false;
+    if (!String(item.text || "").trim()) return false;
+    return true;
+  });
+}
+
+function buildVerseInsertBatch(versionId, batch) {
+  const placeholders = [];
+  const params = [];
+
+  for (const item of batch) {
+    placeholders.push("(?, ?, ?, ?, ?)");
+    params.push(versionId, item.bookId, item.chapter, item.verse, String(item.text).trim());
+  }
+
+  return {
+    sql: `
+      INSERT INTO verses (version_id, book_id, chapter, verse, text)
+      VALUES ${placeholders.join(", ")}
+    `,
+    params
+  };
+}
+
 export async function installBibleVersion(version) {
   const db = await openBibleDb();
   const versionId = normalizeVersionId(version.id);
@@ -197,52 +226,39 @@ export async function installBibleVersion(version) {
   const books = await db.getAllAsync(`SELECT id, code FROM books ORDER BY sort_order ASC`);
   const bookCodeMap = new Map(books.map(item => [String(item.code).toUpperCase(), item.id]));
   const verses = parseVPL(sourceText, bookCodeMap);
-  const resolvedVerses = verses.length ? verses : parseAlternativeVPL(sourceText, bookCodeMap);
+  const resolvedVerses = sanitizeParsedVerses(verses.length ? verses : parseAlternativeVPL(sourceText, bookCodeMap));
 
   if (!resolvedVerses.length) {
     throw new Error("Downloaded version text could not be parsed.");
   }
 
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(`DELETE FROM verses WHERE version_id = ?`, versionId);
-    await db.runAsync(`DELETE FROM book_labels WHERE version_id = ?`, versionId);
-    await db.runAsync(`DELETE FROM versions WHERE id = ?`, versionId);
+  await db.withExclusiveTransactionAsync(async txn => {
+    await txn.runAsync(`DELETE FROM verses WHERE version_id = ?`, [versionId]);
+    await txn.runAsync(`DELETE FROM book_labels WHERE version_id = ?`, [versionId]);
+    await txn.runAsync(`DELETE FROM versions WHERE id = ?`, [versionId]);
 
-    await db.runAsync(
+    await txn.runAsync(
       `
         INSERT INTO versions (id, name, short_label, abbreviation, language_code, license, attribution)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `,
-      versionId,
-      versionName,
-      versionShortLabel,
-      versionAbbreviation,
-      languageCode,
-      license,
-      attribution
+      [versionId, versionName, versionShortLabel, versionAbbreviation, languageCode, license, attribution]
     );
 
-    await db.runAsync(
+    await txn.runAsync(
       `
         INSERT INTO book_labels (version_id, book_id, name)
         SELECT ?, book_id, name
         FROM book_labels
         WHERE version_id = ?
       `,
-      versionId,
-      LABEL_SOURCE_VERSION
+      [versionId, LABEL_SOURCE_VERSION]
     );
 
-    const statement = await db.prepareAsync(
-      `INSERT INTO verses (version_id, book_id, chapter, verse, text) VALUES (?, ?, ?, ?, ?)`
-    );
-
-    try {
-      for (const item of resolvedVerses) {
-        await statement.executeAsync(versionId, item.bookId, item.chapter, item.verse, item.text);
-      }
-    } finally {
-      await statement.finalizeAsync();
+    for (let index = 0; index < resolvedVerses.length; index += INSERT_BATCH_SIZE) {
+      const batch = resolvedVerses.slice(index, index + INSERT_BATCH_SIZE);
+      const { sql, params } = buildVerseInsertBatch(versionId, batch);
+      await txn.runAsync(sql, params);
     }
   });
 
