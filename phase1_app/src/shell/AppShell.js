@@ -41,6 +41,7 @@ import { HomeScreen } from "../screens/HomeScreen";
 import { LiveScreen } from "../screens/LiveScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { PlatformsScreen } from "../screens/PlatformsScreen";
+import { PrivateChatThreadScreen } from "../screens/PrivateChatThreadScreen";
 import { PrayerScreen } from "../screens/PrayerScreen";
 import { ReadingPlansScreen } from "../screens/ReadingPlansScreen";
 import { SearchScreen } from "../screens/SearchScreen";
@@ -107,6 +108,7 @@ function App() {
   const [givingTab, setGivingTab] = useState("Give Now");
   const [downloadsTab, setDownloadsTab] = useState("Sermons");
   const [prayerTab, setPrayerTab] = useState("All Prayers");
+  const [chatTab, setChatTab] = useState("Community");
   const [favorites, setFavorites] = useState([]);
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState(DEFAULT_NOTIFICATION_PREFS);
@@ -389,7 +391,9 @@ useEffect(() => {
       case "Downloads":
         return <DownloadsScreen go={go} tab={downloadsTab} setTab={setDownloadsTab} appLanguage={appLanguage} />;
       case "Chat":
-        return <ChatScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
+        return <ChatScreen go={go} openDrawer={openDrawer} tab={chatTab} setTab={setChatTab} appLanguage={appLanguage} />;
+      case "PrivateChatThread":
+        return <PrivateChatThreadScreen go={go} detail={detail} appLanguage={appLanguage} />;
       case "Testimonies":
         return <TestimoniesScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
       case "Branches":

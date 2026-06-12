@@ -21,6 +21,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/httpx"
 	"github.com/ariga/shekinah-backend/internal/notifications"
 	"github.com/ariga/shekinah-backend/internal/prayers"
+	"github.com/ariga/shekinah-backend/internal/privatechat"
 	"github.com/ariga/shekinah-backend/internal/readingplans"
 	"github.com/ariga/shekinah-backend/internal/testimonies"
 	"github.com/gin-gonic/gin"
@@ -83,6 +84,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	readingPlanHandler := readingplans.NewHandler(db)
 	checkinHandler := checkins.NewHandler(db)
 	bibleVersionsHandler := bibleversions.NewHandler(db, cfg)
+	privateChatHandler := privatechat.NewHandler(db)
 
 	r.GET("/healthz", health.HandleHealthz(cfg, db))
 	r.Static("/uploads", "./uploads")
@@ -120,6 +122,12 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/bible/versions/:id/download", bibleVersionsHandler.Download)
 		api.GET("/bible/installs", auth.RequireAuth(authService), bibleVersionsHandler.ListInstalled)
 		api.POST("/bible/installs", auth.RequireAuth(authService), bibleVersionsHandler.RecordInstall)
+		api.POST("/private-chat/device", auth.RequireAuth(authService), privateChatHandler.RegisterDevice)
+		api.GET("/private-chat/contacts", auth.RequireAuth(authService), privateChatHandler.Contacts)
+		api.POST("/private-chat/threads", auth.RequireAuth(authService), privateChatHandler.CreateThread)
+		api.GET("/private-chat/threads", auth.RequireAuth(authService), privateChatHandler.ListThreads)
+		api.GET("/private-chat/threads/:id/messages", auth.RequireAuth(authService), privateChatHandler.ListMessages)
+		api.POST("/private-chat/threads/:id/messages", auth.RequireAuth(authService), privateChatHandler.SendMessage)
 
 		authGroup := api.Group("/auth")
 		{

@@ -7,10 +7,14 @@ import { C } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 
-export function TopBar({ title, go, right, back, onMenu, appLanguage = "en" }) {
+export function TopBar({ title, go, right, back, onBack, onMenu, appLanguage = "en" }) {
   const handleLeftPress = () => {
     if (back) {
-      go(back);
+      if (typeof onBack === "function") {
+        onBack();
+      } else {
+        go(back);
+      }
       return;
     }
 
