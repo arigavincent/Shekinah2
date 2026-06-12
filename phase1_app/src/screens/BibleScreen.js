@@ -506,6 +506,8 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     [installedVersions, readingMode]
   );
 
+  const defaultVersionId = bibleState.preferences.selectedVersionId || DEFAULT_BIBLE_STATE.preferences.selectedVersionId;
+
   function openBook(nextBook) {
     setBook(nextBook);
     setChapter(1);
@@ -798,6 +800,22 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     );
   }
 
+  async function setDefaultVersion(versionId) {
+    const nextMode = versionId === "parallel" ? readingMode : versionId;
+    if (versionId !== "parallel") {
+      setReadingMode(versionId);
+    }
+
+    await persistBibleState({
+      ...bibleState,
+      preferences: {
+        ...bibleState.preferences,
+        readingMode: nextMode,
+        selectedVersionId: versionId
+      }
+    });
+  }
+
   const fontScale = FONT_SCALES[fontScaleIndex];
 
   if (loading) {
@@ -872,6 +890,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
           <Text style={styles.sectionTitle}>{tr(appLanguage, "Installed Versions")}</Text>
           {installedVersions.map(version => {
             const removable = !BUNDLED_VERSION_IDS.includes(version.id);
+            const isDefault = defaultVersionId === version.id;
 
             return (
               <View key={version.id} style={styles.versionCard}>
@@ -881,7 +900,14 @@ export function BibleScreen({ go, appLanguage = "en" }) {
                 </View>
 
                 <View style={{ alignItems: "flex-end", gap: 8 }}>
-                  <Text style={styles.versionState}>{tr(appLanguage, "Installed")}</Text>
+                  <Text style={styles.versionState}>
+                    {isDefault ? tr(appLanguage, "Current Default") : tr(appLanguage, "Installed")}
+                  </Text>
+                  {!isDefault ? (
+                    <Pressable onPress={() => setDefaultVersion(version.id)}>
+                      <Text style={styles.versionAction}>{tr(appLanguage, "Set as Default")}</Text>
+                    </Pressable>
+                  ) : null}
                   {removable ? (
                     <Pressable disabled={removingVersionId === version.id} onPress={() => handleRemoveVersion(version.id)}>
                       <Text style={[styles.versionState, { color: C.red }]}>
@@ -905,6 +931,9 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             />
             <Text style={styles.infoText}>
               Global provider catalog with offline install to this device.
+            </Text>
+            <Text style={styles.infoText}>
+              Search examples: Kikuyu, Kisii, Gusii, Luo, Dholuo, Kamba, Swahili.
             </Text>
             {installingVersionId ? (
               <Text style={[styles.infoText, { color: C.text, marginTop: 8 }]}>
@@ -1747,6 +1776,11 @@ const styles = makeThemedStyles(C => ({
     color: C.gold,
     fontSize: 14,
     fontWeight: "900"
+  },
+  versionAction: {
+    color: C.text,
+    fontSize: 13,
+    fontWeight: "800"
   },
   infoPanel: {
     marginBottom: 28,

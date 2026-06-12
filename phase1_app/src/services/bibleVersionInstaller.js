@@ -1,6 +1,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { Asset } from "expo-asset";
 import { openDatabaseAsync } from "expo-sqlite";
+import JSZip from "jszip";
 
 import { getBibleVersionDownloadUrl, getBibleVersionFallbackUrl, recordBibleVersionInstall } from "../api/bibleVersionsApi";
 
@@ -45,15 +46,34 @@ export async function listInstalledBibleVersions(database) {
 }
 
 async function readVersionText(version) {
-  const tempPath = `${FileSystem.cacheDirectory}${version.id || "bible"}-${Date.now()}.txt`;
+  const tempPath = `${FileSystem.cacheDirectory}${version.id || "bible"}-${Date.now()}`;
   const attempts = [getBibleVersionDownloadUrl(version), getBibleVersionFallbackUrl(version)].filter(Boolean);
   let lastError = null;
 
   for (const url of attempts) {
     try {
-      await FileSystem.downloadAsync(url, tempPath);
-      const contents = await FileSystem.readAsStringAsync(tempPath);
-      await FileSystem.deleteAsync(tempPath, { idempotent: true });
+      const isZip = /\.zip($|\?)/i.test(url);
+      const targetPath = `${tempPath}${isZip ? ".zip" : ".txt"}`;
+      await FileSystem.downloadAsync(url, targetPath);
+
+      let contents = "";
+      if (isZip) {
+        const base64 = await FileSystem.readAsStringAsync(targetPath, {
+          encoding: FileSystem.EncodingType.Base64
+        });
+        const zip = await JSZip.loadAsync(base64, { base64: true });
+        const textFileName = Object.keys(zip.files).find(name => /\.(txt|vpl)$/i.test(name));
+
+        if (!textFileName) {
+          throw new Error("Bible package did not contain a readable text file.");
+        }
+
+        contents = await zip.files[textFileName].async("string");
+      } else {
+        contents = await FileSystem.readAsStringAsync(targetPath);
+      }
+
+      await FileSystem.deleteAsync(targetPath, { idempotent: true });
       if (contents.trim()) {
         return contents;
       }
@@ -99,6 +119,69 @@ function parseVPL(text, bookCodeMap) {
   return parsed;
 }
 
+function parseCommaSeparatedBookLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed) return null;
+
+  const parts = trimmed.split(/\t|,/);
+  if (parts.length < 4) return null;
+
+  const bookCode = String(parts[0] || "").trim().toUpperCase();
+  const chapter = Number(String(parts[1] || "").trim());
+  const verse = Number(String(parts[2] || "").trim());
+  const text = parts.slice(3).join(" ").trim();
+
+  if (!bookCode || !Number.isFinite(chapter) || !Number.isFinite(verse) || !text) {
+    return null;
+  }
+
+  return { bookCode, chapter, verse, text };
+}
+
+function parsePipeSeparatedBookLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed) return null;
+
+  const parts = trimmed.split("|");
+  if (parts.length < 4) return null;
+
+  const bookCode = String(parts[0] || "").trim().toUpperCase();
+  const chapter = Number(String(parts[1] || "").trim());
+  const verse = Number(String(parts[2] || "").trim());
+  const text = parts.slice(3).join("|").trim();
+
+  if (!bookCode || !Number.isFinite(chapter) || !Number.isFinite(verse) || !text) {
+    return null;
+  }
+
+  return { bookCode, chapter, verse, text };
+}
+
+function parseAlternativeVPL(text, bookCodeMap) {
+  const lines = text.split(/\r?\n/);
+  const parsed = [];
+
+  for (const rawLine of lines) {
+    const line = String(rawLine || "").replace(/^\uFEFF/, "").trim();
+    if (!line) continue;
+
+    const candidate = parsePipeSeparatedBookLine(line) || parseCommaSeparatedBookLine(line);
+    if (!candidate) continue;
+
+    const bookId = bookCodeMap.get(candidate.bookCode);
+    if (!bookId) continue;
+
+    parsed.push({
+      bookId,
+      chapter: candidate.chapter,
+      verse: candidate.verse,
+      text: candidate.text
+    });
+  }
+
+  return parsed;
+}
+
 export async function installBibleVersion(version) {
   const db = await openBibleDb();
   const versionId = normalizeVersionId(version.id);
@@ -114,8 +197,9 @@ export async function installBibleVersion(version) {
   const books = await db.getAllAsync(`SELECT id, code FROM books ORDER BY sort_order ASC`);
   const bookCodeMap = new Map(books.map(item => [String(item.code).toUpperCase(), item.id]));
   const verses = parseVPL(sourceText, bookCodeMap);
+  const resolvedVerses = verses.length ? verses : parseAlternativeVPL(sourceText, bookCodeMap);
 
-  if (!verses.length) {
+  if (!resolvedVerses.length) {
     throw new Error("Downloaded version text could not be parsed.");
   }
 
@@ -154,7 +238,7 @@ export async function installBibleVersion(version) {
     );
 
     try {
-      for (const item of verses) {
+      for (const item of resolvedVerses) {
         await statement.executeAsync(versionId, item.bookId, item.chapter, item.verse, item.text);
       }
     } finally {

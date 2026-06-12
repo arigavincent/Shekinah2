@@ -111,7 +111,34 @@ func buildDownloadURL(translationID string) string {
 	if id == "" {
 		return ""
 	}
-	return "https://ebible.org/Scriptures/" + id + "_vpl.txt"
+	return "https://ebible.org/Scriptures/" + id + "_vpl.zip"
+}
+
+func searchAliases(query string) []string {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return nil
+	}
+
+	aliases := []string{q}
+	switch q {
+	case "kisii":
+		aliases = append(aliases, "gusii", "ekegusii", "guz")
+	case "gusii":
+		aliases = append(aliases, "kisii", "ekegusii", "guz")
+	case "ekegusii":
+		aliases = append(aliases, "kisii", "gusii", "guz")
+	case "kikuyu":
+		aliases = append(aliases, "gikuyu", "kik")
+	case "gikuyu":
+		aliases = append(aliases, "kikuyu", "kik")
+	case "luo":
+		aliases = append(aliases, "dholuo")
+	case "dholuo":
+		aliases = append(aliases, "luo")
+	}
+
+	return aliases
 }
 
 func parseCatalogFromCSV(body string) []Version {
@@ -281,6 +308,7 @@ func (h Handler) List(c *gin.Context) {
 
 	query := strings.ToLower(strings.TrimSpace(c.Query("query")))
 	if query != "" {
+		aliases := searchAliases(query)
 		filtered := make([]Version, 0, len(items))
 		for _, item := range items {
 			searchable := strings.ToLower(strings.Join([]string{
@@ -292,8 +320,11 @@ func (h Handler) List(c *gin.Context) {
 				item.License,
 				item.Attribution,
 			}, " "))
-			if strings.Contains(searchable, query) {
-				filtered = append(filtered, item)
+			for _, candidate := range aliases {
+				if strings.Contains(searchable, candidate) {
+					filtered = append(filtered, item)
+					break
+				}
 			}
 		}
 		items = filtered
