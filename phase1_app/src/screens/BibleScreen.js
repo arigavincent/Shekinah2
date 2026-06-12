@@ -11,7 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { Screen } from "../components/Screen";
-import { C, makeThemedStyles, useAppTheme } from "../constants/theme";
+import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles, useAppTheme } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { listBibleVersions } from "../api/bibleVersionsApi";
 import {
@@ -138,7 +138,7 @@ function Header({ title, subtitle, onBack, right }) {
   return (
     <View style={styles.header}>
       {onBack ? (
-        <Pressable style={styles.iconBtn} onPress={onBack}>
+        <Pressable style={styles.iconBtn} onPress={onBack} hitSlop={10}>
           <Ionicons name="arrow-back" size={26} color={C.text} />
         </Pressable>
       ) : (
@@ -152,7 +152,7 @@ function Header({ title, subtitle, onBack, right }) {
 
       <View style={styles.headerRight}>
         {right}
-        <Pressable style={styles.iconBtn} onPress={toggleTheme}>
+        <Pressable style={styles.iconBtn} onPress={toggleTheme} hitSlop={10}>
           <Ionicons
             name={mode === "light" ? "moon-outline" : "sunny-outline"}
             size={22}
@@ -1034,9 +1034,10 @@ const styles = makeThemedStyles(C => ({
     justifyContent: "center"
   },
   header: {
-    minHeight: 76,
+    minHeight: 86 + ANDROID_STATUS_BAR_HEIGHT,
     paddingHorizontal: 18,
-    paddingTop: 10,
+    paddingTop: ANDROID_STATUS_BAR_HEIGHT + 14,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: C.line,
     flexDirection: "row",
@@ -1044,14 +1045,15 @@ const styles = makeThemedStyles(C => ({
     gap: 12
   },
   iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: C.surface2,
     alignItems: "center",
     justifyContent: "center"
   },
   iconGhost: {
-    width: 44
+    width: 52
   },
   headerTitleWrap: {
     flex: 1
@@ -1069,7 +1071,7 @@ const styles = makeThemedStyles(C => ({
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 18
+    gap: 10
   },
   tabs: {
     flexDirection: "row",

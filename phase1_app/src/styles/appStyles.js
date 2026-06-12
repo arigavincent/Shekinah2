@@ -8,44 +8,55 @@ export const s = makeThemedStyles(C => ({
   scrollPad: { paddingHorizontal: 16, paddingBottom: 120 },
   pad: { paddingHorizontal: 16, paddingVertical: 10 },
   topBar: {
-  minHeight: 82 + ANDROID_STATUS_BAR_HEIGHT,
-  paddingTop: ANDROID_STATUS_BAR_HEIGHT + 8,
-  paddingBottom: 10,
-  paddingHorizontal: 16,
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  backgroundColor: C.background
-},
-topIcon: {
-  width: 48,
-  height: 48,
-  borderRadius: 24,
-  backgroundColor: C.surface2,
-  alignItems: "center",
-  justifyContent: "center"
-},
-topRight: {
-  minWidth: 48,
-  flexDirection: "row",
-  justifyContent: "flex-end",
-  alignItems: "center",
-  gap: 8
-},
-logoWrap: {
-  alignItems: "center",
-  justifyContent: "center",
-  flex: 1
-},
+    minHeight: 94 + ANDROID_STATUS_BAR_HEIGHT,
+    paddingTop: ANDROID_STATUS_BAR_HEIGHT + 16,
+    paddingBottom: 14,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: C.background
+  },
+  topIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: C.surface2,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  topRight: {
+    minWidth: 52,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 8
+  },
+  logoWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1
+  },
   logo: { width: 92, height: 34, borderRadius: 4 },
-logoText: {
-  color: C.white,
-  fontSize: 13,
- fontWeight: "800",
-  marginTop: 4,
-  textAlign: "center"
-},
-  floatingMenu: { position: "absolute", top: 24, left: 14, zIndex: 20, width: 42, height: 42, borderRadius: 21, backgroundColor: C.surface2, alignItems: "center", justifyContent: "center" },
+  logoText: {
+    color: C.white,
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 4,
+    textAlign: "center"
+  },
+  floatingMenu: {
+    position: "absolute",
+    top: ANDROID_STATUS_BAR_HEIGHT + 18,
+    left: 14,
+    zIndex: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: C.surface2,
+    alignItems: "center",
+    justifyContent: "center"
+  },
   devotionHero: { flexDirection: "row", backgroundColor: C.surface, borderRadius: 8, padding: 10, marginTop: 6, gap: 12 },
   devotionThumb: { width: 108, height: 126, borderRadius: 8 },
   badgeOnImage: { position: "absolute", top: 8, right: 8, backgroundColor: C.blue2, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },

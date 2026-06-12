@@ -41,7 +41,7 @@ export function TopBar({ title, go, right, back, onBack, onMenu, appLanguage = "
       </View>
 
       <View style={s.topRight}>
-        <Pressable style={s.topIcon} onPress={toggleTheme}>
+        <Pressable style={s.topIcon} onPress={toggleTheme} hitSlop={10}>
           <Ionicons
             name={mode === "light" ? "moon-outline" : "sunny-outline"}
             size={20}
