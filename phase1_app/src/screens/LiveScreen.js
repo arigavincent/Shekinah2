@@ -332,9 +332,9 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                   </View>
                 )}
 
-                <View style={s.livePlayerShade} />
-                <View style={s.livePlayerOverlay}>
-                  <View style={s.liveStageTopRow}>
+                <View style={s.livePlayerShade} pointerEvents="none" />
+                <View style={s.livePlayerOverlay} pointerEvents="box-none">
+                  <View style={s.liveStageTopRow} pointerEvents="box-none">
                     <View style={s.liveStageTitleWrap}>
                       <View style={s.liveStageBadgeRow}>
                         <View style={s.liveStagePill}>
