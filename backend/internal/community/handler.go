@@ -62,12 +62,41 @@ func cleanStatus(value string) string {
 	}
 }
 
+func cleanOrder(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "asc":
+		return "ASC"
+	default:
+		return "DESC"
+	}
+}
+
 func formatTimestamp(value time.Time) string {
 	return value.UTC().Format(time.RFC3339)
 }
 
 func generateID(prefix string) string {
 	return prefix + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
+func (h Handler) liveChatActive(ctx *gin.Context) (bool, error) {
+	var isLive bool
+	err := h.db.QueryRow(
+		ctx.Request.Context(),
+		`
+			SELECT is_live
+			FROM live_stream_config
+			ORDER BY updated_at DESC
+			LIMIT 1
+		`,
+	).Scan(&isLive)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return isLive, nil
 }
 
 func (h Handler) userIdentity(ctx *gin.Context, userID string) (string, string, error) {
@@ -117,30 +146,58 @@ func scanMessage(row interface{ Scan(dest ...any) error }) (Message, error) {
 func (h Handler) List(c *gin.Context) {
 	channel := cleanChannel(c.Query("channel"))
 	limit := 80
+	order := cleanOrder(c.Query("order"))
+	sinceRaw := strings.TrimSpace(c.Query("since"))
+	active := true
 
-	rows, err := h.db.Query(
-		c.Request.Context(),
-		`
-			SELECT
-				m.id,
-				m.channel,
-				m.display_name,
-				m.message,
-				m.status,
-				m.hidden_reason,
-				m.created_at,
-				u.id::text,
-				u.email
-			FROM community_messages m
-			JOIN users u ON u.id = m.user_id
-			WHERE m.channel = $1
-			  AND m.status = 'approved'
-			ORDER BY m.created_at DESC
-			LIMIT $2
-		`,
-		channel,
-		limit,
-	)
+	if channel == "live" {
+		liveActive, err := h.liveChatActive(c)
+		if err != nil {
+			httpx.Error(c, http.StatusInternalServerError, "community_list_failed", "failed to load live chat state")
+			return
+		}
+		active = liveActive
+		if !active {
+			httpx.OK(c, gin.H{
+				"channel":  channel,
+				"active":   false,
+				"messages": []Message{},
+			})
+			return
+		}
+	}
+
+	query := `
+		SELECT
+			m.id,
+			m.channel,
+			m.display_name,
+			m.message,
+			m.status,
+			m.hidden_reason,
+			m.created_at,
+			u.id::text,
+			u.email
+		FROM community_messages m
+		JOIN users u ON u.id = m.user_id
+		WHERE m.channel = $1
+		  AND m.status = 'approved'
+	`
+	args := []any{channel}
+	if sinceRaw != "" {
+		since, err := time.Parse(time.RFC3339, sinceRaw)
+		if err != nil {
+			httpx.Error(c, http.StatusBadRequest, "invalid_input", "invalid since timestamp")
+			return
+		}
+		query += ` AND m.created_at > $2`
+		args = append(args, since.UTC())
+	}
+	query += ` ORDER BY m.created_at ` + order
+	query += ` LIMIT $` + strconv.Itoa(len(args)+1)
+	args = append(args, limit)
+
+	rows, err := h.db.Query(c.Request.Context(), query, args...)
 	if err != nil {
 		httpx.Error(c, http.StatusInternalServerError, "community_list_failed", "failed to load chat messages")
 		return
@@ -167,6 +224,8 @@ func (h Handler) List(c *gin.Context) {
 	}
 
 	httpx.OK(c, gin.H{
+		"channel":  channel,
+		"active":   active,
 		"messages": items,
 	})
 }
@@ -189,6 +248,18 @@ func (h Handler) Create(c *gin.Context) {
 	if len(message) < 2 || len(message) > 280 {
 		httpx.Error(c, http.StatusBadRequest, "invalid_input", "chat message must be between 2 and 280 characters")
 		return
+	}
+
+	if channel == "live" {
+		active, err := h.liveChatActive(c)
+		if err != nil {
+			httpx.Error(c, http.StatusInternalServerError, "community_create_failed", "failed to validate live chat")
+			return
+		}
+		if !active {
+			httpx.Error(c, http.StatusConflict, "live_chat_inactive", "live chat is only available during an active live stream")
+			return
+		}
 	}
 
 	var lastMessageAt time.Time

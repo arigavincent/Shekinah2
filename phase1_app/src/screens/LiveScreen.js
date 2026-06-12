@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Linking,
@@ -43,6 +43,8 @@ function playablePastService(item) {
 export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
   const { width } = useWindowDimensions();
+  const chatScrollRef = useRef(null);
+  const lastChatTimestampRef = useRef("");
   const [playing, setPlaying] = useState(true);
   const [session, setSession] = useState({ token: null, user: null });
   const [chatMessages, setChatMessages] = useState([]);
@@ -83,6 +85,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   async function loadLiveChat(showRefresh = false) {
     if (!live?.isLive) {
       setChatMessages([]);
+      lastChatTimestampRef.current = "";
       setChatLoading(false);
       setChatRefreshing(false);
       return;
@@ -92,8 +95,31 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
     else setChatLoading(true);
 
     try {
-      const response = await listCommunityMessages("live");
-      setChatMessages(Array.isArray(response?.messages) ? response.messages : []);
+      const response = await listCommunityMessages("live", {
+        order: "asc",
+        since: showRefresh ? lastChatTimestampRef.current : ""
+      });
+
+      if (response?.active === false) {
+        setChatMessages([]);
+        return;
+      }
+
+      const nextMessages = Array.isArray(response?.messages) ? response.messages : [];
+      if (showRefresh && chatMessages.length > 0) {
+        if (nextMessages.length === 0) return;
+        setChatMessages(current => {
+          const existing = new Set(current.map(item => item.id));
+          const additions = nextMessages.filter(item => !existing.has(item.id));
+          if (additions.length > 0) {
+            lastChatTimestampRef.current = additions[additions.length - 1]?.createdAt || lastChatTimestampRef.current;
+          }
+          return additions.length > 0 ? [...current, ...additions] : current;
+        });
+      } else {
+        setChatMessages(nextMessages);
+        lastChatTimestampRef.current = nextMessages[nextMessages.length - 1]?.createdAt || "";
+      }
     } catch (error) {
       if (!showRefresh) {
         Alert.alert(
@@ -110,6 +136,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   useEffect(() => {
     if (!live?.isLive) {
       setChatMessages([]);
+      lastChatTimestampRef.current = "";
       setChatLoading(false);
       return undefined;
     }
@@ -117,7 +144,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
     loadLiveChat(false);
     const timer = setInterval(() => {
       loadLiveChat(true);
-    }, 5000);
+    }, 1500);
 
     return () => clearInterval(timer);
   }, [live?.isLive]);
@@ -136,7 +163,8 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
         channel: "live",
         message
       });
-      setChatMessages(current => [response.message, ...current].slice(0, 120));
+      setChatMessages(current => [...current, response.message].slice(-120));
+      lastChatTimestampRef.current = response?.message?.createdAt || lastChatTimestampRef.current;
       setChatText("");
     } catch (error) {
       const messageText =
@@ -254,15 +282,22 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                 </Text>
               </View>
             ) : (
-              chatMessages.map(item => (
-                <View key={item.id} style={s.plainCard}>
-                  <View style={[s.rowTight, { justifyContent: "space-between" }]}>
-                    <Text style={[s.rowTitle, { color: C.white, flex: 1 }]}>{item.displayName || tr(appLanguage, "Member")}</Text>
-                    <Text style={[s.mutedText, { color: C.muted }]}>{new Date(item.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</Text>
+              <ScrollView
+                ref={chatScrollRef}
+                style={{ maxHeight: 360 }}
+                contentContainerStyle={{ paddingBottom: 8 }}
+                onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+              >
+                {chatMessages.map(item => (
+                  <View key={item.id} style={s.plainCard}>
+                    <View style={[s.rowTight, { justifyContent: "space-between" }]}>
+                      <Text style={[s.rowTitle, { color: C.white, flex: 1 }]}>{item.displayName || tr(appLanguage, "Member")}</Text>
+                      <Text style={[s.mutedText, { color: C.muted }]}>{new Date(item.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</Text>
+                    </View>
+                    <Text style={[s.detailBody, { marginTop: 10 }]}>{item.message}</Text>
                   </View>
-                  <Text style={[s.detailBody, { marginTop: 10 }]}>{item.message}</Text>
-                </View>
-              ))
+                ))}
+              </ScrollView>
             )}
           </>
         ) : (
