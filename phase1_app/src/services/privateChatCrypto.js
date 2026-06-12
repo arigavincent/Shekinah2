@@ -5,7 +5,7 @@ import * as naclUtil from "tweetnacl-util";
 
 import { registerPrivateChatDevice } from "../api/privateChatApi";
 
-const IDENTITY_STORAGE_KEY = "shekinah.privateChat.identity.v1";
+const IDENTITY_STORAGE_PREFIX = "shekinah.privateChat.identity.v1";
 const PROTOCOL_VERSION = "e2ee-v1";
 
 let prngReady = false;
@@ -74,6 +74,14 @@ function signaturePayload({
   ].join(".");
 }
 
+function identityStorageKey(userId) {
+  const cleanUserId = typeof userId === "string" ? userId.trim() : "";
+  if (!cleanUserId) {
+    throw new Error("Signed-in user id is required for private chat identity.");
+  }
+  return `${IDENTITY_STORAGE_PREFIX}.${cleanUserId}`;
+}
+
 function normalizeIdentity(raw) {
   return {
     deviceId: raw.deviceId,
@@ -86,15 +94,16 @@ function normalizeIdentity(raw) {
   };
 }
 
-export async function getOrCreatePrivateChatIdentity() {
+export async function getOrCreatePrivateChatIdentity(userId) {
   configurePrng();
+  const storageKey = identityStorageKey(userId);
 
-  const existing = await AsyncStorage.getItem(IDENTITY_STORAGE_KEY);
+  const existing = await AsyncStorage.getItem(storageKey);
   if (existing) {
     try {
       return normalizeIdentity(JSON.parse(existing));
     } catch {
-      await AsyncStorage.removeItem(IDENTITY_STORAGE_KEY);
+      await AsyncStorage.removeItem(storageKey);
     }
   }
 
@@ -111,12 +120,12 @@ export async function getOrCreatePrivateChatIdentity() {
     createdAt: new Date().toISOString()
   };
 
-  await AsyncStorage.setItem(IDENTITY_STORAGE_KEY, JSON.stringify(identity));
+  await AsyncStorage.setItem(storageKey, JSON.stringify(identity));
   return identity;
 }
 
-export async function ensurePrivateChatDevice() {
-  const identity = await getOrCreatePrivateChatIdentity();
+export async function ensurePrivateChatDevice(userId) {
+  const identity = await getOrCreatePrivateChatIdentity(userId);
 
   await registerPrivateChatDevice({
     deviceId: identity.deviceId,
@@ -138,12 +147,13 @@ export async function publicKeyFingerprint(publicKey) {
 }
 
 export async function encryptPrivateChatMessage({
+  currentUserId,
   threadId,
   text,
   recipientPublicKey,
   recipientDeviceId
 }) {
-  const identity = await getOrCreatePrivateChatIdentity();
+  const identity = await getOrCreatePrivateChatIdentity(currentUserId);
   const payload = JSON.stringify({
     type: "text",
     text,
@@ -225,7 +235,7 @@ export async function decryptPrivateChatMessage({
   peerSigningKey,
   message
 }) {
-  const identity = await getOrCreatePrivateChatIdentity();
+  const identity = await getOrCreatePrivateChatIdentity(currentUserId);
   const verifier = message.senderUserId === currentUserId ? identity.signingPublicKey : peerSigningKey;
   const payload = signaturePayload({
     threadId,

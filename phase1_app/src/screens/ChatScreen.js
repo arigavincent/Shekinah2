@@ -93,7 +93,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
           return;
         }
 
-        const identity = await ensurePrivateChatDevice();
+        const identity = await ensurePrivateChatDevice(savedSession.user.id);
         setDeviceFingerprint(await publicKeyFingerprint(identity.identityPublicKey));
 
         const [threadsResponse, contactsResponse] = await Promise.all([

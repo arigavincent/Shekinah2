@@ -120,7 +120,7 @@ export function PrivateChatThreadScreen({ go, detail, appLanguage = "en" }) {
       else setLoading(true);
 
       try {
-        await ensurePrivateChatDevice();
+        await ensurePrivateChatDevice(session.user.id);
         const response = await listPrivateChatMessages(thread.id);
         await hydrateMessages(Array.isArray(response?.messages) ? response.messages : []);
       } catch (error) {
@@ -178,8 +178,9 @@ export function PrivateChatThreadScreen({ go, detail, appLanguage = "en" }) {
     setSending(true);
 
     try {
-      await ensurePrivateChatDevice();
+      await ensurePrivateChatDevice(session.user.id);
       const encryptedPayload = await encryptPrivateChatMessage({
+        currentUserId: session.user.id,
         threadId: thread.id,
         text: messageText,
         recipientPublicKey: peer.publicKey,
