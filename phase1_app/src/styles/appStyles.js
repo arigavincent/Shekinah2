@@ -113,6 +113,148 @@ logoText: {
   liveNow: { color: C.white, backgroundColor: C.red, borderRadius: 20, overflow: "hidden", paddingHorizontal: 18, paddingVertical: 10, fontWeight: "900" },
   reactionStrip: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginVertical: 16 },
   reaction: { color: C.white, backgroundColor: C.surface2, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, fontWeight: "700" },
+  liveChatShell: {
+    backgroundColor: C.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.line,
+    overflow: "hidden",
+    marginBottom: 18
+  },
+  liveChatHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line
+  },
+  liveChatHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1
+  },
+  liveChatStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.red
+  },
+  liveChatTitle: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  liveChatSubtle: {
+    color: C.muted,
+    fontSize: 12,
+    lineHeight: 17
+  },
+  liveStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: C.surface2
+  },
+  liveStatusPillText: {
+    color: C.white,
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  liveChatList: {
+    maxHeight: 380,
+    minHeight: 220,
+    paddingHorizontal: 14,
+    paddingTop: 12
+  },
+  liveChatListContent: {
+    paddingBottom: 10
+  },
+  liveMessageRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 14
+  },
+  liveAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: C.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2
+  },
+  liveAvatarText: {
+    color: C.gold,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  liveMessageBody: {
+    flex: 1
+  },
+  liveMessageMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 3
+  },
+  liveMessageName: {
+    color: C.gold,
+    fontSize: 12,
+    fontWeight: "900",
+    flexShrink: 1
+  },
+  liveMessageTime: {
+    color: C.faint,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  liveMessageText: {
+    color: C.white,
+    fontSize: 14,
+    lineHeight: 20
+  },
+  liveComposer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+    backgroundColor: C.surface
+  },
+  liveComposerInput: {
+    flex: 1,
+    minHeight: 42,
+    maxHeight: 92,
+    backgroundColor: C.surface2,
+    borderRadius: 21,
+    paddingHorizontal: 14,
+    paddingTop: 11,
+    paddingBottom: 11,
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "700"
+  },
+  liveSendBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: C.gold,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  liveChatEmpty: {
+    paddingHorizontal: 14,
+    paddingVertical: 18
+  },
   storage: { height: 10, borderRadius: 5, backgroundColor: C.surface2, marginBottom: 8 },
   storageFill: { width: "32%", height: "100%", borderRadius: 5, backgroundColor: C.gold },
   plainCard: { backgroundColor: C.surface, borderRadius: 8, padding: 16, marginBottom: 12 },

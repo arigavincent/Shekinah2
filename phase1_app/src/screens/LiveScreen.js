@@ -40,6 +40,38 @@ function playablePastService(item) {
   return item?.type === "video" && Boolean(extractYouTubeId(mediaUrl) || isVideoUrl(mediaUrl));
 }
 
+function mergeUniqueMessages(existing, incoming) {
+  const map = new Map();
+
+  for (const item of existing || []) {
+    if (item?.id) {
+      map.set(item.id, item);
+    }
+  }
+
+  for (const item of incoming || []) {
+    if (item?.id) {
+      map.set(item.id, item);
+    }
+  }
+
+  return Array.from(map.values())
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-120);
+}
+
+function messageInitial(name) {
+  const trimmed = String(name || "").trim();
+  return trimmed ? trimmed.charAt(0).toUpperCase() : "M";
+}
+
+function liveTimeLabel(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
   const { width } = useWindowDimensions();
@@ -106,8 +138,9 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       }
 
       const nextMessages = Array.isArray(response?.messages) ? response.messages : [];
-      setChatMessages(nextMessages);
-      lastChatTimestampRef.current = nextMessages[nextMessages.length - 1]?.createdAt || "";
+      const dedupedMessages = mergeUniqueMessages([], nextMessages);
+      setChatMessages(dedupedMessages);
+      lastChatTimestampRef.current = dedupedMessages[dedupedMessages.length - 1]?.createdAt || "";
     } catch (error) {
       if (!showRefresh) {
         Alert.alert(
@@ -159,10 +192,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
           const payload = JSON.parse(event.data);
           if (payload?.type === "message" && payload?.message?.id) {
             setChatMessages(current => {
-              if (current.some(item => item.id === payload.message.id)) {
-                return current;
-              }
-              return [...current, payload.message].slice(-120);
+              return mergeUniqueMessages(current, [payload.message]);
             });
             lastChatTimestampRef.current = payload.message.createdAt || lastChatTimestampRef.current;
             return;
@@ -235,7 +265,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
         channel: "live",
         message
       });
-      setChatMessages(current => [...current, response.message].slice(-120));
+      setChatMessages(current => mergeUniqueMessages(current, [response.message]));
       lastChatTimestampRef.current = response?.message?.createdAt || lastChatTimestampRef.current;
       setChatText("");
     } catch (error) {
@@ -253,6 +283,15 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       setSending(false);
     }
   }
+
+  const liveStatusColor =
+    socketState === "connected" ? C.green : socketState === "reconnecting" ? C.gold : C.muted;
+  const liveStatusLabel =
+    socketState === "connected"
+      ? tr(appLanguage, "Live chat is connected in real time.")
+      : socketState === "reconnecting"
+        ? tr(appLanguage, "Reconnecting live chat...")
+        : tr(appLanguage, "Connecting live chat...");
 
   return (
     <Screen>
@@ -312,86 +351,102 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
             </View>
 
             <SectionHeader title="Live Chat" appLanguage={appLanguage} />
-            <View style={s.plainCard}>
-              <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "This chat belongs to the active livestream only.")}</Text>
-              <Text style={[s.mutedText, { color: C.muted }]}>
-                {tr(appLanguage, "Use Community Chat for general church conversation outside the current live service.")}
-              </Text>
-            </View>
-
-            <View style={[s.formNote, { marginBottom: 12, borderColor: socketState === "connected" ? "rgba(67,182,111,0.32)" : socketState === "reconnecting" ? "rgba(216,166,52,0.35)" : C.line }]}>
-              <Ionicons
-                name={
-                  socketState === "connected"
-                    ? "radio-outline"
-                    : socketState === "reconnecting"
-                      ? "sync-outline"
-                      : "cloud-offline-outline"
-                }
-                size={20}
-                color={socketState === "connected" ? C.green : socketState === "reconnecting" ? C.gold : C.muted}
-              />
-              <Text style={s.formNoteText}>
-                {socketState === "connected"
-                  ? tr(appLanguage, "Live chat is connected in real time.")
-                  : socketState === "reconnecting"
-                    ? tr(appLanguage, "Reconnecting live chat...")
-                    : tr(appLanguage, "Connecting live chat...")}
-              </Text>
-            </View>
-
-            <View style={[s.plainCard, { marginBottom: 16 }]}>
-              <TextInput
-                style={[
-                  s.searchInput,
-                  {
-                    minHeight: 92,
-                    textAlignVertical: "top",
-                    paddingTop: 12,
-                    color: C.white
-                  }
-                ]}
-                placeholder={tr(appLanguage, "Share a live response...")}
-                placeholderTextColor={C.muted}
-                multiline
-                selectionColor={C.gold}
-                value={chatText}
-                onChangeText={setChatText}
-              />
-              <Pressable style={[s.primaryBtn, sending && { opacity: 0.65 }]} onPress={submitLiveChat} disabled={sending}>
-                <Text style={s.primaryText}>{sending ? tr(appLanguage, "Sending...") : tr(appLanguage, "Send Message")}</Text>
-              </Pressable>
-            </View>
-
-            {chatLoading ? (
-              <View style={s.plainCard}>
-                <Text style={[s.mutedText, { color: C.muted }]}>{tr(appLanguage, "Loading live chat...")}</Text>
+            <View style={s.liveChatShell}>
+              <View style={s.liveChatHeader}>
+                <View style={s.liveChatHeaderLeft}>
+                  <View style={s.liveChatStatusDot} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.liveChatTitle}>{tr(appLanguage, "This chat belongs to the active livestream only.")}</Text>
+                    <Text style={s.liveChatSubtle}>
+                      {tr(appLanguage, "Use Community Chat for general church conversation outside the current live service.")}
+                    </Text>
+                  </View>
+                </View>
+                <View style={s.liveStatusPill}>
+                  <Ionicons
+                    name={
+                      socketState === "connected"
+                        ? "radio-outline"
+                        : socketState === "reconnecting"
+                          ? "sync-outline"
+                          : "cloud-offline-outline"
+                    }
+                    size={14}
+                    color={liveStatusColor}
+                  />
+                  <Text style={s.liveStatusPillText}>{tr(appLanguage, "Live")}</Text>
+                </View>
               </View>
-            ) : chatMessages.length === 0 ? (
-              <View style={s.plainCard}>
-                <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "No live responses yet")}</Text>
-                <Text style={[s.mutedText, { color: C.muted }]}>
-                  {tr(appLanguage, "Live responses will appear here while the stream is active.")}
-                </Text>
-              </View>
-            ) : (
+
               <ScrollView
                 ref={chatScrollRef}
-                style={{ maxHeight: 360 }}
-                contentContainerStyle={{ paddingBottom: 8 }}
+                style={s.liveChatList}
+                contentContainerStyle={s.liveChatListContent}
                 onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
               >
-                {chatMessages.map(item => (
-                  <View key={item.id} style={s.plainCard}>
-                    <View style={[s.rowTight, { justifyContent: "space-between" }]}>
-                      <Text style={[s.rowTitle, { color: C.white, flex: 1 }]}>{item.displayName || tr(appLanguage, "Member")}</Text>
-                      <Text style={[s.mutedText, { color: C.muted }]}>{new Date(item.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</Text>
-                    </View>
-                    <Text style={[s.detailBody, { marginTop: 10 }]}>{item.message}</Text>
+                {chatLoading ? (
+                  <View style={s.liveChatEmpty}>
+                    <Text style={[s.liveChatSubtle, { color: C.muted }]}>{tr(appLanguage, "Loading live chat...")}</Text>
                   </View>
-                ))}
+                ) : chatMessages.length === 0 ? (
+                  <View style={s.liveChatEmpty}>
+                    <Text style={s.liveChatTitle}>{tr(appLanguage, "No live responses yet")}</Text>
+                    <Text style={s.liveChatSubtle}>
+                      {tr(appLanguage, "Live responses will appear here while the stream is active.")}
+                    </Text>
+                  </View>
+                ) : (
+                  chatMessages.map(item => (
+                    <View key={item.id} style={s.liveMessageRow}>
+                      <View style={s.liveAvatar}>
+                        <Text style={s.liveAvatarText}>{messageInitial(item.displayName || tr(appLanguage, "Member"))}</Text>
+                      </View>
+                      <View style={s.liveMessageBody}>
+                        <View style={s.liveMessageMeta}>
+                          <Text style={s.liveMessageName}>{item.displayName || tr(appLanguage, "Member")}</Text>
+                          <Text style={s.liveMessageTime}>{liveTimeLabel(item.createdAt)}</Text>
+                        </View>
+                        <Text style={s.liveMessageText}>{item.message}</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
               </ScrollView>
-            )}
+
+              <View style={s.liveComposer}>
+                <TextInput
+                  style={s.liveComposerInput}
+                  placeholder={tr(appLanguage, "Share a live response...")}
+                  placeholderTextColor={C.muted}
+                  multiline
+                  textAlignVertical="center"
+                  selectionColor={C.gold}
+                  returnKeyType="send"
+                  value={chatText}
+                  onChangeText={setChatText}
+                  onSubmitEditing={() => {
+                    if (!sending) {
+                      submitLiveChat();
+                    }
+                  }}
+                />
+                <Pressable
+                  style={[s.liveSendBtn, sending && { opacity: 0.65 }]}
+                  onPress={submitLiveChat}
+                  disabled={sending}
+                >
+                  <Ionicons
+                    name={sending ? "time-outline" : "send"}
+                    size={18}
+                    color={C.black}
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            <Text style={[s.liveChatSubtle, { marginTop: -4, marginBottom: 18 }]}>
+              {liveStatusLabel}
+            </Text>
           </>
         ) : (
           <EmptyState title={tr(appLanguage, "No live service right now")} text={`${tr(appLanguage, "Next service:")} ${live.nextService}`} />
