@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -8,6 +8,7 @@ import {
   TextInput,
   View
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
@@ -15,9 +16,9 @@ import { Tabs } from "../components/Tabs";
 import { C } from "../constants/theme";
 import { listCommunityMessages, sendCommunityMessage } from "../api/communityApi";
 import {
-  createPrivateChatThread,
-  listPrivateChatContacts,
-  listPrivateChatThreads
+  listPrivateChatRequests,
+  listPrivateChatThreads,
+  respondPrivateChatRequest
 } from "../api/privateChatApi";
 import { loadSavedSession } from "../features/profile/authSession";
 import { tr } from "../i18n/labels";
@@ -27,7 +28,7 @@ import {
 } from "../services/privateChatCrypto";
 import { s } from "../styles/appStyles";
 
-const TABS = ["Community", "Live", "Private"];
+const TABS = ["Community", "Private"];
 
 function formatDate(value) {
   if (!value) return "";
@@ -36,7 +37,47 @@ function formatDate(value) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) {
+function RequestRow({ item, onAccept, onReject, onOpenThread, appLanguage = "en", busy = false }) {
+  const peer = item?.peer || {};
+  const hasDevice = Boolean(peer?.hasDevice || peer?.deviceId);
+
+  return (
+    <View style={s.plainCard}>
+      <View style={[s.rowTight, { justifyContent: "space-between" }]}>
+        <Text style={[s.rowTitle, { color: C.white, flex: 1 }]}>{peer?.displayName || tr(appLanguage, "Member")}</Text>
+        <Text style={[s.mutedText, { color: C.muted }]}>{formatDate(item?.updatedAt || item?.createdAt)}</Text>
+      </View>
+      <Text style={[s.mutedText, { color: hasDevice ? C.gold : C.muted, marginTop: 8 }]}>
+        {hasDevice
+          ? `${tr(appLanguage, "Encrypted Ready")} · ${peer?.fingerprint || ""}`
+          : tr(appLanguage, "Encrypted chat will be ready once this member enables it on their device.")}
+      </Text>
+
+      <View style={[s.bottomActions, { marginTop: 14, flexWrap: "wrap" }]}>
+        {typeof onOpenThread === "function" ? (
+          <Pressable style={s.actionBtn} onPress={onOpenThread}>
+            <Ionicons name="chatbubble-ellipses-outline" size={17} color={C.white} />
+            <Text style={s.actionText}>{tr(appLanguage, "Open Chat")}</Text>
+          </Pressable>
+        ) : null}
+        {typeof onAccept === "function" ? (
+          <Pressable style={[s.actionBtn, busy && { opacity: 0.6 }]} onPress={onAccept} disabled={busy}>
+            <Ionicons name="checkmark-outline" size={17} color={C.white} />
+            <Text style={s.actionText}>{tr(appLanguage, "Accept Request")}</Text>
+          </Pressable>
+        ) : null}
+        {typeof onReject === "function" ? (
+          <Pressable style={[s.actionBtn, busy && { opacity: 0.6 }]} onPress={onReject} disabled={busy}>
+            <Ionicons name="close-outline" size={17} color={C.white} />
+            <Text style={s.actionText}>{tr(appLanguage, "Decline")}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+export function ChatScreen({ go, openDrawer, tab, setTab, detail, appLanguage = "en" }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
@@ -44,14 +85,14 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
   const [sending, setSending] = useState(false);
   const [session, setSession] = useState({ token: null, user: null });
   const [privateThreads, setPrivateThreads] = useState([]);
-  const [contacts, setContacts] = useState([]);
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [outgoingRequests, setOutgoingRequests] = useState([]);
   const [privateLoading, setPrivateLoading] = useState(true);
   const [privateRefreshing, setPrivateRefreshing] = useState(false);
   const [deviceFingerprint, setDeviceFingerprint] = useState("");
-  const [openingContactId, setOpeningContactId] = useState("");
+  const [requestBusyId, setRequestBusyId] = useState("");
 
   const activeTab = tab || "Community";
-  const channel = useMemo(() => (activeTab === "Live" ? "live" : "global"), [activeTab]);
   const signedIn = Boolean(session?.token && session?.user);
 
   const loadCommunity = useCallback(
@@ -60,7 +101,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
       else setLoading(true);
 
       try {
-        const response = await listCommunityMessages(channel);
+        const response = await listCommunityMessages("global");
         setMessages(Array.isArray(response?.messages) ? response.messages : []);
       } catch (error) {
         if (!showSpinner) {
@@ -74,7 +115,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
         setRefreshing(false);
       }
     },
-    [appLanguage, channel]
+    [appLanguage]
   );
 
   const loadPrivate = useCallback(
@@ -88,7 +129,8 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
 
         if (!savedSession?.token || !savedSession?.user) {
           setPrivateThreads([]);
-          setContacts([]);
+          setIncomingRequests([]);
+          setOutgoingRequests([]);
           setDeviceFingerprint("");
           return;
         }
@@ -96,13 +138,14 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
         const identity = await ensurePrivateChatDevice(savedSession.user.id);
         setDeviceFingerprint(await publicKeyFingerprint(identity.identityPublicKey));
 
-        const [threadsResponse, contactsResponse] = await Promise.all([
+        const [threadsResponse, requestsResponse] = await Promise.all([
           listPrivateChatThreads(),
-          listPrivateChatContacts()
+          listPrivateChatRequests()
         ]);
 
         setPrivateThreads(Array.isArray(threadsResponse?.threads) ? threadsResponse.threads : []);
-        setContacts(Array.isArray(contactsResponse?.contacts) ? contactsResponse.contacts : []);
+        setIncomingRequests(Array.isArray(requestsResponse?.incoming) ? requestsResponse.incoming : []);
+        setOutgoingRequests(Array.isArray(requestsResponse?.outgoing) ? requestsResponse.outgoing : []);
       } catch (error) {
         if (!showSpinner) {
           Alert.alert(
@@ -133,6 +176,12 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
   }, []);
 
   useEffect(() => {
+    if (detail?.tab && typeof setTab === "function") {
+      setTab(detail.tab);
+    }
+  }, [detail?.tab, setTab]);
+
+  useEffect(() => {
     if (activeTab === "Private") {
       loadPrivate(false);
       const timer = setInterval(() => {
@@ -161,7 +210,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
 
     try {
       const response = await sendCommunityMessage({
-        channel,
+        channel: "global",
         message
       });
 
@@ -184,30 +233,12 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
     }
   }
 
-  async function openPrivateThread(contact) {
-    if (!signedIn) {
-      Alert.alert(tr(appLanguage, "Sign In Required"), tr(appLanguage, "Sign in to start private encrypted chats."), [
-        { text: tr(appLanguage, "Cancel"), style: "cancel" },
-        { text: tr(appLanguage, "Open Profile"), onPress: () => go("Profile") }
-      ]);
-      return;
-    }
-
-    if (!contact?.hasDevice) {
-      Alert.alert(tr(appLanguage, "Private Chat"), tr(appLanguage, "This contact has not enabled encrypted chat yet."));
-      return;
-    }
-
-    const existingThread = privateThreads.find(item => item?.peer?.id === contact.id);
-    if (existingThread) {
-      go("PrivateChatThread", { thread: existingThread });
-      return;
-    }
-
-    setOpeningContactId(contact.id);
+  async function handleRequestAction(requestId, action) {
+    setRequestBusyId(requestId);
 
     try {
-      const response = await createPrivateChatThread(contact.id);
+      const response = await respondPrivateChatRequest(requestId, action);
+      setIncomingRequests(current => current.filter(item => item.id !== requestId));
       if (response?.thread) {
         setPrivateThreads(current => {
           const others = current.filter(item => item?.id !== response.thread.id);
@@ -218,10 +249,10 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
     } catch (error) {
       Alert.alert(
         tr(appLanguage, "Private Chat"),
-        error instanceof Error ? error.message : tr(appLanguage, "Unable to open encrypted thread.")
+        error instanceof Error ? error.message : tr(appLanguage, "Unable to update the chat request.")
       );
     } finally {
-      setOpeningContactId("");
+      setRequestBusyId("");
     }
   }
 
@@ -229,11 +260,9 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
     return (
       <>
         <View style={s.plainCard}>
-          <Text style={[s.rowTitle, { color: C.white }]}>
-            {activeTab === "Live" ? tr(appLanguage, "Live Service Chat") : tr(appLanguage, "Community Chat")}
-          </Text>
+          <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Community Chat")}</Text>
           <Text style={[s.mutedText, { color: C.muted }]}>
-            {tr(appLanguage, "Short encouragement, prayer points, and reactions from members.")}
+            {tr(appLanguage, "General church conversation, encouragement, and prayer points outside the active livestream.")}
           </Text>
         </View>
 
@@ -248,11 +277,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
                 color: C.white
               }
             ]}
-            placeholder={
-              activeTab === "Live"
-                ? tr(appLanguage, "Share a live response...")
-                : tr(appLanguage, "Write a short message...")
-            }
+            placeholder={tr(appLanguage, "Write a short message...")}
             placeholderTextColor={C.muted}
             multiline
             selectionColor={C.gold}
@@ -280,7 +305,9 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
           messages.map(item => (
             <View key={item.id} style={s.plainCard}>
               <View style={[s.rowTight, { justifyContent: "space-between" }]}>
-                <Text style={[s.rowTitle, { color: C.white, flex: 1 }]}>{item.displayName || "Member"}</Text>
+                <Pressable onPress={() => go("MemberProfile", { memberId: item.userId, displayName: item.displayName })}>
+                  <Text style={[s.rowTitle, { color: C.white }]}>{item.displayName || tr(appLanguage, "Member")}</Text>
+                </Pressable>
                 <Text style={[s.mutedText, { color: C.muted }]}>{formatDate(item.createdAt)}</Text>
               </View>
               <Text style={[s.detailBody, { marginTop: 10 }]}>{item.message}</Text>
@@ -297,7 +324,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
         <View style={s.plainCard}>
           <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Private Chat")}</Text>
           <Text style={[s.mutedText, { color: C.muted }]}>
-            {tr(appLanguage, "Sign in to start private encrypted chats.")}
+            {tr(appLanguage, "Private chat starts from a member profile. Send a request, wait for acceptance, then open the encrypted thread here.")}
           </Text>
           <Pressable style={s.primaryBtn} onPress={() => go("Profile")}>
             <Text style={s.primaryText}>{tr(appLanguage, "Sign In")}</Text>
@@ -311,7 +338,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
         <View style={s.plainCard}>
           <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Encrypted Chat")}</Text>
           <Text style={[s.mutedText, { color: C.muted }]}>
-            {tr(appLanguage, "Messages are encrypted on this device before upload. The server stores ciphertext only.")}
+            {tr(appLanguage, "Tap a member name in Community Chat to open their profile and send a private chat request.")}
           </Text>
           {deviceFingerprint ? (
             <Text style={[s.goldSmall, { marginTop: 10 }]}>
@@ -327,75 +354,78 @@ export function ChatScreen({ go, openDrawer, tab, setTab, appLanguage = "en" }) 
         ) : (
           <>
             <View style={s.plainCard}>
-              <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Existing Threads")}</Text>
+              <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Incoming Requests")}</Text>
               <Text style={[s.mutedText, { color: C.muted }]}>
-                {tr(appLanguage, "Open an encrypted thread or start a new one below.")}
+                {tr(appLanguage, "Accept a request to unlock a private encrypted thread with that member.")}
               </Text>
-              {privateThreads.length === 0 ? (
-                <Text style={[s.mutedText, { color: C.muted, marginTop: 12 }]}>
-                  {tr(appLanguage, "No private threads yet")}
-                </Text>
-              ) : (
-                privateThreads.map(item => (
-                  <Pressable
-                    key={item.id}
-                    style={[s.listRow, { borderBottomWidth: 0 }]}
-                    onPress={() => go("PrivateChatThread", { thread: item })}
-                  >
-                    <View style={[s.smallCircle, { backgroundColor: C.blue2 }]}>
-                      <Text style={{ color: C.white, fontWeight: "900" }}>
-                        {(item?.peer?.displayName || item?.peer?.email || "M").charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={s.rowBody}>
-                      <Text style={[s.rowTitle, { color: C.white }]}>{item?.peer?.displayName || item?.peer?.email}</Text>
-                      <Text style={[s.mutedText, { color: C.muted }]}>
-                        {tr(appLanguage, "Encrypted Ready")} · {item?.peer?.fingerprint || ""}
-                      </Text>
-                    </View>
-                    <Text style={[s.goldSmall, { marginTop: 0 }]}>{formatDate(item?.lastMessageAt)}</Text>
-                  </Pressable>
-                ))
-              )}
             </View>
 
+            {incomingRequests.length === 0 ? (
+              <View style={s.plainCard}>
+                <Text style={[s.mutedText, { color: C.muted }]}>{tr(appLanguage, "No incoming requests")}</Text>
+              </View>
+            ) : (
+              incomingRequests.map(item => (
+                <RequestRow
+                  key={item.id}
+                  item={item}
+                  onAccept={() => handleRequestAction(item.id, "accept")}
+                  onReject={() => handleRequestAction(item.id, "reject")}
+                  busy={requestBusyId === item.id}
+                  appLanguage={appLanguage}
+                />
+              ))
+            )}
+
             <View style={s.plainCard}>
-              <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Available Members")}</Text>
+              <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Existing Threads")}</Text>
               <Text style={[s.mutedText, { color: C.muted }]}>
-                {tr(appLanguage, "Tap a member to start a private encrypted thread.")}
+                {tr(appLanguage, "Accepted requests become encrypted private threads here.")}
               </Text>
-              {contacts.length === 0 ? (
-                <Text style={[s.mutedText, { color: C.muted, marginTop: 12 }]}>
-                  {tr(appLanguage, "No members found")}
-                </Text>
-              ) : (
-                contacts.map(contact => {
-                  const ready = Boolean(contact?.hasDevice && contact?.device?.identityPublicKey);
-                  return (
-                    <Pressable
-                      key={contact.id}
-                      style={[s.listRow, { borderBottomWidth: 0, opacity: openingContactId === contact.id ? 0.7 : 1 }]}
-                      onPress={() => openPrivateThread(contact)}
-                      disabled={openingContactId === contact.id}
-                    >
-                      <View style={[s.smallCircle, { backgroundColor: ready ? C.blue2 : C.surface2 }]}>
-                        <Text style={{ color: C.white, fontWeight: "900" }}>
-                          {(contact?.displayName || contact?.email || "M").charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={s.rowBody}>
-                        <Text style={[s.rowTitle, { color: C.white }]}>{contact?.displayName || contact?.email}</Text>
-                        <Text style={[s.mutedText, { color: ready ? C.gold : C.muted }]}>
-                          {ready
-                            ? `${tr(appLanguage, "Encrypted Ready")} · ${contact?.device?.fingerprint || ""}`
-                            : tr(appLanguage, "Not Enabled")}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })
-              )}
             </View>
+
+            {privateThreads.length === 0 ? (
+              <View style={s.plainCard}>
+                <Text style={[s.mutedText, { color: C.muted }]}>{tr(appLanguage, "No private threads yet")}</Text>
+              </View>
+            ) : (
+              privateThreads.map(item => (
+                <Pressable
+                  key={item.id}
+                  style={s.plainCard}
+                  onPress={() => go("PrivateChatThread", { thread: item })}
+                >
+                  <View style={[s.rowTight, { justifyContent: "space-between" }]}>
+                    <Text style={[s.rowTitle, { color: C.white, flex: 1 }]}>{item?.peer?.displayName || tr(appLanguage, "Member")}</Text>
+                    <Text style={[s.mutedText, { color: C.muted }]}>{formatDate(item?.lastMessageAt)}</Text>
+                  </View>
+                  <Text style={[s.mutedText, { color: C.gold, marginTop: 8 }]}>
+                    {tr(appLanguage, "Encrypted Ready")} · {item?.peer?.fingerprint || ""}
+                  </Text>
+                </Pressable>
+              ))
+            )}
+
+            <View style={s.plainCard}>
+              <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Outgoing Requests")}</Text>
+              <Text style={[s.mutedText, { color: C.muted }]}>
+                {tr(appLanguage, "These members still need to accept your request before private chat opens.")}
+              </Text>
+            </View>
+
+            {outgoingRequests.length === 0 ? (
+              <View style={s.plainCard}>
+                <Text style={[s.mutedText, { color: C.muted }]}>{tr(appLanguage, "No outgoing requests")}</Text>
+              </View>
+            ) : (
+              outgoingRequests.map(item => (
+                <RequestRow
+                  key={item.id}
+                  item={item}
+                  appLanguage={appLanguage}
+                />
+              ))
+            )}
           </>
         )}
       </>

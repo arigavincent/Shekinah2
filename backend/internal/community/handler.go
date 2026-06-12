@@ -157,7 +157,6 @@ func (h Handler) List(c *gin.Context) {
 		}
 
 		item.HiddenReason = ""
-		item.UserID = ""
 		item.UserEmail = ""
 		items = append(items, item)
 	}
@@ -255,7 +254,6 @@ func (h Handler) Create(c *gin.Context) {
 		return
 	}
 
-	item.UserID = ""
 	item.UserEmail = ""
 	item.HiddenReason = ""
 

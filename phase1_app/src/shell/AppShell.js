@@ -39,6 +39,7 @@ import { EventsScreen } from "../screens/EventsScreen";
 import { GivingScreen } from "../screens/GivingScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { LiveScreen } from "../screens/LiveScreen";
+import { MemberProfileScreen } from "../screens/MemberProfileScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { PlatformsScreen } from "../screens/PlatformsScreen";
 import { PrivateChatThreadScreen } from "../screens/PrivateChatThreadScreen";
@@ -391,7 +392,9 @@ useEffect(() => {
       case "Downloads":
         return <DownloadsScreen go={go} tab={downloadsTab} setTab={setDownloadsTab} appLanguage={appLanguage} />;
       case "Chat":
-        return <ChatScreen go={go} openDrawer={openDrawer} tab={chatTab} setTab={setChatTab} appLanguage={appLanguage} />;
+        return <ChatScreen go={go} openDrawer={openDrawer} tab={chatTab} setTab={setChatTab} detail={detail} appLanguage={appLanguage} />;
+      case "MemberProfile":
+        return <MemberProfileScreen go={go} detail={detail} appLanguage={appLanguage} />;
       case "PrivateChatThread":
         return <PrivateChatThreadScreen go={go} detail={detail} appLanguage={appLanguage} />;
       case "Testimonies":

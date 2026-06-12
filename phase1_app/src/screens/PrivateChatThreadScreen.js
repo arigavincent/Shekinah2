@@ -206,7 +206,7 @@ export function PrivateChatThreadScreen({ go, detail, appLanguage = "en" }) {
         title={peerName}
         go={go}
         back="Chat"
-        onBack={() => go("Chat", null, { replace: true })}
+        onBack={() => go("Chat", { tab: "Private" }, { replace: true })}
         appLanguage={appLanguage}
       />
 
