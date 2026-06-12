@@ -283,6 +283,9 @@ const SWAHILI_LABELS = {
   "This chat belongs to the active livestream only.": "Mazungumzo haya ni ya ibada inayoendelea moja kwa moja pekee.",
   "Use Community Chat for general church conversation outside the current live service.": "Tumia Mazungumzo ya Jamii kwa mazungumzo ya kawaida ya kanisa nje ya ibada ya sasa ya moja kwa moja.",
   "Loading live chat...": "Inapakia mazungumzo ya moja kwa moja...",
+  "Live chat is connected in real time.": "Mazungumzo ya moja kwa moja yameunganishwa kwa muda halisi.",
+  "Reconnecting live chat...": "Inaunganisha tena mazungumzo ya moja kwa moja...",
+  "Connecting live chat...": "Inaunganisha mazungumzo ya moja kwa moja...",
   "No live responses yet": "Hakuna mwitikio wa moja kwa moja bado",
   "Live responses will appear here while the stream is active.": "Mwitikio wa moja kwa moja utaonekana hapa wakati ibada inaendelea.",
   "Unable to load live chat.": "Imeshindikana kupakia mazungumzo ya moja kwa moja.",
@@ -336,6 +339,19 @@ const SWAHILI_LABELS = {
   "No requests right now": "Hakuna maombi kwa sasa",
   "Search for a member or tap one in Community Chat to send a private request.": "Tafuta mshiriki au gusa mmoja kwenye Mazungumzo ya Jamii kutuma ombi la faragha.",
   "Testimonies": "Shuhuda"
+  ,
+  "Downloading package...": "Inapakua kifurushi...",
+  "Installing offline text...": "Inaweka maandishi ya nje ya mtandao...",
+  "Finalizing library...": "Inakamilisha maktaba...",
+  "Preparing Bible download...": "Inaandaa upakuaji wa Biblia...",
+  "Remove Bible Version": "Ondoa Tafsiri ya Biblia",
+  "This removes the downloaded version from this device. Bundled versions stay available offline.": "Hii huondoa tafsiri iliyopakuliwa kutoka kwenye kifaa hiki. Tafsiri zilizojumuishwa hubaki kupatikana nje ya mtandao.",
+  "Removing...": "Inaondoa...",
+  "Search for a language or version name to download it.": "Tafuta lugha au jina la tafsiri ili kuipakua.",
+  "Unable to load Bible versions right now.": "Imeshindikana kupakia tafsiri za Biblia kwa sasa.",
+  "Refresh Pending": "Sasisha Zinazosubiri",
+  "Refreshing...": "Inasasisha...",
+  "Refresh Pending Failed": "Kusasisha Zinazosubiri Kumeshindikana"
 };
 
 export const APP_LANGUAGES = [

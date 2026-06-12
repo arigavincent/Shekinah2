@@ -170,7 +170,10 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   const [catalogVersions, setCatalogVersions] = useState([]);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
   const [installingVersionId, setInstallingVersionId] = useState("");
+  const [installStage, setInstallStage] = useState("");
+  const [removingVersionId, setRemovingVersionId] = useState("");
   const [book, setBook] = useState(null);
   const [chapter, setChapter] = useState(1);
   const [chapterCount, setChapterCount] = useState(1);
@@ -334,6 +337,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
     let alive = true;
     setCatalogLoading(true);
+    setCatalogError("");
 
     const timer = setTimeout(() => {
       listBibleVersions(catalogQuery)
@@ -344,8 +348,13 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             (response?.versions || []).filter(item => !installed.has(item.id))
           );
         })
-        .catch(() => {
-          if (alive) setCatalogVersions([]);
+        .catch(error => {
+          if (alive) {
+            setCatalogVersions([]);
+            setCatalogError(
+              error instanceof Error ? error.message : "Unable to load Bible versions right now."
+            );
+          }
         })
         .finally(() => {
           if (alive) setCatalogLoading(false);
@@ -558,9 +567,12 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
   async function handleInstallVersion(version) {
     setInstallingVersionId(version.id);
+    setInstallStage(tr(appLanguage, "Downloading package..."));
 
     try {
+      setInstallStage(tr(appLanguage, "Installing offline text..."));
       const installed = await installBibleVersion(version);
+      setInstallStage(tr(appLanguage, "Finalizing library..."));
       const nextState = {
         ...bibleState,
         preferences: {
@@ -579,30 +591,48 @@ export function BibleScreen({ go, appLanguage = "en" }) {
       );
     } finally {
       setInstallingVersionId("");
+      setInstallStage("");
     }
   }
 
   async function handleRemoveVersion(versionId) {
-    try {
-      await removeBibleVersion(versionId);
-      const nextState = {
-        ...bibleState,
-        preferences: {
-          ...bibleState.preferences,
-          readingMode:
-            bibleState.preferences.readingMode === versionId
-              ? "parallel"
-              : bibleState.preferences.readingMode
+    Alert.alert(
+      tr(appLanguage, "Remove Bible Version"),
+      tr(appLanguage, "This removes the downloaded version from this device. Bundled versions stay available offline."),
+      [
+        { text: tr(appLanguage, "Cancel"), style: "cancel" },
+        {
+          text: tr(appLanguage, "Remove"),
+          style: "destructive",
+          onPress: async () => {
+            setRemovingVersionId(versionId);
+
+            try {
+              await removeBibleVersion(versionId);
+              const nextState = {
+                ...bibleState,
+                preferences: {
+                  ...bibleState.preferences,
+                  readingMode:
+                    bibleState.preferences.readingMode === versionId
+                      ? "parallel"
+                      : bibleState.preferences.readingMode
+                }
+              };
+              await syncInstalled(db, nextState);
+              Alert.alert("Removed", "The Bible version was removed from this device.");
+            } catch (error) {
+              Alert.alert(
+                "Remove Failed",
+                error instanceof Error ? error.message : "Unable to remove this Bible version."
+              );
+            } finally {
+              setRemovingVersionId("");
+            }
+          }
         }
-      };
-      await syncInstalled(db, nextState);
-      Alert.alert("Removed", "The Bible version was removed from this device.");
-    } catch (error) {
-      Alert.alert(
-        "Remove Failed",
-        error instanceof Error ? error.message : "Unable to remove this Bible version."
-      );
-    }
+      ]
+    );
   }
 
   const fontScale = FONT_SCALES[fontScaleIndex];
@@ -690,8 +720,10 @@ export function BibleScreen({ go, appLanguage = "en" }) {
                 <View style={{ alignItems: "flex-end", gap: 8 }}>
                   <Text style={styles.versionState}>{tr(appLanguage, "Installed")}</Text>
                   {removable ? (
-                    <Pressable onPress={() => handleRemoveVersion(version.id)}>
-                      <Text style={[styles.versionState, { color: "#f87171" }]}>Remove</Text>
+                    <Pressable disabled={removingVersionId === version.id} onPress={() => handleRemoveVersion(version.id)}>
+                      <Text style={[styles.versionState, { color: "#f87171" }]}>
+                        {removingVersionId === version.id ? tr(appLanguage, "Removing...") : tr(appLanguage, "Remove")}
+                      </Text>
                     </Pressable>
                   ) : null}
                 </View>
@@ -711,10 +743,22 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             <Text style={styles.infoText}>
               Direct provider catalog with offline install to this device.
             </Text>
+            {installingVersionId ? (
+              <Text style={[styles.infoText, { color: "#fff", marginTop: 8 }]}>
+                {installStage || tr(appLanguage, "Preparing Bible download...")}
+              </Text>
+            ) : null}
+            {catalogError ? (
+              <Text style={[styles.infoText, { color: "#f87171", marginTop: 8 }]}>
+                {catalogError}
+              </Text>
+            ) : null}
           </View>
 
           {catalogLoading ? (
             <Text style={styles.emptyText}>Loading available versions...</Text>
+          ) : !catalogQuery.trim() ? (
+            <Text style={styles.emptyText}>{tr(appLanguage, "Search for a language or version name to download it.")}</Text>
           ) : catalogVersions.length ? (
             catalogVersions.slice(0, 30).map(version => (
               <View key={version.id} style={styles.versionCard}>
@@ -727,7 +771,9 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
                 <Pressable disabled={installingVersionId === version.id} onPress={() => handleInstallVersion(version)}>
                   <Text style={styles.versionState}>
-                    {installingVersionId === version.id ? "Installing..." : tr(appLanguage, "Download")}
+                    {installingVersionId === version.id
+                      ? installStage || tr(appLanguage, "Installing offline text...")
+                      : tr(appLanguage, "Download")}
                   </Text>
                 </Pressable>
               </View>

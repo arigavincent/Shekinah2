@@ -54,6 +54,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const [chatLoading, setChatLoading] = useState(true);
   const [chatText, setChatText] = useState("");
   const [sending, setSending] = useState(false);
+  const [socketState, setSocketState] = useState("disconnected");
   const live = data.live;
   const liveVideoId = extractYouTubeId(live.youtubeId || live.youtubeUrl || "");
   const playerWidth = Math.max(280, width - 32);
@@ -124,6 +125,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
 
     function closeStream() {
       liveStreamClosedRef.current = true;
+      setSocketState("disconnected");
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
@@ -143,10 +145,12 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
         return;
       }
 
+      setSocketState(liveSocketRef.current ? "reconnecting" : "connecting");
       const socket = new WebSocket(liveChatSocketUrl());
       liveSocketRef.current = socket;
 
       socket.onopen = () => {
+        setSocketState("connected");
         loadLiveChat(true);
       };
 
@@ -177,6 +181,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       socket.onclose = () => {
         liveSocketRef.current = null;
         if (!liveStreamClosedRef.current && live?.isLive) {
+          setSocketState("reconnecting");
           reconnectTimerRef.current = setTimeout(() => {
             reconnectTimerRef.current = null;
             connectStream();
@@ -195,6 +200,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       setChatMessages([]);
       lastChatTimestampRef.current = "";
       setChatLoading(false);
+      setSocketState("disconnected");
       closeStream();
       return () => {
         closeStream();
@@ -202,6 +208,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
     }
 
     loadLiveChat(false);
+    setSocketState("connecting");
     connectStream();
 
     const liveStateTimer = setInterval(() => {
@@ -309,6 +316,27 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
               <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "This chat belongs to the active livestream only.")}</Text>
               <Text style={[s.mutedText, { color: C.muted }]}>
                 {tr(appLanguage, "Use Community Chat for general church conversation outside the current live service.")}
+              </Text>
+            </View>
+
+            <View style={[s.formNote, { marginBottom: 12, borderColor: socketState === "connected" ? "rgba(67,182,111,0.32)" : socketState === "reconnecting" ? "rgba(216,166,52,0.35)" : C.line }]}>
+              <Ionicons
+                name={
+                  socketState === "connected"
+                    ? "radio-outline"
+                    : socketState === "reconnecting"
+                      ? "sync-outline"
+                      : "cloud-offline-outline"
+                }
+                size={20}
+                color={socketState === "connected" ? C.green : socketState === "reconnecting" ? C.gold : C.muted}
+              />
+              <Text style={s.formNoteText}>
+                {socketState === "connected"
+                  ? tr(appLanguage, "Live chat is connected in real time.")
+                  : socketState === "reconnecting"
+                    ? tr(appLanguage, "Reconnecting live chat...")
+                    : tr(appLanguage, "Connecting live chat...")}
               </Text>
             </View>
 

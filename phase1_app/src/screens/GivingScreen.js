@@ -16,6 +16,7 @@ import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { Tabs } from "../components/Tabs";
+import { tr } from "../i18n/labels";
 import {
   getGivingTransaction,
   startCardGiving,
@@ -172,10 +173,22 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
   const [historyRefreshing, setHistoryRefreshing] = useState(false);
 
   const cleanAmount = useMemo(() => normalizeAmount(amount), [amount]);
+  const pendingTransactions = useMemo(
+    () => transactions.filter(item => item?.status === "pending"),
+    [transactions]
+  );
 
   useEffect(() => {
     listGivingHistory().then(setTransactions);
   }, []);
+
+  useEffect(() => {
+    if (tab !== "Give History" || pendingTransactions.length === 0 || historyRefreshing) {
+      return;
+    }
+
+    refreshPending(true);
+  }, [tab, pendingTransactions.length, historyRefreshing]);
 
   function validate() {
     if (!cleanAmount || cleanAmount <= 0) {
@@ -320,6 +333,43 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
 
       await saveGivingHistory(next);
       setTransactions(next);
+    } finally {
+      setHistoryRefreshing(false);
+    }
+  }
+
+  async function refreshPending(silent = false) {
+    const current = await listGivingHistory();
+    const pending = current.filter(item => item?.status === "pending");
+    if (pending.length === 0) return;
+
+    setHistoryRefreshing(true);
+    const next = [];
+
+    try {
+      for (const item of current) {
+        if (item?.status !== "pending") {
+          next.push(item);
+          continue;
+        }
+
+        try {
+          const response = await getGivingTransaction(item.id);
+          next.push(response.transaction || item);
+        } catch {
+          next.push(item);
+        }
+      }
+
+      await saveGivingHistory(next);
+      setTransactions(next);
+    } catch (error) {
+      if (!silent) {
+        Alert.alert(
+          tr(appLanguage, "Refresh Pending Failed"),
+          error instanceof Error ? error.message : "Unable to refresh pending transactions."
+        );
+      }
     } finally {
       setHistoryRefreshing(false);
     }
@@ -533,6 +583,25 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
                 Shows transactions started from this device.
               </Text>
             </View>
+
+            {pendingTransactions.length > 0 ? (
+              <View style={s.formNote}>
+                <Ionicons name="time-outline" size={20} color={C.gold} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.rowTitle, { color: C.white }]}>
+                    {pendingTransactions.length} pending transaction{pendingTransactions.length === 1 ? "" : "s"}
+                  </Text>
+                  <Text style={s.formNoteText}>
+                    Pending M-Pesa or card checkouts can take a moment to reconcile. Refresh them after payment is completed.
+                  </Text>
+                </View>
+                <Pressable onPress={() => refreshPending(false)} disabled={historyRefreshing}>
+                  <Text style={[s.goldSmall, { marginTop: 0 }]}>
+                    {historyRefreshing ? tr(appLanguage, "Refreshing...") : tr(appLanguage, "Refresh Pending")}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             {transactions.length === 0 ? (
               <View style={s.plainCard}>

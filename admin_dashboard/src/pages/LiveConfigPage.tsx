@@ -17,6 +17,19 @@ const emptyForm: LiveConfigPayload = {
   youtubeId: "jfKfPfyJRdk"
 };
 
+function normalizeYouTubeInput(value: string) {
+  const raw = value.trim();
+  if (!raw) return raw;
+
+  const match =
+    raw.match(/[?&]v=([A-Za-z0-9_-]{11})/) ||
+    raw.match(/youtu\.be\/([A-Za-z0-9_-]{11})/) ||
+    raw.match(/youtube\.com\/live\/([A-Za-z0-9_-]{11})/) ||
+    raw.match(/^([A-Za-z0-9_-]{11})$/);
+
+  return match?.[1] || raw;
+}
+
 export function LiveConfigPage() {
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null);
   const [form, setForm] = useState<LiveConfigPayload>({ ...emptyForm });
@@ -179,7 +192,7 @@ export function LiveConfigPage() {
                 YouTube ID
                 <input
                   value={form.youtubeId}
-                  onChange={event => updateField("youtubeId", event.target.value)}
+                  onChange={event => updateField("youtubeId", normalizeYouTubeInput(event.target.value))}
                   placeholder="jfKfPfyJRdk"
                 />
               </label>
@@ -192,6 +205,23 @@ export function LiveConfigPage() {
               <button disabled={saving}>
                 {saving ? "Saving..." : "Save Live Config"}
               </button>
+
+              <div className="two-col">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => updateField("isLive", true)}
+                >
+                  Go Live Now
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => updateField("isLive", false)}
+                >
+                  Mark Offline
+                </button>
+              </div>
             </>
           )}
         </form>
