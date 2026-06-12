@@ -4,9 +4,11 @@ import { Navigate, useNavigate } from "react-router-dom";
 
 import { changePassword } from "../api/authApi";
 import { getToken, getUser, saveSession } from "../auth/session";
+import { useAdminTheme } from "../theme";
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
+  const { mode, toggleTheme } = useAdminTheme();
   const token = getToken();
   const user = getUser();
 
@@ -51,6 +53,9 @@ export function ResetPasswordPage() {
 
   return (
     <main className="auth-page">
+      <button type="button" className="secondary compact auth-theme-toggle" onClick={toggleTheme}>
+        {mode === "light" ? "Dark" : "Light"}
+      </button>
       <form className="auth-card" onSubmit={submit}>
         <p className="eyebrow">Security</p>
         <h1>Reset Admin Password</h1>

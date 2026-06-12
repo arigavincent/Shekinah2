@@ -342,7 +342,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                           <Text style={s.liveStagePillText}>{tr(appLanguage, "Live")}</Text>
                         </View>
                         <View style={s.liveStagePill}>
-                          <Ionicons name="eye-outline" size={14} color={C.white} />
+                          <Ionicons name="eye-outline" size={14} color={C.textOnBrand} />
                           <Text style={s.liveStagePillText}>{live.viewers} {tr(appLanguage, "watching")}</Text>
                         </View>
                       </View>
@@ -355,12 +355,12 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                         <Ionicons
                           name={playing ? "pause-outline" : "play-outline"}
                           size={18}
-                          color={C.white}
+                          color={C.textOnBrand}
                         />
                       </Pressable>
                       {liveVideoId ? (
                         <Pressable style={s.liveStageActionBtn} onPress={openLiveOnYouTube}>
-                          <Ionicons name="logo-youtube" size={18} color={C.white} />
+                          <Ionicons name="logo-youtube" size={18} color={C.textOnBrand} />
                         </Pressable>
                       ) : null}
                     </View>
@@ -377,7 +377,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                     >
                       {chatLoading ? (
                         <View style={s.liveChatEmpty}>
-                          <Text style={[s.liveChatSubtle, { color: C.white }]}>{tr(appLanguage, "Loading live chat...")}</Text>
+                          <Text style={[s.liveChatSubtle, { color: C.textOnBrand }]}>{tr(appLanguage, "Loading live chat...")}</Text>
                         </View>
                       ) : chatMessages.length === 0 ? (
                         <View style={s.liveChatEmpty}>

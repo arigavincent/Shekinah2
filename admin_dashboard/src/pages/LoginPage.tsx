@@ -4,9 +4,11 @@ import { useNavigate } from "react-router-dom";
 
 import { login } from "../api/authApi";
 import { saveSession } from "../auth/session";
+import { useAdminTheme } from "../theme";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { mode, toggleTheme } = useAdminTheme();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,6 +40,9 @@ export function LoginPage() {
 
   return (
     <main className="auth-page">
+      <button type="button" className="secondary compact auth-theme-toggle" onClick={toggleTheme}>
+        {mode === "light" ? "Dark" : "Light"}
+      </button>
       <form className="auth-card" onSubmit={submit}>
         <p className="eyebrow">Shekinah Admin</p>
         <h1>Dashboard Login</h1>

@@ -53,7 +53,7 @@ function RequestRow({ item, onAccept, onReject, onOpenProfile, appLanguage = "en
       <View style={[s.rowTight, { justifyContent: "space-between" }]}>
         <View style={[s.rowTight, { flex: 1 }]}>
           <View style={[s.smallCircle, { width: 42, height: 42, borderRadius: 21, backgroundColor: C.blue2 }]}>
-            <Text style={{ color: C.white, fontWeight: "900" }}>{initials(peer?.displayName)}</Text>
+            <Text style={{ color: C.textOnBrand, fontWeight: "900" }}>{initials(peer?.displayName)}</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Pressable onPress={onOpenProfile}>
@@ -343,7 +343,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, detail, appLanguage = 
               <View style={[s.rowTight, { justifyContent: "space-between" }]}>
                 <View style={[s.rowTight, { flex: 1 }]}>
                   <View style={[s.smallCircle, { width: 42, height: 42, borderRadius: 21, backgroundColor: C.blue2 }]}>
-                    <Text style={{ color: C.white, fontWeight: "900" }}>{initials(item?.displayName)}</Text>
+                    <Text style={{ color: C.textOnBrand, fontWeight: "900" }}>{initials(item?.displayName)}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Pressable onPress={() => go("MemberProfile", { memberId: item.userId, displayName: item.displayName })}>
@@ -452,7 +452,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, detail, appLanguage = 
                     <View style={[s.rowTight, { justifyContent: "space-between" }]}>
                       <View style={[s.rowTight, { flex: 1 }]}>
                         <View style={[s.smallCircle, { width: 42, height: 42, borderRadius: 21, backgroundColor: item?.hasDevice ? C.blue2 : C.surface2 }]}>
-                          <Text style={{ color: C.white, fontWeight: "900" }}>{initials(item?.displayName)}</Text>
+                          <Text style={{ color: item?.hasDevice ? C.textOnBrand : C.white, fontWeight: "900" }}>{initials(item?.displayName)}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={[s.rowTitle, { color: C.white }]}>{item?.displayName || tr(appLanguage, "Member")}</Text>
@@ -489,7 +489,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, detail, appLanguage = 
                       <View style={[s.rowTight, { justifyContent: "space-between" }]}>
                         <View style={[s.rowTight, { flex: 1 }]}>
                           <View style={[s.smallCircle, { width: 46, height: 46, borderRadius: 23, backgroundColor: C.blue2 }]}>
-                            <Text style={{ color: C.white, fontWeight: "900" }}>{initials(item?.peer?.displayName)}</Text>
+                            <Text style={{ color: C.textOnBrand, fontWeight: "900" }}>{initials(item?.peer?.displayName)}</Text>
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={[s.rowTitle, { color: C.white }]}>{item?.peer?.displayName || tr(appLanguage, "Member")}</Text>

@@ -29,40 +29,40 @@ function statusLabel(status: string) {
 function statusStyle(status: string) {
   if (status === "prayed_for" || status === "contacted") {
     return {
-      color: "#43b66f",
-      background: "rgba(67, 182, 111, 0.12)",
-      border: "1px solid rgba(67, 182, 111, 0.45)"
+      color: "var(--success)",
+      background: "var(--success-wash)",
+      border: "1px solid var(--success-border)"
     };
   }
 
   if (status === "reviewed") {
     return {
-      color: "#d8a634",
-      background: "rgba(216, 166, 52, 0.12)",
-      border: "1px solid rgba(216, 166, 52, 0.45)"
+      color: "var(--gold)",
+      background: "var(--accent-wash)",
+      border: "1px solid color-mix(in srgb, var(--gold) 45%, transparent)"
     };
   }
 
   return {
-    color: "#a7a7a7",
-    background: "#181818",
-    border: "1px solid #252525"
+    color: "var(--muted)",
+    background: "var(--surface-2)",
+    border: "1px solid var(--line)"
   };
 }
 
 function visibilityStyle(isPublic: boolean) {
   if (isPublic) {
     return {
-      color: "#d8a634",
-      background: "rgba(216, 166, 52, 0.12)",
-      border: "1px solid rgba(216, 166, 52, 0.4)"
+      color: "var(--gold)",
+      background: "var(--accent-wash)",
+      border: "1px solid color-mix(in srgb, var(--gold) 40%, transparent)"
     };
   }
 
   return {
-    color: "#f87171",
-    background: "rgba(239, 68, 68, 0.12)",
-    border: "1px solid rgba(239, 68, 68, 0.35)"
+    color: "var(--danger)",
+    background: "var(--danger-wash)",
+    border: "1px solid var(--danger-border)"
   };
 }
 
@@ -238,9 +238,9 @@ export function PrayersPage() {
                     style={{
                       textAlign: "left",
                       cursor: "pointer",
-                      borderColor: active ? "#d8a634" : "#252525",
+                      borderColor: active ? "var(--gold)" : "var(--line)",
                       boxShadow: active
-                        ? "0 0 0 1px rgba(216, 166, 52, 0.25)"
+                        ? "0 0 0 1px color-mix(in srgb, var(--gold) 25%, transparent)"
                         : "none"
                     }}
                   >
@@ -298,8 +298,8 @@ export function PrayersPage() {
                   gap: 10,
                   padding: 16,
                   borderRadius: 18,
-                  background: "#181818",
-                  border: "1px solid #252525"
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--line)"
                 }}
               >
                 <div

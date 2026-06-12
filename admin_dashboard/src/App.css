@@ -204,31 +204,31 @@
 .admin-table th,
 .admin-table td {
   padding: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
 }
 
 .admin-table th {
-  color: #d4af37;
+  color: var(--gold);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .admin-table td {
-  color: rgba(255, 255, 255, 0.86);
+  color: var(--text);
 }
 
 .admin-table code {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--muted);
   font-size: 12px;
 }
 
 .status-pill.danger {
-  background: rgba(239, 68, 68, 0.14);
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.35);
+  background: var(--danger-wash);
+  color: var(--danger);
+  border-color: var(--danger-border);
 }
 
 @media (max-width: 760px) {

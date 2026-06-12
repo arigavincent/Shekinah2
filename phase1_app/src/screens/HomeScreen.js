@@ -138,7 +138,7 @@ function HomeHero({ live, featuredVideo, go, appLanguage }) {
             paddingVertical: 7
           }}
         >
-          <Text style={{ color: C.white, fontWeight: "900", fontSize: 12 }}>
+          <Text style={{ color: C.textOnBrand, fontWeight: "900", fontSize: 12 }}>
             {tr(appLanguage, live?.isLive ? "LIVE NOW" : "NEXT SERVICE")}
           </Text>
         </View>
@@ -158,11 +158,11 @@ function HomeHero({ live, featuredVideo, go, appLanguage }) {
       </View>
 
       <View style={{ padding: 16 }}>
-        <Text style={{ color: C.white, fontSize: 28, fontWeight: "900" }}>
+        <Text style={{ color: C.textOnBrand, fontSize: 28, fontWeight: "900" }}>
           {live?.title || "Shekinah Sons Global"}
         </Text>
 
-        <Text style={{ color: C.muted, fontSize: 14, fontWeight: "800", marginTop: 8 }}>
+        <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 14, fontWeight: "800", marginTop: 8 }}>
           {live?.isLive ? tr(appLanguage, "Join the service now.") : live?.nextService || tr(appLanguage, "Stay connected to the word, worship, and prayer.")}
         </Text>
 
@@ -194,7 +194,7 @@ function HomeHero({ live, featuredVideo, go, appLanguage }) {
             }}
             onPress={() => go("Sermons")}
           >
-            <Text style={{ color: C.white, fontWeight: "900" }}>{tr(appLanguage, "Sermons")}</Text>
+            <Text style={{ color: C.textOnBrand, fontWeight: "900" }}>{tr(appLanguage, "Sermons")}</Text>
           </Pressable>
         </View>
       </View>
@@ -294,17 +294,17 @@ function FeaturedMediaCard({ item, onPress, progressEntry, downloadEntry, appLan
             <Ionicons
               name={isAudio ? "musical-notes-outline" : "play-outline"}
               size={20}
-              color={C.white}
+              color={C.textOnBrand}
             />
           </View>
         </View>
 
         <View style={{ padding: 12 }}>
-          <Text style={{ color: C.white, fontSize: 17, fontWeight: "900" }} numberOfLines={2}>
+          <Text style={{ color: C.textOnBrand, fontSize: 17, fontWeight: "900" }} numberOfLines={2}>
             {item.title}
           </Text>
 
-          <Text style={{ color: C.muted, fontSize: 12, fontWeight: "800", marginTop: 5 }} numberOfLines={1}>
+          <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, fontWeight: "800", marginTop: 5 }} numberOfLines={1}>
             {item.speaker || item.category || "Sermon"} · {item.date || item.sermonDate || ""}
           </Text>
 

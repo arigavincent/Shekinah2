@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { clearSession, getUser } from "../auth/session";
+import { useAdminTheme } from "../theme";
 
 const navItems = [
   { label: "Overview", to: "/" },
@@ -22,6 +23,7 @@ const navItems = [
 export function AdminLayout() {
   const navigate = useNavigate();
   const user = getUser();
+  const { mode, toggleTheme } = useAdminTheme();
 
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     window.matchMedia("(min-width: 981px)").matches
@@ -111,6 +113,12 @@ export function AdminLayout() {
           <div className="workspace-title">
             <strong>Shekinah Admin</strong>
             <span>Content dashboard</span>
+          </div>
+
+          <div className="topbar-actions">
+            <button type="button" className="secondary compact theme-toggle" onClick={toggleTheme}>
+              {mode === "light" ? "Dark" : "Light"}
+            </button>
           </div>
         </header>
 

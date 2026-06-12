@@ -290,11 +290,11 @@ export function AboutScreen({ go, appLanguage = "en" }) {
               SHEKINAH SONS GLOBAL
             </Text>
 
-            <Text style={{ color: C.white, fontSize: 30, fontWeight: "900", marginTop: 8 }}>
+            <Text style={{ color: C.textOnBrand, fontSize: 30, fontWeight: "900", marginTop: 8 }}>
               Stay connected to the house.
             </Text>
 
-            <Text style={{ color: C.muted, fontSize: 14, fontWeight: "700", marginTop: 10 }}>
+            <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 14, fontWeight: "700", marginTop: 10 }}>
               {contactSummary}
             </Text>
 
@@ -324,7 +324,7 @@ export function AboutScreen({ go, appLanguage = "en" }) {
                 }}
                 onPress={() => openUrl(whatsappUrl(primaryPhone))}
               >
-                <Text style={{ color: C.white, fontWeight: "900" }}>WhatsApp</Text>
+                <Text style={{ color: C.textOnBrand, fontWeight: "900" }}>WhatsApp</Text>
               </Pressable>
             </View>
           </View>

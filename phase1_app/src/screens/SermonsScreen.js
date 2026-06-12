@@ -297,12 +297,12 @@ function CategoryTile({ category, sermons, onPress }) {
         </View>
 
         <View style={{ padding: 12 }}>
-          <Text
-            style={{
-              color: C.white,
-              fontSize: 17,
-              fontWeight: "900"
-            }}
+            <Text
+              style={{
+                color: C.textOnBrand,
+                fontSize: 17,
+                fontWeight: "900"
+              }}
             numberOfLines={2}
           >
             {name}
@@ -310,7 +310,7 @@ function CategoryTile({ category, sermons, onPress }) {
 
           <Text
             style={{
-              color: C.muted,
+              color: "rgba(255,255,255,0.82)",
               fontSize: 12,
               fontWeight: "800",
               marginTop: 5
@@ -435,7 +435,7 @@ function HighlightCard({ item, featured = false, openSermon }) {
             <Ionicons
               name={item.type === "audio" ? "musical-notes-outline" : "play-outline"}
               size={22}
-              color={C.white}
+              color={C.textOnBrand}
             />
           </View>
         </View>
@@ -443,7 +443,7 @@ function HighlightCard({ item, featured = false, openSermon }) {
         <View style={{ padding: 14 }}>
           <Text
             style={{
-              color: C.white,
+              color: C.textOnBrand,
               fontSize: featured ? 24 : 18,
               fontWeight: "900"
             }}
@@ -454,7 +454,7 @@ function HighlightCard({ item, featured = false, openSermon }) {
 
           <Text
             style={{
-              color: C.muted,
+              color: "rgba(255,255,255,0.82)",
               fontSize: 13,
               fontWeight: "800",
               marginTop: 6

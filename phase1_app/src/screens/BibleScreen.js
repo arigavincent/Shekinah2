@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { Screen } from "../components/Screen";
+import { C, makeThemedStyles, useAppTheme } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { listBibleVersions } from "../api/bibleVersionsApi";
 import {
@@ -132,11 +133,13 @@ async function searchBible(db, query) {
 }
 
 function Header({ title, subtitle, onBack, right }) {
+  const { mode, toggleTheme } = useAppTheme();
+
   return (
     <View style={styles.header}>
       {onBack ? (
         <Pressable style={styles.iconBtn} onPress={onBack}>
-          <Ionicons name="arrow-back" size={26} color="#fff" />
+          <Ionicons name="arrow-back" size={26} color={C.text} />
         </Pressable>
       ) : (
         <View style={styles.iconGhost} />
@@ -147,7 +150,16 @@ function Header({ title, subtitle, onBack, right }) {
         {!!subtitle && <Text style={styles.headerSubtitle}>{subtitle}</Text>}
       </View>
 
-      <View style={styles.headerRight}>{right}</View>
+      <View style={styles.headerRight}>
+        {right}
+        <Pressable style={styles.iconBtn} onPress={toggleTheme}>
+          <Ionicons
+            name={mode === "light" ? "moon-outline" : "sunny-outline"}
+            size={22}
+            color={C.gold}
+          />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -655,7 +667,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
           onBack={() => go?.("Home")}
           right={
             <Pressable onPress={() => setStage("library")}>
-              <Ionicons name="library-outline" size={28} color="#fff" />
+              <Ionicons name="library-outline" size={28} color={C.text} />
             </Pressable>
           }
         />
@@ -679,7 +691,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
         <ScrollView contentContainerStyle={styles.page}>
           {visibleBooks.map(item => (
             <Pressable key={item.id} style={styles.bookCard} onPress={() => openBook(item)}>
-              <Ionicons name="book" size={36} color="#b2223a" />
+              <Ionicons name="book" size={36} color={C.gold} />
 
               <View style={styles.bookMeta}>
                 <Text style={styles.bookTitle}>
@@ -688,7 +700,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
                 <TestamentLabel value={item.testament} />
               </View>
 
-              <Ionicons name="arrow-forward" size={34} color="#777" />
+              <Ionicons name="arrow-forward" size={34} color={C.muted} />
             </Pressable>
           ))}
         </ScrollView>
@@ -721,7 +733,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
                   <Text style={styles.versionState}>{tr(appLanguage, "Installed")}</Text>
                   {removable ? (
                     <Pressable disabled={removingVersionId === version.id} onPress={() => handleRemoveVersion(version.id)}>
-                      <Text style={[styles.versionState, { color: "#f87171" }]}>
+                      <Text style={[styles.versionState, { color: C.red }]}>
                         {removingVersionId === version.id ? tr(appLanguage, "Removing...") : tr(appLanguage, "Remove")}
                       </Text>
                     </Pressable>
@@ -737,19 +749,19 @@ export function BibleScreen({ go, appLanguage = "en" }) {
               value={catalogQuery}
               onChangeText={setCatalogQuery}
               placeholder="Search version or language..."
-              placeholderTextColor="#888"
+              placeholderTextColor={C.faint}
               style={[styles.searchInput, { marginBottom: 10 }]}
             />
             <Text style={styles.infoText}>
               Direct provider catalog with offline install to this device.
             </Text>
             {installingVersionId ? (
-              <Text style={[styles.infoText, { color: "#fff", marginTop: 8 }]}>
+              <Text style={[styles.infoText, { color: C.text, marginTop: 8 }]}>
                 {installStage || tr(appLanguage, "Preparing Bible download...")}
               </Text>
             ) : null}
             {catalogError ? (
-              <Text style={[styles.infoText, { color: "#f87171", marginTop: 8 }]}>
+              <Text style={[styles.infoText, { color: C.red, marginTop: 8 }]}>
                 {catalogError}
               </Text>
             ) : null}
@@ -796,7 +808,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
                   </Text>
                   <Text style={styles.muted}>{tr(appLanguage, "Chapter")} {item.chapter}</Text>
                 </View>
-                <Ionicons name="arrow-forward" size={26} color="#777" />
+                <Ionicons name="arrow-forward" size={26} color={C.muted} />
               </Pressable>
             ))
           ) : (
@@ -817,7 +829,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
                   </Text>
                   <Text style={styles.muted}>{tr(appLanguage, "Chapter")} {item.chapter}</Text>
                 </View>
-                <Ionicons name="heart" size={24} color="#ff5a5f" />
+                <Ionicons name="heart" size={24} color={C.red} />
               </Pressable>
             ))
           ) : (
@@ -836,7 +848,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
           onBack={() => setStage("books")}
           right={
             <Pressable onPress={() => setStage("library")}>
-              <Ionicons name="library-outline" size={28} color="#fff" />
+              <Ionicons name="library-outline" size={28} color={C.text} />
             </Pressable>
           }
         />
@@ -892,12 +904,12 @@ export function BibleScreen({ go, appLanguage = "en" }) {
               <Ionicons
                 name={isFavorite ? "heart" : "heart-outline"}
                 size={30}
-                color={isFavorite ? "#ff5a5f" : "#fff"}
+                color={isFavorite ? C.red : C.text}
               />
             </Pressable>
 
             <Pressable onPress={() => setShowSearch(v => !v)}>
-              <Ionicons name="search" size={28} color="#fff" />
+              <Ionicons name="search" size={28} color={C.text} />
             </Pressable>
 
             <Pressable onPress={cycleFontSize}>
@@ -914,7 +926,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
               value={query}
               onChangeText={setQuery}
               placeholder="Search installed Bible versions..."
-              placeholderTextColor="#888"
+              placeholderTextColor={C.faint}
               style={styles.searchInput}
               autoFocus
             />
@@ -1015,7 +1027,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   );
 }
 
-const styles = {
+const styles = makeThemedStyles(C => ({
   center: {
     flex: 1,
     alignItems: "center",
@@ -1026,7 +1038,7 @@ const styles = {
     paddingHorizontal: 18,
     paddingTop: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#222",
+    borderBottomColor: C.line,
     flexDirection: "row",
     alignItems: "center",
     gap: 12
@@ -1045,12 +1057,12 @@ const styles = {
     flex: 1
   },
   headerTitle: {
-    color: "#fff",
+    color: C.text,
     fontSize: 24,
     fontWeight: "900"
   },
   headerSubtitle: {
-    color: "#999",
+    color: C.muted,
     fontSize: 13,
     marginTop: 3
   },
@@ -1061,7 +1073,7 @@ const styles = {
   },
   tabs: {
     flexDirection: "row",
-    backgroundColor: "#2d3699"
+    backgroundColor: C.blue
   },
   tab: {
     flex: 1,
@@ -1071,10 +1083,10 @@ const styles = {
     borderBottomColor: "transparent"
   },
   tabActive: {
-    borderBottomColor: "#ff6b35"
+    borderBottomColor: C.gold
   },
   tabText: {
-    color: "#fff",
+    color: C.textOnBrand,
     fontSize: 13,
     fontWeight: "900",
     letterSpacing: 1.2
@@ -1088,9 +1100,9 @@ const styles = {
     paddingHorizontal: 18,
     marginBottom: 22,
     borderWidth: 1,
-    borderColor: "#444",
+    borderColor: C.line,
     borderRadius: 8,
-    backgroundColor: "#191919",
+    backgroundColor: C.surface,
     flexDirection: "row",
     alignItems: "center",
     gap: 18
@@ -1099,17 +1111,17 @@ const styles = {
     flex: 1
   },
   bookTitle: {
-    color: "#f4f4f4",
+    color: C.text,
     fontSize: 21,
     fontWeight: "700"
   },
   muted: {
-    color: "#888",
+    color: C.muted,
     fontSize: 16,
     marginTop: 8
   },
   sectionTitle: {
-    color: "#ddd",
+    color: C.text,
     fontSize: 22,
     fontWeight: "900",
     marginBottom: 28
@@ -1123,19 +1135,19 @@ const styles = {
     width: "22%",
     minHeight: 86,
     borderWidth: 1,
-    borderColor: "#3d2b2b",
+    borderColor: C.line,
     borderRadius: 8,
-    backgroundColor: "#1d1d1d",
+    backgroundColor: C.surface,
     alignItems: "center",
     justifyContent: "center"
   },
   gridNumber: {
-    color: "#d7d3df",
+    color: C.text,
     fontSize: 28,
     fontWeight: "900"
   },
   gridLabel: {
-    color: "#888",
+    color: C.muted,
     fontSize: 14,
     marginTop: 6
   },
@@ -1155,22 +1167,22 @@ const styles = {
     paddingHorizontal: 14,
     borderRadius: 19,
     borderWidth: 1,
-    borderColor: "#444",
+    borderColor: C.line,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#111"
+    backgroundColor: C.backgroundElevated
   },
   modePillActive: {
-    borderColor: "#f4c542",
-    backgroundColor: "#2a2312"
+    borderColor: C.gold,
+    backgroundColor: C.surface2
   },
   modeText: {
-    color: "#bbb",
+    color: C.muted,
     fontSize: 14,
     fontWeight: "800"
   },
   modeTextActive: {
-    color: "#f4c542"
+    color: C.gold
   },
   readerLabels: {
     flexDirection: "row",
@@ -1178,7 +1190,7 @@ const styles = {
   },
   readerLabel: {
     flex: 1,
-    color: "#cfcbd8",
+    color: C.text,
     fontSize: 20,
     fontWeight: "900"
   },
@@ -1193,30 +1205,30 @@ const styles = {
     flex: 1
   },
   chapterHeading: {
-    color: "#ff5a5f",
+    color: C.gold,
     fontSize: 32,
     fontWeight: "900",
     marginBottom: 24
   },
   verseText: {
-    color: "#d7d3df",
+    color: C.text,
     fontSize: 26,
     lineHeight: 42,
     fontWeight: "600",
     marginBottom: 26
   },
   verseNo: {
-    color: "#4caf63",
+    color: C.green,
     fontSize: 17,
     fontWeight: "900"
   },
   fontIcon: {
-    color: "#fff",
+    color: C.text,
     fontSize: 27,
     fontWeight: "900"
   },
   title: {
-    color: "#fff",
+    color: C.text,
     fontSize: 20,
     fontWeight: "800"
   },
@@ -1225,33 +1237,33 @@ const styles = {
     marginBottom: 18,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: "#171717",
+    backgroundColor: C.surface,
     borderWidth: 1,
-    borderColor: "#333"
+    borderColor: C.line
   },
   searchInput: {
     minHeight: 48,
     borderWidth: 1,
-    borderColor: "#444",
+    borderColor: C.line,
     borderRadius: 10,
     paddingHorizontal: 12,
-    color: "#fff",
+    color: C.text,
     fontSize: 16,
     marginBottom: 12
   },
   searchResult: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#333"
+    borderBottomColor: C.line
   },
   searchRef: {
-    color: "#f4c542",
+    color: C.gold,
     fontSize: 15,
     fontWeight: "900",
     marginBottom: 4
   },
   searchText: {
-    color: "#ddd",
+    color: C.text,
     fontSize: 15,
     lineHeight: 22
   },
@@ -1260,9 +1272,9 @@ const styles = {
     paddingHorizontal: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: C.line,
     borderRadius: 10,
-    backgroundColor: "#141414",
+    backgroundColor: C.surface,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1272,12 +1284,12 @@ const styles = {
     flex: 1
   },
   versionTitle: {
-    color: "#fff",
+    color: C.text,
     fontSize: 18,
     fontWeight: "800"
   },
   versionState: {
-    color: "#f4c542",
+    color: C.gold,
     fontSize: 14,
     fontWeight: "900"
   },
@@ -1286,17 +1298,17 @@ const styles = {
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2d3699",
-    backgroundColor: "#11162f"
+    borderColor: C.blue,
+    backgroundColor: C.surface2
   },
   infoTitle: {
-    color: "#fff",
+    color: C.text,
     fontSize: 16,
     fontWeight: "900",
     marginBottom: 8
   },
   infoText: {
-    color: "#c6cee8",
+    color: C.muted,
     fontSize: 14,
     lineHeight: 22
   },
@@ -1305,16 +1317,16 @@ const styles = {
     paddingHorizontal: 18,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: C.line,
     borderRadius: 10,
-    backgroundColor: "#141414",
+    backgroundColor: C.surface,
     flexDirection: "row",
     alignItems: "center",
     gap: 16
   },
   emptyText: {
-    color: "#888",
+    color: C.muted,
     fontSize: 15,
     marginBottom: 26
   }
-};
+}));

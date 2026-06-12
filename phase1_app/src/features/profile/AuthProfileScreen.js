@@ -503,12 +503,12 @@ const s = makeThemedStyles(C => ({
     marginBottom: 12
   },
   heroTitle: {
-    color: C.white,
+    color: C.textOnBrand,
     fontSize: 24,
     fontWeight: "900"
   },
   heroText: {
-    color: C.muted,
+    color: "rgba(255,255,255,0.82)",
     textAlign: "center",
     lineHeight: 20,
     marginTop: 8
