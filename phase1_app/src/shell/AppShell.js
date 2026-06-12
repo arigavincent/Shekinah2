@@ -11,9 +11,10 @@ import { AuthProfileScreen } from "../features/profile/AuthProfileScreen";
 
 import { ContentProvider } from "../providers/ContentProvider";
 
-import { C } from "../constants/theme";
+import { C, setThemeMode, ThemeContext } from "../constants/theme";
 import {
   DEFAULT_APP_LANGUAGE,
+  DEFAULT_APP_THEME,
   DEFAULT_NOTIFICATION_PREFS,
   STORAGE_KEYS
 } from "../constants/storage";
@@ -116,6 +117,8 @@ function App() {
   const [notificationPrefsLoaded, setNotificationPrefsLoaded] = useState(false);
   const [appLanguage, setAppLanguage] = useState(DEFAULT_APP_LANGUAGE);
   const [appLanguageLoaded, setAppLanguageLoaded] = useState(false);
+  const [appTheme, setAppTheme] = useState(DEFAULT_APP_THEME);
+  const [appThemeLoaded, setAppThemeLoaded] = useState(false);
   const [miniPlayer, setMiniPlayer] = useState(null);
 
 useEffect(() => {
@@ -148,6 +151,36 @@ useEffect(() => {
   }
 
   loadFavouriteDevotions();
+
+  return () => {
+    mounted = false;
+  };
+}, []);
+
+useEffect(() => {
+  let mounted = true;
+
+  async function loadAppTheme() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.appTheme);
+
+      if (!mounted) return;
+
+      setAppTheme(raw === "light" ? "light" : DEFAULT_APP_THEME);
+    } catch (error) {
+      console.warn("Failed to load app theme", error);
+
+      if (mounted) {
+        setAppTheme(DEFAULT_APP_THEME);
+      }
+    } finally {
+      if (mounted) {
+        setAppThemeLoaded(true);
+      }
+    }
+  }
+
+  loadAppTheme();
 
   return () => {
     mounted = false;
@@ -242,6 +275,18 @@ useEffect(() => {
     console.warn("Failed to save app language", error);
   });
 }, [appLanguage, appLanguageLoaded]);
+
+useEffect(() => {
+  if (!appThemeLoaded) return;
+
+  AsyncStorage.setItem(STORAGE_KEYS.appTheme, appTheme).catch(error => {
+    console.warn("Failed to save app theme", error);
+  });
+}, [appTheme, appThemeLoaded]);
+
+useEffect(() => {
+  setThemeMode(appTheme);
+}, [appTheme]);
 
 
 useEffect(() => {
@@ -402,7 +447,15 @@ useEffect(() => {
       case "Branches":
         return <BranchesScreen go={go} appLanguage={appLanguage} />;
       case "Profile":
-        return <AuthProfileScreen go={go} appLanguage={appLanguage} setAppLanguage={setAppLanguage} />;
+        return (
+          <AuthProfileScreen
+            go={go}
+            appLanguage={appLanguage}
+            setAppLanguage={setAppLanguage}
+            appTheme={appTheme}
+            setAppTheme={setAppTheme}
+          />
+        );
       case "Bible":
         return <BibleScreen go={go} appLanguage={appLanguage} />;
       case "ReadingPlans":
@@ -439,10 +492,17 @@ useEffect(() => {
     }
   };
 
+  const themeContextValue = {
+    mode: appTheme,
+    setMode: setAppTheme,
+    toggleTheme: () => setAppTheme(current => (current === "light" ? "dark" : "light"))
+  };
+
   return (
+  <ThemeContext.Provider value={themeContextValue}>
   <ContentProvider>
     <SafeAreaView style={s.app}>
-      <StatusBar barStyle="light-content" backgroundColor={C.black} />
+      <StatusBar barStyle={appTheme === "light" ? "dark-content" : "light-content"} backgroundColor={C.background} />
       {renderScreen()}
 
       {miniPlayer && screen !== "AudioPlayer" ? (
@@ -461,6 +521,7 @@ useEffect(() => {
       <Drawer visible={drawerOpen} close={() => setDrawerOpen(false)} go={go} appLanguage={appLanguage} />
     </SafeAreaView>
   </ContentProvider>
+  </ThemeContext.Provider>
 );
 }
 

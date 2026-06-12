@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { C } from "../constants/theme";
+import { C, makeThemedStyles } from "../constants/theme";
 import { PHASE1_IMAGES } from "../content";
 import { sermonThumbnail } from "../utils/mediaUrl";
 import {
@@ -101,7 +101,7 @@ export function MiniPlayer({ item, sermon, onOpen, onClose }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = makeThemedStyles(C => ({
   root: {
     position: "absolute",
     left: 14,
@@ -172,4 +172,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   }
-});
+}));

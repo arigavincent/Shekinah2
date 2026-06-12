@@ -1,10 +1,12 @@
 export const STORAGE_KEYS = {
   favouriteDevotions: "shekinah.phase1.favouriteDevotions",
   notificationPreferences: "shekinah.phase1.notificationPreferences",
-  appLanguage: "shekinah.phase1.appLanguage"
+  appLanguage: "shekinah.phase1.appLanguage",
+  appTheme: "shekinah.phase1.appTheme"
 };
 
 export const DEFAULT_APP_LANGUAGE = "en";
+export const DEFAULT_APP_THEME = "dark";
 
 export const DEFAULT_NOTIFICATION_PREFS = {
   newSermons: true,

@@ -13,7 +13,7 @@ import {
 import { Screen } from "../components/Screen";
 import { IconButton } from "../components/IconButton";
 import { TopBar } from "../components/TopBar";
-import { C } from "../constants/theme";
+import { C, makeThemedStyles } from "../constants/theme";
 import { loadSavedSession } from "../features/profile/authSession";
 import { tr } from "../i18n/labels";
 import {
@@ -296,7 +296,7 @@ export function PrivateChatThreadScreen({ go, detail, appLanguage = "en" }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = makeThemedStyles(C => ({
   messageWrap: {
     width: "100%",
     marginBottom: 12
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
   composer: {
     borderTopWidth: 1,
     borderTopColor: C.line,
-    backgroundColor: C.black,
+    backgroundColor: C.background,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 90
@@ -363,4 +363,4 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 0
   }
-});
+}));

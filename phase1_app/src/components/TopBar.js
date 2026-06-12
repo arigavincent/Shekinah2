@@ -3,11 +3,13 @@ import { Image, Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { brandLogo } from "../constants/assets";
-import { C } from "../constants/theme";
+import { C, useAppTheme } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 
 export function TopBar({ title, go, right, back, onBack, onMenu, appLanguage = "en" }) {
+  const { mode, toggleTheme } = useAppTheme();
+
   const handleLeftPress = () => {
     if (back) {
       if (typeof onBack === "function") {
@@ -38,7 +40,16 @@ export function TopBar({ title, go, right, back, onBack, onMenu, appLanguage = "
         <Text style={s.logoText}>{tr(appLanguage, title || "Shekinah Sons Global")}</Text>
       </View>
 
-      <View style={s.topRight}>{right}</View>
+      <View style={s.topRight}>
+        <Pressable style={s.topIcon} onPress={toggleTheme}>
+          <Ionicons
+            name={mode === "light" ? "moon-outline" : "sunny-outline"}
+            size={20}
+            color={C.white}
+          />
+        </Pressable>
+        {right}
+      </View>
     </View>
   );
 }

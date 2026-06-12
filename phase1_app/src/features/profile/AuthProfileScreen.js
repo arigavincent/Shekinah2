@@ -21,22 +21,9 @@ import {
 } from "../auth/authSession";
 import { API_CONFIG } from "../../config/apiConfig";
 import { APP_LANGUAGES, tr } from "../../i18n/labels";
+import { C, makeThemedStyles, THEME_OPTIONS, useAppTheme } from "../../constants/theme";
 
-const C = {
-  black: "#000000",
-  surface: "#101010",
-  surface2: "#181818",
-  line: "#252525",
-  white: "#FFFFFF",
-  muted: "#A7A7A7",
-  faint: "#666666",
-  gold: "#D8A634",
-  blue: "#092B57",
-  green: "#43B66F",
-  red: "#F13B3B"
-};
-
-export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage }) {
+export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage, appTheme, setAppTheme }) {
   const [mode, setMode] = useState("Login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -157,6 +144,12 @@ export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage }) {
           setAppLanguage={setAppLanguage}
         />
 
+        <ThemeCard
+          appLanguage={appLanguage}
+          appTheme={appTheme}
+          setAppTheme={setAppTheme}
+        />
+
         {signedIn ? (
           <SignedInView
             user={session.user}
@@ -186,6 +179,8 @@ export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage }) {
 }
 
 function Top({ go, appLanguage = "en" }) {
+  const { mode, toggleTheme } = useAppTheme();
+
   return (
     <View style={s.topBar}>
       <Pressable style={s.iconBtn} onPress={() => go("Home")}>
@@ -197,7 +192,9 @@ function Top({ go, appLanguage = "en" }) {
         <Text style={s.subtitle}>{tr(appLanguage, "Account and member access")}</Text>
       </View>
 
-      <View style={s.iconSpacer} />
+      <Pressable style={s.iconBtn} onPress={toggleTheme}>
+        <Ionicons name={mode === "light" ? "moon-outline" : "sunny-outline"} size={20} color={C.white} />
+      </Pressable>
     </View>
   );
 }
@@ -217,6 +214,29 @@ function LanguageCard({ appLanguage, setAppLanguage }) {
           >
             <Text style={[s.modeText, appLanguage === item.key && s.modeTextActive]}>
               {item.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ThemeCard({ appLanguage, appTheme, setAppTheme }) {
+  return (
+    <View style={s.card}>
+      <Text style={s.sectionTitle}>{tr(appLanguage, "App Theme")}</Text>
+      <Text style={s.noteText}>{tr(appLanguage, "Switch the app palette for every screen.")}</Text>
+
+      <View style={[s.modeRow, { marginTop: 14, marginBottom: 0 }]}>
+        {THEME_OPTIONS.map(item => (
+          <Pressable
+            key={item.key}
+            style={[s.modeBtn, appTheme === item.key && s.modeActive]}
+            onPress={() => setAppTheme?.(item.key)}
+          >
+            <Text style={[s.modeText, appTheme === item.key && s.modeTextActive]}>
+              {tr(appLanguage, item.label)}
             </Text>
           </Pressable>
         ))}
@@ -398,10 +418,10 @@ function MenuRow({ label, onPress }) {
   );
 }
 
-const s = StyleSheet.create({
+const s = makeThemedStyles(C => ({
   screen: {
     flex: 1,
-    backgroundColor: C.black,
+    backgroundColor: C.background,
     paddingBottom: 76
   },
   topBar: {
@@ -411,7 +431,7 @@ const s = StyleSheet.create({
     paddingBottom: 12,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.black
+    backgroundColor: C.background
   },
   iconBtn: {
     width: 48,
@@ -477,7 +497,7 @@ const s = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: C.black,
+    backgroundColor: C.backgroundElevated,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12
@@ -684,4 +704,4 @@ const s = StyleSheet.create({
     color: C.red,
     fontWeight: "900"
   }
-});
+}));
