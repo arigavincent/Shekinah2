@@ -16,7 +16,7 @@ import YoutubePlayer from "react-native-youtube-iframe";
 import { PHASE1_IMAGES } from "../content";
 import { C } from "../constants/theme";
 import { tr } from "../i18n/labels";
-import { listCommunityMessages, sendCommunityMessage } from "../api/communityApi";
+import { liveChatSocketUrl, listCommunityMessages, sendCommunityMessage } from "../api/communityApi";
 import { loadSavedSession } from "../features/profile/authSession";
 import { useContent } from "../providers/ContentProvider";
 import { s } from "../styles/appStyles";
@@ -44,12 +44,14 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
   const { width } = useWindowDimensions();
   const chatScrollRef = useRef(null);
+  const liveSocketRef = useRef(null);
   const lastChatTimestampRef = useRef("");
+  const reconnectTimerRef = useRef(null);
+  const liveStreamClosedRef = useRef(false);
   const [playing, setPlaying] = useState(true);
   const [session, setSession] = useState({ token: null, user: null });
   const [chatMessages, setChatMessages] = useState([]);
   const [chatLoading, setChatLoading] = useState(true);
-  const [chatRefreshing, setChatRefreshing] = useState(false);
   const [chatText, setChatText] = useState("");
   const [sending, setSending] = useState(false);
   const live = data.live;
@@ -87,17 +89,14 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       setChatMessages([]);
       lastChatTimestampRef.current = "";
       setChatLoading(false);
-      setChatRefreshing(false);
       return;
     }
 
-    if (showRefresh) setChatRefreshing(true);
-    else setChatLoading(true);
+    if (!showRefresh) setChatLoading(true);
 
     try {
       const response = await listCommunityMessages("live", {
-        order: "asc",
-        since: showRefresh ? lastChatTimestampRef.current : ""
+        order: "asc"
       });
 
       if (response?.active === false) {
@@ -106,20 +105,8 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       }
 
       const nextMessages = Array.isArray(response?.messages) ? response.messages : [];
-      if (showRefresh && chatMessages.length > 0) {
-        if (nextMessages.length === 0) return;
-        setChatMessages(current => {
-          const existing = new Set(current.map(item => item.id));
-          const additions = nextMessages.filter(item => !existing.has(item.id));
-          if (additions.length > 0) {
-            lastChatTimestampRef.current = additions[additions.length - 1]?.createdAt || lastChatTimestampRef.current;
-          }
-          return additions.length > 0 ? [...current, ...additions] : current;
-        });
-      } else {
-        setChatMessages(nextMessages);
-        lastChatTimestampRef.current = nextMessages[nextMessages.length - 1]?.createdAt || "";
-      }
+      setChatMessages(nextMessages);
+      lastChatTimestampRef.current = nextMessages[nextMessages.length - 1]?.createdAt || "";
     } catch (error) {
       if (!showRefresh) {
         Alert.alert(
@@ -129,25 +116,103 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       }
     } finally {
       setChatLoading(false);
-      setChatRefreshing(false);
     }
   }
 
   useEffect(() => {
+    liveStreamClosedRef.current = false;
+
+    function closeStream() {
+      liveStreamClosedRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (liveSocketRef.current) {
+        liveSocketRef.current.onopen = null;
+        liveSocketRef.current.onmessage = null;
+        liveSocketRef.current.onerror = null;
+        liveSocketRef.current.onclose = null;
+        liveSocketRef.current.close();
+        liveSocketRef.current = null;
+      }
+    }
+
+    function connectStream() {
+      if (!live?.isLive || liveStreamClosedRef.current) {
+        return;
+      }
+
+      const socket = new WebSocket(liveChatSocketUrl());
+      liveSocketRef.current = socket;
+
+      socket.onopen = () => {
+        loadLiveChat(true);
+      };
+
+      socket.onmessage = event => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.type === "message" && payload?.message?.id) {
+            setChatMessages(current => {
+              if (current.some(item => item.id === payload.message.id)) {
+                return current;
+              }
+              return [...current, payload.message].slice(-120);
+            });
+            lastChatTimestampRef.current = payload.message.createdAt || lastChatTimestampRef.current;
+            return;
+          }
+
+          if (payload?.type === "inactive") {
+            setChatMessages([]);
+            closeStream();
+            reload();
+          }
+        } catch {
+          // Ignore malformed realtime payloads and keep the stream alive.
+        }
+      };
+
+      socket.onclose = () => {
+        liveSocketRef.current = null;
+        if (!liveStreamClosedRef.current && live?.isLive) {
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            connectStream();
+          }, 2000);
+        }
+      };
+
+      socket.onerror = () => {
+        if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
+          socket.close();
+        }
+      };
+    }
+
     if (!live?.isLive) {
       setChatMessages([]);
       lastChatTimestampRef.current = "";
       setChatLoading(false);
-      return undefined;
+      closeStream();
+      return () => {
+        closeStream();
+      };
     }
 
     loadLiveChat(false);
-    const timer = setInterval(() => {
-      loadLiveChat(true);
-    }, 1500);
+    connectStream();
 
-    return () => clearInterval(timer);
-  }, [live?.isLive]);
+    const liveStateTimer = setInterval(() => {
+      reload();
+    }, 20000);
+
+    return () => {
+      clearInterval(liveStateTimer);
+      closeStream();
+    };
+  }, [live?.isLive, reload]);
 
   async function submitLiveChat() {
     const message = chatText.trim();

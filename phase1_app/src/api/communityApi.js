@@ -1,4 +1,5 @@
 import { request, requestWithAuth } from "./client";
+import { API_CONFIG } from "../config/apiConfig";
 
 export function listCommunityMessages(channel = "global", options = {}) {
   const params = new URLSearchParams();
@@ -19,4 +20,16 @@ export function sendCommunityMessage(payload) {
     method: "POST",
     body: payload
   });
+}
+
+export function liveChatSocketUrl() {
+  const baseUrl = API_CONFIG.baseUrl.replace(/\/+$/, "");
+  if (baseUrl.startsWith("https://")) {
+    return `${baseUrl.replace("https://", "wss://")}/api/v1/community/live/stream`;
+  }
+  if (baseUrl.startsWith("http://")) {
+    return `${baseUrl.replace("http://", "ws://")}/api/v1/community/live/stream`;
+  }
+
+  return `${baseUrl}/api/v1/community/live/stream`;
 }

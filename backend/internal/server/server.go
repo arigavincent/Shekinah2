@@ -107,6 +107,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/prayer-requests/mine", auth.RequireAuth(authService), prayerHandler.ListMine)
 		api.POST("/prayer-requests/:id/pray", auth.RequireAuth(authService), prayerHandler.Pray)
 		api.GET("/community/messages", communityHandler.List)
+		api.GET("/community/live/stream", communityHandler.LiveStream)
 		api.POST("/community/messages", auth.RequireAuth(authService), communityHandler.Create)
 		api.GET("/testimonies", testimonyHandler.List)
 		api.GET("/testimonies/mine", auth.RequireAuth(authService), testimonyHandler.ListMine)

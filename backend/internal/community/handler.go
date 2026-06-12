@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ariga/shekinah-backend/internal/auth"
@@ -12,10 +13,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/net/websocket"
 )
 
 type Handler struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	liveHub *liveHub
 }
 
 type CreateMessageRequest struct {
@@ -40,8 +43,70 @@ type Message struct {
 	UserEmail    string `json:"userEmail,omitempty"`
 }
 
+type liveEvent struct {
+	Type    string   `json:"type"`
+	Active  bool     `json:"active,omitempty"`
+	Message *Message `json:"message,omitempty"`
+}
+
+type liveHub struct {
+	mu      sync.Mutex
+	clients map[*websocket.Conn]struct{}
+}
+
 func NewHandler(db *pgxpool.Pool) Handler {
-	return Handler{db: db}
+	return Handler{
+		db:      db,
+		liveHub: newLiveHub(),
+	}
+}
+
+func newLiveHub() *liveHub {
+	return &liveHub{
+		clients: make(map[*websocket.Conn]struct{}),
+	}
+}
+
+func (h *liveHub) add(conn *websocket.Conn) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.clients[conn] = struct{}{}
+}
+
+func (h *liveHub) remove(conn *websocket.Conn) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.clients, conn)
+}
+
+func (h *liveHub) broadcast(event liveEvent) {
+	h.mu.Lock()
+	clients := make([]*websocket.Conn, 0, len(h.clients))
+	for conn := range h.clients {
+		clients = append(clients, conn)
+	}
+	h.mu.Unlock()
+
+	for _, conn := range clients {
+		if err := websocket.JSON.Send(conn, event); err != nil {
+			_ = conn.Close()
+			h.remove(conn)
+		}
+	}
+}
+
+func (h *liveHub) closeAll() {
+	h.mu.Lock()
+	clients := make([]*websocket.Conn, 0, len(h.clients))
+	for conn := range h.clients {
+		clients = append(clients, conn)
+	}
+	h.clients = make(map[*websocket.Conn]struct{})
+	h.mu.Unlock()
+
+	for _, conn := range clients {
+		_ = conn.Close()
+	}
 }
 
 func cleanChannel(value string) string {
@@ -328,9 +393,69 @@ func (h Handler) Create(c *gin.Context) {
 	item.UserEmail = ""
 	item.HiddenReason = ""
 
+	if channel == "live" && h.liveHub != nil {
+		broadcastItem := item
+		h.liveHub.broadcast(liveEvent{
+			Type:    "message",
+			Active:  true,
+			Message: &broadcastItem,
+		})
+	}
+
 	httpx.Created(c, gin.H{
 		"message": item,
 	})
+}
+
+func (h Handler) LiveStream(c *gin.Context) {
+	active, err := h.liveChatActive(c)
+	if err != nil {
+		httpx.Error(c, http.StatusInternalServerError, "community_live_stream_failed", "failed to load live chat state")
+		return
+	}
+	if !active {
+		httpx.Error(c, http.StatusConflict, "live_chat_inactive", "live chat is only available during an active live stream")
+		return
+	}
+
+	websocket.Handler(func(conn *websocket.Conn) {
+		if h.liveHub == nil {
+			_ = conn.Close()
+			return
+		}
+
+		h.liveHub.add(conn)
+		defer func() {
+			h.liveHub.remove(conn)
+			_ = conn.Close()
+		}()
+
+		_ = websocket.JSON.Send(conn, liveEvent{
+			Type:   "ready",
+			Active: true,
+		})
+
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			liveActive, checkErr := h.liveChatActive(c)
+			if checkErr != nil || !liveActive {
+				_ = websocket.JSON.Send(conn, liveEvent{
+					Type:   "inactive",
+					Active: false,
+				})
+				return
+			}
+
+			if err := websocket.JSON.Send(conn, liveEvent{
+				Type:   "heartbeat",
+				Active: true,
+			}); err != nil {
+				return
+			}
+		}
+	}).ServeHTTP(c.Writer, c.Request)
 }
 
 func (h Handler) AdminList(c *gin.Context) {
