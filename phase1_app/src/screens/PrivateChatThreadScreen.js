@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { Screen } from "../components/Screen";
+import { IconButton } from "../components/IconButton";
 import { TopBar } from "../components/TopBar";
 import { C } from "../constants/theme";
 import { loadSavedSession } from "../features/profile/authSession";
@@ -206,7 +207,8 @@ export function PrivateChatThreadScreen({ go, detail, appLanguage = "en" }) {
         title={peerName}
         go={go}
         back="Chat"
-        onBack={() => go("Chat", { tab: "Private" }, { replace: true })}
+        onBack={() => go("Chat", { tab: "Inbox" }, { replace: true })}
+        right={peer?.id ? <IconButton name="information-circle-outline" onPress={() => go("MemberProfile", { memberId: peer.id, displayName: peerName })} /> : null}
         appLanguage={appLanguage}
       />
 

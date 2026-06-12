@@ -323,7 +323,19 @@ const SWAHILI_LABELS = {
   "Open Private": "Fungua Faragha",
   "Request Pending": "Ombi Linasubiri",
   "Request Sent": "Ombi Limetumwa",
-  "Unable to update the chat request.": "Imeshindikana kusasisha ombi la mazungumzo."
+  "Unable to update the chat request.": "Imeshindikana kusasisha ombi la mazungumzo.",
+  Inbox: "Kikasha",
+  Requests: "Maombi",
+  People: "Watu",
+  "Search members or conversations": "Tafuta washiriki au mazungumzo",
+  "Open a profile to send a chat request.": "Fungua wasifu kutuma ombi la mazungumzo.",
+  "Open profile to request chat": "Fungua wasifu kuomba mazungumzo",
+  "No conversations yet": "Hakuna mazungumzo bado",
+  "No matching members or conversations.": "Hakuna washiriki au mazungumzo yanayolingana.",
+  "Encrypted conversation": "Mazungumzo yaliyosimbwa",
+  "No requests right now": "Hakuna maombi kwa sasa",
+  "Search for a member or tap one in Community Chat to send a private request.": "Tafuta mshiriki au gusa mmoja kwenye Mazungumzo ya Jamii kutuma ombi la faragha.",
+  "Testimonies": "Shuhuda"
 };
 
 export const APP_LANGUAGES = [

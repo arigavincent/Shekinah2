@@ -178,7 +178,7 @@ export function MemberProfileScreen({ go, detail, appLanguage = "en" }) {
               <Text style={[s.goldSmall, { marginTop: 0 }]}>{tr(appLanguage, "Request Pending")}</Text>
             </View>
           ) : member?.requestStatus === "pending" && member?.requestDirection === "incoming" ? (
-            <Pressable style={[s.primaryBtn, acting && { opacity: 0.6 }]} onPress={() => go("Chat", { tab: "Private" }, { replace: true })} disabled={acting}>
+            <Pressable style={[s.primaryBtn, acting && { opacity: 0.6 }]} onPress={() => go("Chat", { tab: "Inbox" }, { replace: true })} disabled={acting}>
               <Text style={s.primaryText}>{tr(appLanguage, "Open Private")}</Text>
             </Pressable>
           ) : (
