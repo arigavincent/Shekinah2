@@ -93,7 +93,6 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const liveVideoId = extractYouTubeId(live.youtubeId || live.youtubeUrl || "");
   const playerWidth = Math.max(280, width - 32);
   const liveStageHeight = Math.max(460, Math.min(620, width * 1.42));
-  const visibleLiveMessages = chatMessages.slice(-8);
   const pastServices = data.sermons
     .filter(playablePastService)
     .map(item => ({
@@ -302,6 +301,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       <TopBar title="Live Stream" go={go} onMenu={openDrawer} appLanguage={appLanguage} />
       <ScrollView
         contentContainerStyle={s.scrollPad}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -373,12 +373,13 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                       contentContainerStyle={s.liveChatListContent}
                       onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
                       keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled
                     >
                       {chatLoading ? (
                         <View style={s.liveChatEmpty}>
                           <Text style={[s.liveChatSubtle, { color: C.white }]}>{tr(appLanguage, "Loading live chat...")}</Text>
                         </View>
-                      ) : visibleLiveMessages.length === 0 ? (
+                      ) : chatMessages.length === 0 ? (
                         <View style={s.liveChatEmpty}>
                           <Text style={[s.liveChatTitle, { fontSize: 13 }]}>{tr(appLanguage, "No live responses yet")}</Text>
                           <Text style={[s.liveChatSubtle, { color: "rgba(255,255,255,0.78)" }]}>
@@ -386,7 +387,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                           </Text>
                         </View>
                       ) : (
-                        visibleLiveMessages.map(item => (
+                        chatMessages.map(item => (
                           <View key={item.id} style={s.liveMessageRow}>
                             <View style={s.liveAvatar}>
                               <Text style={s.liveAvatarText}>{messageInitial(item.displayName || tr(appLanguage, "Member"))}</Text>
