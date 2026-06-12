@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   BackHandler,
   SafeAreaView,
@@ -289,7 +289,7 @@ useEffect(() => {
 }, [appTheme]);
 
 
-useEffect(() => {
+  useEffect(() => {
   if (!favoritesLoaded) return;
 
   AsyncStorage.setItem(
@@ -498,10 +498,23 @@ useEffect(() => {
     toggleTheme: () => setAppTheme(current => (current === "light" ? "dark" : "light"))
   };
 
+  const memoizedThemeContextValue = useMemo(
+    () => themeContextValue,
+    [appTheme]
+  );
+
+  if (!appThemeLoaded) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#000000" }}>
+        <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      </SafeAreaView>
+    );
+  }
+
   return (
-  <ThemeContext.Provider value={themeContextValue}>
+  <ThemeContext.Provider value={memoizedThemeContextValue}>
   <ContentProvider>
-    <SafeAreaView style={s.app}>
+    <SafeAreaView key={appTheme} style={s.app}>
       <StatusBar barStyle={appTheme === "light" ? "dark-content" : "light-content"} backgroundColor={C.background} />
       {renderScreen()}
 
