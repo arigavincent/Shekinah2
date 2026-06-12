@@ -1,6 +1,7 @@
 package bibleversions
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -95,10 +96,102 @@ func sampleFilePath(versionID string) string {
 	}
 }
 
+func catalogSnapshotPath() string {
+	return filepath.Join("internal", "bibleversions", "catalog", "translations.csv")
+}
+
 func cleanText(value string) string {
 	value = strings.ReplaceAll(value, "\n", " ")
 	value = strings.ReplaceAll(value, "\r", " ")
 	return strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(value, " "))
+}
+
+func buildDownloadURL(translationID string) string {
+	id := strings.TrimSpace(translationID)
+	if id == "" {
+		return ""
+	}
+	return "https://ebible.org/Scriptures/" + id + "_vpl.txt"
+}
+
+func parseCatalogFromCSV(body string) []Version {
+	reader := csv.NewReader(strings.NewReader(strings.TrimPrefix(body, "\uFEFF")))
+	reader.FieldsPerRecord = -1
+	reader.LazyQuotes = true
+	rows, err := reader.ReadAll()
+	if err != nil || len(rows) < 2 {
+		return nil
+	}
+
+	get := func(row []string, index int) string {
+		if index < 0 || index >= len(row) {
+			return ""
+		}
+		return strings.TrimSpace(strings.TrimPrefix(row[index], "\uFEFF"))
+	}
+
+	items := make([]Version, 0, len(rows)-1)
+	seen := map[string]bool{}
+
+	for _, row := range rows[1:] {
+		translationID := strings.TrimSpace(get(row, 1))
+		if translationID == "" || seen[translationID] {
+			continue
+		}
+		if !strings.EqualFold(get(row, 27), "true") {
+			continue
+		}
+
+		seen[translationID] = true
+
+		languageName := firstNonEmpty(
+			get(row, 2),
+			get(row, 3),
+		)
+		name := firstNonEmpty(
+			get(row, 29),
+			get(row, 6),
+			get(row, 7),
+			translationID,
+		)
+		license := firstNonEmpty(
+			get(row, 9),
+			"Provider supplied",
+		)
+		attribution := firstNonEmpty(
+			get(row, 5),
+			"eBible.org",
+		)
+		abbreviation := strings.ToUpper(firstNonEmpty(
+			get(row, 1),
+			get(row, 0),
+			translationID,
+		))
+		if len(abbreviation) > 24 {
+			abbreviation = abbreviation[:24]
+		}
+
+		items = append(items, Version{
+			ID:           translationID,
+			Name:         name,
+			Abbreviation: abbreviation,
+			LanguageCode: strings.TrimSpace(get(row, 0)),
+			LanguageName: languageName,
+			License:      license,
+			Attribution:  attribution,
+			Provider:     "eBible.org",
+			DownloadURL:  buildDownloadURL(translationID),
+			FileType:     "vpl-text",
+		})
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		left := strings.ToLower(items[i].LanguageName + " " + items[i].Name)
+		right := strings.ToLower(items[j].LanguageName + " " + items[j].Name)
+		return left < right
+	})
+
+	return items
 }
 
 func parseCatalogFromHTML(body string) []Version {
@@ -169,13 +262,19 @@ func min(a, b int) int {
 func (h Handler) List(c *gin.Context) {
 	items := localCatalog()
 
-	resp, err := h.client.Get("https://ebible.org/Scriptures/")
-	if err == nil && resp != nil {
-		defer resp.Body.Close()
-		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
-		if readErr == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			if parsed := parseCatalogFromHTML(string(body)); len(parsed) > 0 {
-				items = parsed
+	if body, err := os.ReadFile(catalogSnapshotPath()); err == nil {
+		if parsed := parseCatalogFromCSV(string(body)); len(parsed) > 0 {
+			items = parsed
+		}
+	} else {
+		resp, err := h.client.Get("https://ebible.org/Scriptures/translations.csv")
+		if err == nil && resp != nil {
+			defer resp.Body.Close()
+			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 20*1024*1024))
+			if readErr == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				if parsed := parseCatalogFromCSV(string(body)); len(parsed) > 0 {
+					items = parsed
+				}
 			}
 		}
 	}
@@ -184,7 +283,15 @@ func (h Handler) List(c *gin.Context) {
 	if query != "" {
 		filtered := make([]Version, 0, len(items))
 		for _, item := range items {
-			searchable := strings.ToLower(item.ID + " " + item.Name + " " + item.LanguageName + " " + item.LanguageCode)
+			searchable := strings.ToLower(strings.Join([]string{
+				item.ID,
+				item.Name,
+				item.LanguageName,
+				item.LanguageCode,
+				item.Abbreviation,
+				item.License,
+				item.Attribution,
+			}, " "))
 			if strings.Contains(searchable, query) {
 				filtered = append(filtered, item)
 			}

@@ -27,6 +27,7 @@ import {
   openBibleDb,
   removeBibleVersion
 } from "../services/bibleVersionInstaller";
+import { isBibleSpeechActive, speakBibleText, stopBibleSpeech } from "../services/bibleReaderSpeech";
 
 const ENGLISH = "eng_msb";
 const SWAHILI = "swh_neno";
@@ -38,6 +39,10 @@ function chapterRef(bookId, chapter) {
 
 function recentKey(bookId, chapter) {
   return `${bookId}:${chapter}`;
+}
+
+function verseRef(bookId, chapter, verse) {
+  return `${bookId}:${chapter}:${verse}`;
 }
 
 async function getBooks(db) {
@@ -195,9 +200,13 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
+  const [selectedVerse, setSelectedVerse] = useState(1);
+  const [speechPlaying, setSpeechPlaying] = useState(false);
+  const [speechMessage, setSpeechMessage] = useState("");
   const [bibleState, setBibleState] = useState(() => ({
     ...DEFAULT_BIBLE_STATE,
     bookmarks: [...DEFAULT_BIBLE_STATE.bookmarks],
+    verseBookmarks: [...DEFAULT_BIBLE_STATE.verseBookmarks],
     highlights: [...DEFAULT_BIBLE_STATE.highlights],
     notes: { ...DEFAULT_BIBLE_STATE.notes },
     recent: [...DEFAULT_BIBLE_STATE.recent],
@@ -209,6 +218,12 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   const [readingMode, setReadingMode] = useState(
     DEFAULT_BIBLE_STATE.preferences.readingMode
   );
+
+  useEffect(() => {
+    return () => {
+      stopBibleSpeech().catch(() => {});
+    };
+  }, []);
 
   async function persistBibleState(nextState) {
     setBibleState(nextState);
@@ -315,6 +330,11 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   }, [db, book?.id, chapter]);
 
   useEffect(() => {
+    if (selectedVerse <= verseCount || verseCount <= 0) return;
+    setSelectedVerse(1);
+  }, [selectedVerse, verseCount]);
+
+  useEffect(() => {
     if (!db || !book || readingMode === "parallel") {
       setSingleVersionVerses([]);
       return;
@@ -418,6 +438,16 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     [bibleState.bookmarks]
   );
 
+  const verseBookmarkSet = useMemo(
+    () => new Set(bibleState.verseBookmarks || []),
+    [bibleState.verseBookmarks]
+  );
+
+  const verseHighlightSet = useMemo(
+    () => new Set(bibleState.highlights || []),
+    [bibleState.highlights]
+  );
+
   const recentChapters = useMemo(
     () =>
       bibleState.recent
@@ -479,6 +509,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   function openBook(nextBook) {
     setBook(nextBook);
     setChapter(1);
+    setSelectedVerse(1);
     setChapterCount(0);
     setVerseCount(0);
     setParallelVerses([]);
@@ -488,6 +519,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
   function openChapter(nextChapter) {
     setChapter(nextChapter);
+    setSelectedVerse(1);
     setStage("verses");
   }
 
@@ -501,7 +533,8 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     await persistBibleState(nextState);
   }
 
-  function openReader() {
+  function openReader(nextVerse = 1) {
+    setSelectedVerse(nextVerse);
     setStage("reader");
     if (book) {
       void rememberRecent(book, chapter);
@@ -511,12 +544,18 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   function openSavedChapter(nextBook, nextChapter) {
     setBook(nextBook);
     setChapter(nextChapter);
+    setSelectedVerse(1);
     setStage("reader");
     void rememberRecent(nextBook, nextChapter);
   }
 
   const currentRef = book ? chapterRef(book.id, chapter) : "";
   const isFavorite = currentRef ? favoriteRefs.has(currentRef) : false;
+  const currentVerseRef = book ? verseRef(book.id, chapter, selectedVerse) : "";
+  const isVerseBookmarked = currentVerseRef ? verseBookmarkSet.has(currentVerseRef) : false;
+  const isVerseHighlighted = currentVerseRef ? verseHighlightSet.has(currentVerseRef) : false;
+  const selectedParallelVerse = parallelVerses.find(item => item.verse === selectedVerse) || null;
+  const selectedSingleVerse = singleVersionVerses.find(item => item.verse === selectedVerse) || null;
 
   async function toggleFavorite() {
     if (!currentRef) return;
@@ -529,6 +568,117 @@ export function BibleScreen({ go, appLanguage = "en" }) {
       ...bibleState,
       bookmarks: nextBookmarks
     });
+  }
+
+  async function toggleVerseBookmark() {
+    if (!currentVerseRef) return;
+
+    const nextBookmarks = isVerseBookmarked
+      ? (bibleState.verseBookmarks || []).filter(ref => ref !== currentVerseRef)
+      : [...(bibleState.verseBookmarks || []), currentVerseRef];
+
+    await persistBibleState({
+      ...bibleState,
+      verseBookmarks: nextBookmarks
+    });
+  }
+
+  async function toggleVerseHighlight() {
+    if (!currentVerseRef) return;
+
+    const nextHighlights = isVerseHighlighted
+      ? (bibleState.highlights || []).filter(ref => ref !== currentVerseRef)
+      : [...(bibleState.highlights || []), currentVerseRef];
+
+    await persistBibleState({
+      ...bibleState,
+      highlights: nextHighlights
+    });
+  }
+
+  function selectVerse(verseNumber) {
+    setSelectedVerse(verseNumber);
+  }
+
+  function textToReadForVersion(versionId, selectedOnly = false) {
+    if (!book) return "";
+
+    if (readingMode === "parallel") {
+      if (versionId === SWAHILI) {
+        if (selectedOnly) {
+          return selectedParallelVerse
+            ? `${book.swahili_name || book.english_name} ${chapter}:${selectedVerse}. ${selectedParallelVerse.swahili_text || ""}`
+            : "";
+        }
+
+        return parallelVerses
+          .map(item => `${item.verse}. ${item.swahili_text || ""}`)
+          .join(" ");
+      }
+
+      if (selectedOnly) {
+        return selectedParallelVerse
+          ? `${book.english_name} ${chapter}:${selectedVerse}. ${selectedParallelVerse.english_text || ""}`
+          : "";
+      }
+
+      return parallelVerses
+        .map(item => `${item.verse}. ${item.english_text || ""}`)
+        .join(" ");
+    }
+
+    const sourceVerse = selectedOnly
+      ? selectedSingleVerse
+      : null;
+
+    if (selectedOnly) {
+      return sourceVerse
+        ? `${activeVersionMeta?.name || book.english_name} ${chapter}:${selectedVerse}. ${sourceVerse.text || ""}`
+        : "";
+    }
+
+    return singleVersionVerses
+      .map(item => `${item.verse}. ${item.text || ""}`)
+      .join(" ");
+  }
+
+  function speakCurrentText(versionId, selectedOnly = false) {
+    const text = textToReadForVersion(versionId, selectedOnly);
+    if (!text.trim()) {
+      Alert.alert("Bible Audio Reader", "No readable text is available for this selection.");
+      return;
+    }
+
+    setSpeechMessage(selectedOnly ? "Reading selected verse..." : "Reading chapter...");
+    speakBibleText({
+      text,
+      versionId,
+      onStart: () => {
+        setSpeechPlaying(true);
+      },
+      onDone: () => {
+        setSpeechPlaying(false);
+        setSpeechMessage("");
+      },
+      onStopped: () => {
+        setSpeechPlaying(false);
+        setSpeechMessage("");
+      },
+      onError: error => {
+        setSpeechPlaying(false);
+        setSpeechMessage("");
+        Alert.alert(
+          "Bible Audio Reader",
+          error instanceof Error ? error.message : "Unable to read this Bible passage aloud."
+        );
+      }
+    });
+  }
+
+  async function stopReading() {
+    await stopBibleSpeech();
+    setSpeechPlaying(false);
+    setSpeechMessage("");
   }
 
   function cycleFontSize() {
@@ -570,6 +720,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
 
     setBook(nextBook);
     setChapter(item.chapter);
+    setSelectedVerse(item.verse || 1);
     setQuery("");
     setResults([]);
     setShowSearch(false);
@@ -748,12 +899,12 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             <TextInput
               value={catalogQuery}
               onChangeText={setCatalogQuery}
-              placeholder="Search version or language..."
+              placeholder="Search language, tribe, or version..."
               placeholderTextColor={C.faint}
               style={[styles.searchInput, { marginBottom: 10 }]}
             />
             <Text style={styles.infoText}>
-              Direct provider catalog with offline install to this device.
+              Global provider catalog with offline install to this device.
             </Text>
             {installingVersionId ? (
               <Text style={[styles.infoText, { color: C.text, marginTop: 8 }]}>
@@ -960,6 +1111,117 @@ export function BibleScreen({ go, appLanguage = "en" }) {
           ))}
         </View>
 
+        <View style={styles.audioReaderCard}>
+          <View style={styles.audioReaderHeader}>
+            <Text style={styles.audioReaderTitle}>Audio Reader</Text>
+            {speechPlaying || isBibleSpeechActive() ? (
+              <Text style={styles.audioReaderMeta}>{speechMessage || "Reading..."}</Text>
+            ) : (
+              <Text style={styles.audioReaderMeta}>
+                {readingMode === "parallel"
+                  ? "Read English or Kiswahili aloud."
+                  : "Read the current version aloud."}
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.audioReaderActions}>
+            {readingMode === "parallel" ? (
+              <>
+                <Pressable style={styles.audioReaderBtn} onPress={() => speakCurrentText(SWAHILI, false)}>
+                  <Ionicons name="volume-high-outline" size={18} color={C.gold} />
+                  <Text style={styles.audioReaderBtnText}>Read Kiswahili</Text>
+                </Pressable>
+                <Pressable style={styles.audioReaderBtn} onPress={() => speakCurrentText(ENGLISH, false)}>
+                  <Ionicons name="volume-high-outline" size={18} color={C.gold} />
+                  <Text style={styles.audioReaderBtnText}>Read English</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Pressable style={styles.audioReaderBtn} onPress={() => speakCurrentText(readingMode, false)}>
+                <Ionicons name="volume-high-outline" size={18} color={C.gold} />
+                <Text style={styles.audioReaderBtnText}>Read Chapter</Text>
+              </Pressable>
+            )}
+
+            <Pressable
+              style={[styles.audioReaderBtn, !speechPlaying && styles.audioReaderBtnDisabled]}
+              onPress={stopReading}
+              disabled={!speechPlaying}
+            >
+              <Ionicons name="stop-outline" size={18} color={speechPlaying ? C.red : C.muted} />
+              <Text style={[styles.audioReaderBtnText, { color: speechPlaying ? C.red : C.muted }]}>Stop</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.selectionCard}>
+          <View style={styles.selectionHeader}>
+            <Text style={styles.selectionTitle}>Selected Verse</Text>
+            <Text style={styles.selectionMeta}>
+              {book?.english_name} {chapter}:{selectedVerse}
+            </Text>
+          </View>
+
+          <View style={styles.selectionActions}>
+            <Pressable
+              style={[styles.selectionBtn, isVerseBookmarked && styles.selectionBtnActive]}
+              onPress={toggleVerseBookmark}
+            >
+              <Ionicons
+                name={isVerseBookmarked ? "bookmark" : "bookmark-outline"}
+                size={16}
+                color={isVerseBookmarked ? C.textOnAccent : C.gold}
+              />
+              <Text
+                style={[
+                  styles.selectionBtnText,
+                  isVerseBookmarked && styles.selectionBtnTextActive
+                ]}
+              >
+                {isVerseBookmarked ? "Bookmarked" : "Bookmark"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.selectionBtn, isVerseHighlighted && styles.selectionBtnActive]}
+              onPress={toggleVerseHighlight}
+            >
+              <Ionicons
+                name={isVerseHighlighted ? "color-fill" : "color-fill-outline"}
+                size={16}
+                color={isVerseHighlighted ? C.textOnAccent : C.gold}
+              />
+              <Text
+                style={[
+                  styles.selectionBtnText,
+                  isVerseHighlighted && styles.selectionBtnTextActive
+                ]}
+              >
+                {isVerseHighlighted ? "Highlighted" : "Highlight"}
+              </Text>
+            </Pressable>
+
+            {readingMode === "parallel" ? (
+              <>
+                <Pressable style={styles.selectionBtn} onPress={() => speakCurrentText(SWAHILI, true)}>
+                  <Ionicons name="volume-medium-outline" size={16} color={C.gold} />
+                  <Text style={styles.selectionBtnText}>Read SW</Text>
+                </Pressable>
+                <Pressable style={styles.selectionBtn} onPress={() => speakCurrentText(ENGLISH, true)}>
+                  <Ionicons name="volume-medium-outline" size={16} color={C.gold} />
+                  <Text style={styles.selectionBtnText}>Read EN</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Pressable style={styles.selectionBtn} onPress={() => speakCurrentText(readingMode, true)}>
+                <Ionicons name="volume-medium-outline" size={16} color={C.gold} />
+                <Text style={styles.selectionBtnText}>Read Verse</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+
         {readingMode === "parallel" ? (
           <>
             <View style={styles.readerLabels}>
@@ -968,36 +1230,52 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             </View>
 
             <View style={styles.parallel}>
-              <View style={styles.column}>
-                <Text style={styles.chapterHeading}>{book?.swahili_name}</Text>
-                {parallelVerses.map(item => (
-                  <Text
-                    key={`sw-${item.verse}`}
-                    style={[
-                      styles.verseText,
-                      { fontSize: 26 * fontScale, lineHeight: 42 * fontScale }
-                    ]}
-                  >
-                    <Text style={styles.verseNo}>{item.verse} </Text>
-                    {item.swahili_text}
-                  </Text>
-                ))}
-              </View>
+              {parallelVerses.map(item => {
+                const nextRef = verseRef(book?.id, chapter, item.verse);
+                const selected = selectedVerse === item.verse;
+                const highlighted = verseHighlightSet.has(nextRef);
+                const bookmarked = verseBookmarkSet.has(nextRef);
 
-              <View style={styles.column}>
-                {parallelVerses.map(item => (
-                  <Text
-                    key={`en-${item.verse}`}
+                return (
+                  <Pressable
+                    key={`parallel-${item.verse}`}
                     style={[
-                      styles.verseText,
-                      { fontSize: 26 * fontScale, lineHeight: 42 * fontScale }
+                      styles.parallelVerseRow,
+                      selected && styles.parallelVerseRowSelected,
+                      highlighted && styles.parallelVerseRowHighlighted
                     ]}
+                    onPress={() => selectVerse(item.verse)}
                   >
-                    <Text style={styles.verseNo}>{item.verse} </Text>
-                    {item.english_text}
-                  </Text>
-                ))}
-              </View>
+                    <View style={styles.parallelVerseTop}>
+                      <Text style={styles.parallelVerseNo}>{item.verse}</Text>
+                      <View style={styles.parallelVerseBadges}>
+                        {highlighted ? <Ionicons name="color-fill" size={14} color={C.gold} /> : null}
+                        {bookmarked ? <Ionicons name="bookmark" size={14} color={C.gold} /> : null}
+                      </View>
+                    </View>
+
+                    <View style={styles.parallelVerseColumns}>
+                      <Text
+                        style={[
+                          styles.parallelVerseText,
+                          { fontSize: 22 * fontScale, lineHeight: 34 * fontScale }
+                        ]}
+                      >
+                        {item.swahili_text}
+                      </Text>
+
+                      <Text
+                        style={[
+                          styles.parallelVerseText,
+                          { fontSize: 22 * fontScale, lineHeight: 34 * fontScale }
+                        ]}
+                      >
+                        {item.english_text}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           </>
         ) : (
@@ -1006,16 +1284,37 @@ export function BibleScreen({ go, appLanguage = "en" }) {
               {activeVersionMeta?.name || book?.english_name}
             </Text>
             {singleVersionVerses.map(item => (
-              <Text
+              <Pressable
                 key={`${readingMode}-${item.verse}`}
                 style={[
-                  styles.verseText,
-                  { fontSize: 28 * fontScale, lineHeight: 44 * fontScale }
+                  styles.singleVerseRow,
+                  selectedVerse === item.verse && styles.singleVerseRowSelected,
+                  verseHighlightSet.has(verseRef(book?.id, chapter, item.verse)) &&
+                    styles.singleVerseRowHighlighted
                 ]}
+                onPress={() => selectVerse(item.verse)}
               >
-                <Text style={styles.verseNo}>{item.verse} </Text>
-                {item.text}
-              </Text>
+                <View style={styles.parallelVerseTop}>
+                  <Text style={styles.parallelVerseNo}>{item.verse}</Text>
+                  <View style={styles.parallelVerseBadges}>
+                    {verseHighlightSet.has(verseRef(book?.id, chapter, item.verse)) ? (
+                      <Ionicons name="color-fill" size={14} color={C.gold} />
+                    ) : null}
+                    {verseBookmarkSet.has(verseRef(book?.id, chapter, item.verse)) ? (
+                      <Ionicons name="bookmark" size={14} color={C.gold} />
+                    ) : null}
+                  </View>
+                </View>
+
+                <Text
+                  style={[
+                    styles.verseText,
+                    { fontSize: 28 * fontScale, lineHeight: 44 * fontScale }
+                  ]}
+                >
+                  {item.text}
+                </Text>
+              </Pressable>
             ))}
             {!singleVersionVerses.length ? (
               <Text style={styles.emptyText}>No verses are available for this version in the selected chapter.</Text>
@@ -1186,6 +1485,101 @@ const styles = makeThemedStyles(C => ({
   modeTextActive: {
     color: C.gold
   },
+  audioReaderCard: {
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.line,
+    gap: 12
+  },
+  audioReaderHeader: {
+    gap: 4
+  },
+  audioReaderTitle: {
+    color: C.text,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  audioReaderMeta: {
+    color: C.muted,
+    fontSize: 13,
+    lineHeight: 19
+  },
+  audioReaderActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10
+  },
+  audioReaderBtn: {
+    minHeight: 38,
+    paddingHorizontal: 12,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.backgroundElevated,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  audioReaderBtnDisabled: {
+    opacity: 0.55
+  },
+  audioReaderBtnText: {
+    color: C.text,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  selectionCard: {
+    marginBottom: 18,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: C.surface2,
+    borderWidth: 1,
+    borderColor: C.line,
+    gap: 12
+  },
+  selectionHeader: {
+    gap: 4
+  },
+  selectionTitle: {
+    color: C.text,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  selectionMeta: {
+    color: C.muted,
+    fontSize: 13
+  },
+  selectionActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10
+  },
+  selectionBtn: {
+    minHeight: 38,
+    paddingHorizontal: 12,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  selectionBtnActive: {
+    backgroundColor: C.gold,
+    borderColor: C.gold
+  },
+  selectionBtnText: {
+    color: C.text,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  selectionBtnTextActive: {
+    color: C.textOnAccent
+  },
   readerLabels: {
     flexDirection: "row",
     marginBottom: 20
@@ -1197,14 +1591,10 @@ const styles = makeThemedStyles(C => ({
     fontWeight: "900"
   },
   parallel: {
-    flexDirection: "row",
-    gap: 24
+    gap: 16
   },
   singleColumn: {
     paddingBottom: 12
-  },
-  column: {
-    flex: 1
   },
   chapterHeading: {
     color: C.gold,
@@ -1217,12 +1607,75 @@ const styles = makeThemedStyles(C => ({
     fontSize: 26,
     lineHeight: 42,
     fontWeight: "600",
-    marginBottom: 26
+    marginBottom: 0
   },
   verseNo: {
     color: C.green,
     fontSize: 17,
     fontWeight: "900"
+  },
+  parallelVerseRow: {
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    padding: 14,
+    gap: 12
+  },
+  parallelVerseRowSelected: {
+    borderColor: C.gold,
+    shadowColor: C.gold,
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3
+  },
+  parallelVerseRowHighlighted: {
+    backgroundColor: C.surface2
+  },
+  parallelVerseTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  parallelVerseNo: {
+    color: C.gold,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  parallelVerseBadges: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  parallelVerseColumns: {
+    flexDirection: "row",
+    gap: 18
+  },
+  parallelVerseText: {
+    flex: 1,
+    color: C.text,
+    fontWeight: "600"
+  },
+  singleVerseRow: {
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+    marginBottom: 12
+  },
+  singleVerseRowSelected: {
+    borderColor: C.gold,
+    shadowColor: C.gold,
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3
+  },
+  singleVerseRowHighlighted: {
+    backgroundColor: C.surface2
   },
   fontIcon: {
     color: C.text,

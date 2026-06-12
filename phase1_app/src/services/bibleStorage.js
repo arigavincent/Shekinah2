@@ -4,6 +4,7 @@ const STORAGE_KEY = "shekinah:bible:v1";
 
 export const DEFAULT_BIBLE_STATE = {
   bookmarks: [],
+  verseBookmarks: [],
   highlights: [],
   notes: {},
   recent: [],
@@ -22,6 +23,7 @@ function normalizeBibleState(value) {
 
   return {
     bookmarks: Array.isArray(value.bookmarks) ? value.bookmarks : [],
+    verseBookmarks: Array.isArray(value.verseBookmarks) ? value.verseBookmarks : [],
     highlights: Array.isArray(value.highlights) ? value.highlights : [],
     notes: value.notes && typeof value.notes === "object" ? value.notes : {},
     recent: Array.isArray(value.recent) ? value.recent : [],
