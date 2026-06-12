@@ -111,6 +111,85 @@ logoText: {
   primaryBtn: { backgroundColor: C.gold, borderRadius: 24, paddingHorizontal: 18, paddingVertical: 13, alignItems: "center", justifyContent: "center", marginTop: 16 },
   primaryText: { color: C.black, fontSize: 14, fontWeight: "900" },
   liveNow: { color: C.white, backgroundColor: C.red, borderRadius: 20, overflow: "hidden", paddingHorizontal: 18, paddingVertical: 10, fontWeight: "900" },
+  liveStage: {
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: C.surface2,
+    marginTop: 8,
+    marginBottom: 18
+  },
+  livePlayerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "space-between",
+    padding: 14
+  },
+  livePlayerShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.22)"
+  },
+  liveStageTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12
+  },
+  liveStageTitleWrap: {
+    flex: 1,
+    gap: 8
+  },
+  liveStageBadgeRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    flexWrap: "wrap"
+  },
+  liveStagePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(10,10,10,0.72)",
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  liveStagePillText: {
+    color: C.white,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  liveStageTitle: {
+    color: C.white,
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 26
+  },
+  liveStageMeta: {
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 12,
+    lineHeight: 18
+  },
+  liveStageActions: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center"
+  },
+  liveStageActionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(10,10,10,0.72)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  liveOverlayPanel: {
+    backgroundColor: "rgba(0,0,0,0.62)",
+    borderRadius: 12,
+    paddingTop: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)"
+  },
   reactionStrip: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginVertical: 16 },
   reaction: { color: C.white, backgroundColor: C.surface2, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, fontWeight: "700" },
   liveChatShell: {
@@ -167,19 +246,16 @@ logoText: {
     fontWeight: "800"
   },
   liveChatList: {
-    maxHeight: 380,
-    minHeight: 220,
-    paddingHorizontal: 14,
-    paddingTop: 12
+    maxHeight: 220
   },
   liveChatListContent: {
-    paddingBottom: 10
+    paddingBottom: 2
   },
   liveMessageRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
-    marginBottom: 14
+    marginBottom: 12
   },
   liveAvatar: {
     width: 26,
@@ -217,31 +293,29 @@ logoText: {
   },
   liveMessageText: {
     color: C.white,
-    fontSize: 14,
-    lineHeight: 20
+    fontSize: 13,
+    lineHeight: 18
   },
   liveComposer: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: C.line,
-    backgroundColor: C.surface
+    paddingTop: 10
   },
   liveComposerInput: {
     flex: 1,
     minHeight: 42,
     maxHeight: 92,
-    backgroundColor: C.surface2,
+    backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 21,
     paddingHorizontal: 14,
     paddingTop: 11,
     paddingBottom: 11,
     color: C.white,
     fontSize: 14,
-    fontWeight: "700"
+    fontWeight: "700",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)"
   },
   liveSendBtn: {
     width: 42,
@@ -252,8 +326,7 @@ logoText: {
     justifyContent: "center"
   },
   liveChatEmpty: {
-    paddingHorizontal: 14,
-    paddingVertical: 18
+    paddingVertical: 10
   },
   storage: { height: 10, borderRadius: 5, backgroundColor: C.surface2, marginBottom: 8 },
   storageFill: { width: "32%", height: "100%", borderRadius: 5, backgroundColor: C.gold },

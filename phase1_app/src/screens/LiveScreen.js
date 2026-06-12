@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -90,6 +92,8 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const live = data.live;
   const liveVideoId = extractYouTubeId(live.youtubeId || live.youtubeUrl || "");
   const playerWidth = Math.max(280, width - 32);
+  const liveStageHeight = Math.max(460, Math.min(620, width * 1.42));
+  const visibleLiveMessages = chatMessages.slice(-8);
   const pastServices = data.sermons
     .filter(playablePastService)
     .map(item => ({
@@ -310,143 +314,128 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       >
         {live.isLive ? (
           <>
-            <View style={s.videoBox}>
-              {liveVideoId ? (
-                <YoutubePlayer
-                  height={220}
-                  width={playerWidth}
-                  play={playing}
-                  videoId={liveVideoId}
-                />
-              ) : (
-                <View style={s.videoOverlay}>
-                  <Text style={s.liveNow}>LIVE NOW</Text>
-                </View>
-              )}
-            </View>
-
-            <Text style={s.detailTitle}>{live.title}</Text>
-            <Text style={s.goldSmall}>{live.viewers} watching</Text>
-
-            {liveVideoId ? (
-              <View style={s.bottomActions}>
-                <Pressable style={s.actionBtn} onPress={() => setPlaying(current => !current)}>
-                  <Ionicons
-                    name={playing ? "pause-outline" : "play-outline"}
-                    size={17}
-                    color={C.white}
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              keyboardVerticalOffset={Platform.OS === "ios" ? 84 : 24}
+            >
+              <View style={[s.liveStage, { height: liveStageHeight }]}>
+                {liveVideoId ? (
+                  <YoutubePlayer
+                    height={liveStageHeight}
+                    width={playerWidth}
+                    play={playing}
+                    videoId={liveVideoId}
                   />
-                  <Text style={s.actionText}>{tr(appLanguage, playing ? "Pause" : "Play")}</Text>
-                </Pressable>
-
-                <Pressable style={s.actionBtn} onPress={openLiveOnYouTube}>
-                  <Ionicons name="logo-youtube" size={17} color={C.white} />
-                  <Text style={s.actionText}>{tr(appLanguage, "Open YouTube")}</Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            <View style={s.reactionStrip}>
-              {["Amen", "Glory", "Hallelujah", "Praying", "Blessed"].map(x => <Text key={x} style={s.reaction}>{tr(appLanguage, x)}</Text>)}
-            </View>
-
-            <SectionHeader title="Live Chat" appLanguage={appLanguage} />
-            <View style={s.liveChatShell}>
-              <View style={s.liveChatHeader}>
-                <View style={s.liveChatHeaderLeft}>
-                  <View style={s.liveChatStatusDot} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.liveChatTitle}>{tr(appLanguage, "This chat belongs to the active livestream only.")}</Text>
-                    <Text style={s.liveChatSubtle}>
-                      {tr(appLanguage, "Use Community Chat for general church conversation outside the current live service.")}
-                    </Text>
-                  </View>
-                </View>
-                <View style={s.liveStatusPill}>
-                  <Ionicons
-                    name={
-                      socketState === "connected"
-                        ? "radio-outline"
-                        : socketState === "reconnecting"
-                          ? "sync-outline"
-                          : "cloud-offline-outline"
-                    }
-                    size={14}
-                    color={liveStatusColor}
-                  />
-                  <Text style={s.liveStatusPillText}>{tr(appLanguage, "Live")}</Text>
-                </View>
-              </View>
-
-              <ScrollView
-                ref={chatScrollRef}
-                style={s.liveChatList}
-                contentContainerStyle={s.liveChatListContent}
-                onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
-              >
-                {chatLoading ? (
-                  <View style={s.liveChatEmpty}>
-                    <Text style={[s.liveChatSubtle, { color: C.muted }]}>{tr(appLanguage, "Loading live chat...")}</Text>
-                  </View>
-                ) : chatMessages.length === 0 ? (
-                  <View style={s.liveChatEmpty}>
-                    <Text style={s.liveChatTitle}>{tr(appLanguage, "No live responses yet")}</Text>
-                    <Text style={s.liveChatSubtle}>
-                      {tr(appLanguage, "Live responses will appear here while the stream is active.")}
-                    </Text>
-                  </View>
                 ) : (
-                  chatMessages.map(item => (
-                    <View key={item.id} style={s.liveMessageRow}>
-                      <View style={s.liveAvatar}>
-                        <Text style={s.liveAvatarText}>{messageInitial(item.displayName || tr(appLanguage, "Member"))}</Text>
-                      </View>
-                      <View style={s.liveMessageBody}>
-                        <View style={s.liveMessageMeta}>
-                          <Text style={s.liveMessageName}>{item.displayName || tr(appLanguage, "Member")}</Text>
-                          <Text style={s.liveMessageTime}>{liveTimeLabel(item.createdAt)}</Text>
-                        </View>
-                        <Text style={s.liveMessageText}>{item.message}</Text>
-                      </View>
-                    </View>
-                  ))
+                  <View style={[s.videoOverlay, { height: liveStageHeight }]}>
+                    <Text style={s.liveNow}>LIVE NOW</Text>
+                  </View>
                 )}
-              </ScrollView>
 
-              <View style={s.liveComposer}>
-                <TextInput
-                  style={s.liveComposerInput}
-                  placeholder={tr(appLanguage, "Share a live response...")}
-                  placeholderTextColor={C.muted}
-                  multiline
-                  textAlignVertical="center"
-                  selectionColor={C.gold}
-                  returnKeyType="send"
-                  value={chatText}
-                  onChangeText={setChatText}
-                  onSubmitEditing={() => {
-                    if (!sending) {
-                      submitLiveChat();
-                    }
-                  }}
-                />
-                <Pressable
-                  style={[s.liveSendBtn, sending && { opacity: 0.65 }]}
-                  onPress={submitLiveChat}
-                  disabled={sending}
-                >
-                  <Ionicons
-                    name={sending ? "time-outline" : "send"}
-                    size={18}
-                    color={C.black}
-                  />
-                </Pressable>
+                <View style={s.livePlayerShade} />
+                <View style={s.livePlayerOverlay}>
+                  <View style={s.liveStageTopRow}>
+                    <View style={s.liveStageTitleWrap}>
+                      <View style={s.liveStageBadgeRow}>
+                        <View style={s.liveStagePill}>
+                          <View style={s.liveChatStatusDot} />
+                          <Text style={s.liveStagePillText}>{tr(appLanguage, "Live")}</Text>
+                        </View>
+                        <View style={s.liveStagePill}>
+                          <Ionicons name="eye-outline" size={14} color={C.white} />
+                          <Text style={s.liveStagePillText}>{live.viewers} {tr(appLanguage, "watching")}</Text>
+                        </View>
+                      </View>
+                      <Text style={s.liveStageTitle}>{live.title}</Text>
+                      <Text style={s.liveStageMeta}>{liveStatusLabel}</Text>
+                    </View>
+
+                    <View style={s.liveStageActions}>
+                      <Pressable style={s.liveStageActionBtn} onPress={() => setPlaying(current => !current)}>
+                        <Ionicons
+                          name={playing ? "pause-outline" : "play-outline"}
+                          size={18}
+                          color={C.white}
+                        />
+                      </Pressable>
+                      {liveVideoId ? (
+                        <Pressable style={s.liveStageActionBtn} onPress={openLiveOnYouTube}>
+                          <Ionicons name="logo-youtube" size={18} color={C.white} />
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  <View style={s.liveOverlayPanel}>
+                    <ScrollView
+                      ref={chatScrollRef}
+                      style={s.liveChatList}
+                      contentContainerStyle={s.liveChatListContent}
+                      onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {chatLoading ? (
+                        <View style={s.liveChatEmpty}>
+                          <Text style={[s.liveChatSubtle, { color: C.white }]}>{tr(appLanguage, "Loading live chat...")}</Text>
+                        </View>
+                      ) : visibleLiveMessages.length === 0 ? (
+                        <View style={s.liveChatEmpty}>
+                          <Text style={[s.liveChatTitle, { fontSize: 13 }]}>{tr(appLanguage, "No live responses yet")}</Text>
+                          <Text style={[s.liveChatSubtle, { color: "rgba(255,255,255,0.78)" }]}>
+                            {tr(appLanguage, "Live responses will appear here while the stream is active.")}
+                          </Text>
+                        </View>
+                      ) : (
+                        visibleLiveMessages.map(item => (
+                          <View key={item.id} style={s.liveMessageRow}>
+                            <View style={s.liveAvatar}>
+                              <Text style={s.liveAvatarText}>{messageInitial(item.displayName || tr(appLanguage, "Member"))}</Text>
+                            </View>
+                            <View style={s.liveMessageBody}>
+                              <View style={s.liveMessageMeta}>
+                                <Text style={s.liveMessageName}>{item.displayName || tr(appLanguage, "Member")}</Text>
+                                <Text style={s.liveMessageTime}>{liveTimeLabel(item.createdAt)}</Text>
+                              </View>
+                              <Text style={s.liveMessageText}>{item.message}</Text>
+                            </View>
+                          </View>
+                        ))
+                      )}
+                    </ScrollView>
+
+                    <View style={s.liveComposer}>
+                      <TextInput
+                        style={s.liveComposerInput}
+                        placeholder={tr(appLanguage, "Share a live response...")}
+                        placeholderTextColor="rgba(255,255,255,0.6)"
+                        multiline
+                        textAlignVertical="center"
+                        selectionColor={C.gold}
+                        returnKeyType="send"
+                        value={chatText}
+                        onChangeText={setChatText}
+                        onSubmitEditing={() => {
+                          if (!sending) {
+                            submitLiveChat();
+                          }
+                        }}
+                      />
+                      <Pressable
+                        style={[s.liveSendBtn, sending && { opacity: 0.65 }]}
+                        onPress={submitLiveChat}
+                        disabled={sending}
+                      >
+                        <Ionicons
+                          name={sending ? "time-outline" : "send"}
+                          size={18}
+                          color={C.black}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
               </View>
-            </View>
-
-            <Text style={[s.liveChatSubtle, { marginTop: -4, marginBottom: 18 }]}>
-              {liveStatusLabel}
-            </Text>
+            </KeyboardAvoidingView>
           </>
         ) : (
           <EmptyState title={tr(appLanguage, "No live service right now")} text={`${tr(appLanguage, "Next service:")} ${live.nextService}`} />

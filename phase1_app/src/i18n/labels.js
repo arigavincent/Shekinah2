@@ -286,6 +286,7 @@ const SWAHILI_LABELS = {
   "Live chat is connected in real time.": "Mazungumzo ya moja kwa moja yameunganishwa kwa muda halisi.",
   "Reconnecting live chat...": "Inaunganisha tena mazungumzo ya moja kwa moja...",
   "Connecting live chat...": "Inaunganisha mazungumzo ya moja kwa moja...",
+  watching: "wanatazama",
   "No live responses yet": "Hakuna mwitikio wa moja kwa moja bado",
   "Live responses will appear here while the stream is active.": "Mwitikio wa moja kwa moja utaonekana hapa wakati ibada inaendelea.",
   "Unable to load live chat.": "Imeshindikana kupakia mazungumzo ya moja kwa moja.",
