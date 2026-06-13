@@ -3,12 +3,15 @@ package giving
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -453,6 +456,16 @@ func validateMpesaConfig() string {
 }
 
 func (h Handler) accessToken(ctx context.Context) (string, error) {
+	log.Printf(
+		"mpesa oauth start env=%s base=%s key=%s secret=%s shortcode=%s callback=%s",
+		env("MPESA_ENV"),
+		mpesaBaseURL(),
+		secretFingerprint(env("MPESA_CONSUMER_KEY")),
+		secretFingerprint(env("MPESA_CONSUMER_SECRET")),
+		secretFingerprint(env("MPESA_SHORTCODE")),
+		strings.TrimSpace(env("MPESA_CALLBACK_URL")),
+	)
+
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
@@ -485,8 +498,11 @@ func (h Handler) accessToken(ctx context.Context) (string, error) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || payload.AccessToken == "" {
+		log.Printf("mpesa oauth failed status=%d body=%s", resp.StatusCode, sanitizeMpesaErrorBody(body))
 		return "", fmt.Errorf("mpesa token request failed: status=%d body=%s", resp.StatusCode, sanitizeMpesaErrorBody(body))
 	}
+
+	log.Printf("mpesa oauth success expires_in=%s", payload.ExpiresIn)
 
 	return payload.AccessToken, nil
 }
@@ -504,6 +520,28 @@ func sanitizeMpesaErrorBody(body []byte) string {
 	}
 
 	return text
+}
+
+func secretFingerprint(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "<empty>"
+	}
+
+	sum := sha256.Sum256([]byte(value))
+	fingerprint := hex.EncodeToString(sum[:])
+	if len(fingerprint) > 12 {
+		fingerprint = fingerprint[:12]
+	}
+
+	return fmt.Sprintf("len=%d tail=%s sha=%s", len(value), tail(value, 4), fingerprint)
+}
+
+func tail(value string, size int) string {
+	if len(value) <= size {
+		return value
+	}
+	return value[len(value)-size:]
 }
 
 func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, phone string, amount int, givingCategory string) (stkPushResponse, []byte, error) {
