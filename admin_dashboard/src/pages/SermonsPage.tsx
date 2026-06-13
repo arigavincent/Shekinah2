@@ -37,6 +37,8 @@ export function SermonsPage() {
   const [form, setForm] = useState<SermonPayload>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "video" | "audio">("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<MediaKind | "">("");
@@ -44,16 +46,23 @@ export function SermonsPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const next = sermons.filter(sermon => {
+      const matchesQuery =
+        !q ||
+        [sermon.title, sermon.speaker, sermon.category, sermon.type]
+          .join(" ")
+          .toLowerCase()
+          .includes(q);
+      const matchesType = typeFilter === "all" || sermon.type === typeFilter;
+      return matchesQuery && matchesType;
+    });
 
-    if (!q) return sermons;
-
-    return sermons.filter(sermon =>
-      [sermon.title, sermon.speaker, sermon.category, sermon.type]
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [query, sermons]);
+    return next.sort((a, b) => {
+      if (sortBy === "title") return a.title.localeCompare(b.title);
+      if (sortBy === "oldest") return a.sermonDate.localeCompare(b.sermonDate);
+      return b.sermonDate.localeCompare(a.sermonDate);
+    });
+  }, [query, sermons, sortBy, typeFilter]);
 
   async function load() {
     setLoading(true);
@@ -172,7 +181,9 @@ export function SermonsPage() {
   }
 
   async function remove(sermon: Sermon) {
-    const confirmed = confirm(`Delete "${sermon.title}"?`);
+    const confirmed = confirm(
+      `Delete "${sermon.title}"?\n\nThis removes the sermon from the admin list and the mobile app.`
+    );
     if (!confirmed) return;
 
     setSaving(true);
@@ -299,6 +310,18 @@ export function SermonsPage() {
             />
           </label>
 
+          {isValidAssetReference(form.thumbnailUrl) ? (
+            <div className="media-preview-card">
+              <div className="section-title-row compact">
+                <h3>Thumbnail Preview</h3>
+                <a href={form.thumbnailUrl} target="_blank" rel="noreferrer">
+                  Open file
+                </a>
+              </div>
+              <img className="asset-preview-image" src={form.thumbnailUrl} alt="Sermon thumbnail preview" />
+            </div>
+          ) : null}
+
           <div className="two-col">
             <label>
               Duration
@@ -360,6 +383,23 @@ export function SermonsPage() {
             <p className="muted">Uploading {uploading}...</p>
           ) : null}
 
+          {isValidAssetReference(form.mediaUrl) ? (
+            <div className="media-preview-card">
+              <div className="section-title-row compact">
+                <h3>{form.type === "audio" ? "Audio Asset" : "Video Asset"}</h3>
+                <a href={form.mediaUrl} target="_blank" rel="noreferrer">
+                  Open file
+                </a>
+              </div>
+              <p className="small-muted asset-meta">
+                {form.type === "audio"
+                  ? "Use this to verify the uploaded audio before publishing."
+                  : "Use this to verify the video file or external stream link before publishing."}
+              </p>
+              <code>{form.mediaUrl}</code>
+            </div>
+          ) : null}
+
           <label>
             Description
             <textarea
@@ -381,12 +421,42 @@ export function SermonsPage() {
             <span className="count-pill">{filtered.length}</span>
           </div>
 
-          <input
-            className="search"
-            value={query}
-            onChange={event => setQuery(event.target.value)}
-            placeholder="Search sermons..."
-          />
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search sermons..."
+            />
+
+            <div className="filters-row">
+              <select value={typeFilter} onChange={event => setTypeFilter(event.target.value as "all" | "video" | "audio")}>
+                <option value="all">All Types</option>
+                <option value="video">Video</option>
+                <option value="audio">Audio</option>
+              </select>
+
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title A-Z</option>
+              </select>
+
+              {(query || typeFilter !== "all" || sortBy !== "newest") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setTypeFilter("all");
+                    setSortBy("newest");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
 
           {loading ? (
             <p className="muted">Loading sermons...</p>
@@ -405,10 +475,10 @@ export function SermonsPage() {
                   </div>
 
                   <div className="row-actions">
-                    <button className="secondary compact" onClick={() => startEdit(sermon)}>
+                    <button type="button" className="secondary compact" onClick={() => startEdit(sermon)}>
                       Edit
                     </button>
-                    <button className="danger compact" onClick={() => remove(sermon)}>
+                    <button type="button" className="danger compact" onClick={() => remove(sermon)}>
                       Delete
                     </button>
                   </div>

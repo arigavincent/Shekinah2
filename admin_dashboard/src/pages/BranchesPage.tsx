@@ -61,6 +61,7 @@ export function BranchesPage() {
   const [form, setForm] = useState<BranchForm>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "newest" | "oldest">("name");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -68,16 +69,20 @@ export function BranchesPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-
-    if (!q) return branches;
-
-    return branches.filter(branch =>
+    const next = branches.filter(branch =>
+      !q ||
       [branch.name, branch.address, branch.services, branch.phone]
         .join(" ")
         .toLowerCase()
         .includes(q)
     );
-  }, [branches, query]);
+
+    return next.sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "oldest") return a.createdAt.localeCompare(b.createdAt);
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }, [branches, query, sortBy]);
 
   async function load() {
     setLoading(true);
@@ -185,7 +190,9 @@ export function BranchesPage() {
   }
 
   async function remove(branch: Branch) {
-    const confirmed = confirm(`Delete "${branch.name}"?`);
+    const confirmed = confirm(
+      `Delete "${branch.name}"?\n\nThis removes the branch and its public contact details from the app.`
+    );
     if (!confirmed) return;
 
     setSaving(true);
@@ -318,6 +325,18 @@ export function BranchesPage() {
             <p className="muted">Uploading image...</p>
           ) : null}
 
+          {isValidAssetReference(form.imageUrl) ? (
+            <div className="media-preview-card">
+              <div className="section-title-row compact">
+                <h3>Branch Image Preview</h3>
+                <a href={form.imageUrl} target="_blank" rel="noreferrer">
+                  Open file
+                </a>
+              </div>
+              <img className="asset-preview-image" src={form.imageUrl} alt="Branch image preview" />
+            </div>
+          ) : null}
+
           <button disabled={saving}>
             {saving ? "Saving..." : editingId ? "Update Branch" : "Create Branch"}
           </button>
@@ -329,12 +348,35 @@ export function BranchesPage() {
             <span className="count-pill">{filtered.length}</span>
           </div>
 
-          <input
-            className="search"
-            value={query}
-            onChange={event => setQuery(event.target.value)}
-            placeholder="Search branches..."
-          />
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search branches..."
+            />
+
+            <div className="filters-row">
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "name" | "newest" | "oldest")}>
+                <option value="name">Name A-Z</option>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+              </select>
+
+              {(query || sortBy !== "name") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setSortBy("name");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
 
           {loading ? (
             <p className="muted">Loading branches...</p>
@@ -354,11 +396,11 @@ export function BranchesPage() {
                   </div>
 
                   <div className="row-actions">
-                    <button className="secondary compact" onClick={() => startEdit(branch)}>
+                    <button type="button" className="secondary compact" onClick={() => startEdit(branch)}>
                       Edit
                     </button>
 
-                    <button className="danger compact" onClick={() => remove(branch)}>
+                    <button type="button" className="danger compact" onClick={() => remove(branch)}>
                       Delete
                     </button>
                   </div>

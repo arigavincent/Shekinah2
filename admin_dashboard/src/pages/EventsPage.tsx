@@ -26,6 +26,7 @@ export function EventsPage() {
   const [form, setForm] = useState<EventPayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -33,16 +34,20 @@ export function EventsPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-
-    if (!q) return events;
-
-    return events.filter(event =>
+    const next = events.filter(event =>
+      !q ||
       [event.title, event.location, event.description, event.eventDate, event.eventTime]
         .join(" ")
         .toLowerCase()
         .includes(q)
     );
-  }, [events, query]);
+
+    return next.sort((a, b) => {
+      if (sortBy === "title") return a.title.localeCompare(b.title);
+      if (sortBy === "oldest") return a.eventDate.localeCompare(b.eventDate);
+      return b.eventDate.localeCompare(a.eventDate);
+    });
+  }, [events, query, sortBy]);
 
   async function load() {
     setLoading(true);
@@ -149,7 +154,9 @@ export function EventsPage() {
   }
 
   async function remove(event: EventItem) {
-    const confirmed = confirm(`Delete "${event.title}"?`);
+    const confirmed = confirm(
+      `Delete "${event.title}"?\n\nThis removes the event from the public schedule and detail views.`
+    );
     if (!confirmed) return;
 
     setSaving(true);
@@ -263,6 +270,18 @@ export function EventsPage() {
             <p className="muted">Uploading image...</p>
           ) : null}
 
+          {isValidAssetReference(form.imageUrl) ? (
+            <div className="media-preview-card">
+              <div className="section-title-row compact">
+                <h3>Event Banner Preview</h3>
+                <a href={form.imageUrl} target="_blank" rel="noreferrer">
+                  Open file
+                </a>
+              </div>
+              <img className="asset-preview-image" src={form.imageUrl} alt="Event banner preview" />
+            </div>
+          ) : null}
+
           <label>
             Description
             <textarea
@@ -284,12 +303,33 @@ export function EventsPage() {
             <span className="count-pill">{filtered.length}</span>
           </div>
 
-          <input
-            className="search"
-            value={query}
-            onChange={event => setQuery(event.target.value)}
-            placeholder="Search events..."
-          />
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search events..."
+            />
+            <div className="filters-row">
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title A-Z</option>
+              </select>
+              {(query || sortBy !== "newest") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setSortBy("newest");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
 
           {loading ? (
             <p className="muted">Loading events...</p>
@@ -308,11 +348,11 @@ export function EventsPage() {
                   </div>
 
                   <div className="row-actions">
-                    <button className="secondary compact" onClick={() => startEdit(event)}>
+                    <button type="button" className="secondary compact" onClick={() => startEdit(event)}>
                       Edit
                     </button>
 
-                    <button className="danger compact" onClick={() => remove(event)}>
+                    <button type="button" className="danger compact" onClick={() => remove(event)}>
                       Delete
                     </button>
                   </div>

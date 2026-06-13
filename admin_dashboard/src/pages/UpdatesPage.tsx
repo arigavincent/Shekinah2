@@ -9,6 +9,7 @@ import {
   type UpdatePayload,
   updateUpdate
 } from "../api/adminUpdatesApi";
+import { uploadMedia } from "../api/adminMediaApi";
 import { isValidAssetReference, isValidDateString } from "../lib/validation";
 
 const emptyForm: UpdatePayload = {
@@ -23,22 +24,28 @@ export function UpdatesPage() {
   const [form, setForm] = useState<UpdatePayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-
-    if (!q) return updates;
-
-    return updates.filter(update =>
+    const next = updates.filter(update =>
+      !q ||
       [update.title, update.excerpt, update.updateDate]
         .join(" ")
         .toLowerCase()
         .includes(q)
     );
-  }, [updates, query]);
+
+    return next.sort((a, b) => {
+      if (sortBy === "title") return a.title.localeCompare(b.title);
+      if (sortBy === "oldest") return a.updateDate.localeCompare(b.updateDate);
+      return b.updateDate.localeCompare(a.updateDate);
+    });
+  }, [updates, query, sortBy]);
 
   async function load() {
     setLoading(true);
@@ -83,6 +90,22 @@ export function UpdatesPage() {
     });
   }
 
+  async function uploadImage(file: File | null) {
+    if (!file) return;
+
+    setUploadingImage(true);
+    setError("");
+
+    try {
+      const response = await uploadMedia("image", file);
+      updateField("imageUrl", response.media.path || response.media.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload update image");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
   function validate() {
     if (!form.title.trim()) return "Title is required.";
     if (!form.excerpt.trim()) return "Excerpt is required.";
@@ -125,7 +148,9 @@ export function UpdatesPage() {
   }
 
   async function remove(update: UpdateItem) {
-    const confirmed = confirm(`Delete "${update.title}"?`);
+    const confirmed = confirm(
+      `Delete "${update.title}"?\n\nThis removes the announcement from the updates feed in the mobile app.`
+    );
     if (!confirmed) return;
 
     setSaving(true);
@@ -198,9 +223,38 @@ export function UpdatesPage() {
             <input
               value={form.imageUrl}
               onChange={event => updateField("imageUrl", event.target.value)}
-              placeholder="https://..."
+              placeholder="/uploads/media/image.png or https://..."
             />
           </label>
+
+          <label>
+            Upload Image
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={uploadingImage}
+              onChange={async event => {
+                await uploadImage(event.target.files?.[0] || null);
+                event.target.value = "";
+              }}
+            />
+          </label>
+
+          {uploadingImage ? (
+            <p className="muted">Uploading image...</p>
+          ) : null}
+
+          {isValidAssetReference(form.imageUrl) ? (
+            <div className="media-preview-card">
+              <div className="section-title-row compact">
+                <h3>Update Image Preview</h3>
+                <a href={form.imageUrl} target="_blank" rel="noreferrer">
+                  Open file
+                </a>
+              </div>
+              <img className="asset-preview-image" src={form.imageUrl} alt="Update image preview" />
+            </div>
+          ) : null}
 
           <label>
             Excerpt
@@ -223,12 +277,35 @@ export function UpdatesPage() {
             <span className="count-pill">{filtered.length}</span>
           </div>
 
-          <input
-            className="search"
-            value={query}
-            onChange={event => setQuery(event.target.value)}
-            placeholder="Search updates..."
-          />
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search updates..."
+            />
+
+            <div className="filters-row">
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title A-Z</option>
+              </select>
+
+              {(query || sortBy !== "newest") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setSortBy("newest");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
 
           {loading ? (
             <p className="muted">Loading updates...</p>
@@ -245,11 +322,11 @@ export function UpdatesPage() {
                   </div>
 
                   <div className="row-actions">
-                    <button className="secondary compact" onClick={() => startEdit(update)}>
+                    <button type="button" className="secondary compact" onClick={() => startEdit(update)}>
                       Edit
                     </button>
 
-                    <button className="danger compact" onClick={() => remove(update)}>
+                    <button type="button" className="danger compact" onClick={() => remove(update)}>
                       Delete
                     </button>
                   </div>

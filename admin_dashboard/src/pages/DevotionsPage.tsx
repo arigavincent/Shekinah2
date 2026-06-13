@@ -25,6 +25,7 @@ export function DevotionsPage() {
   const [form, setForm] = useState<DevotionPayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -32,16 +33,20 @@ export function DevotionsPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-
-    if (!q) return devotions;
-
-    return devotions.filter(devotion =>
+    const next = devotions.filter(devotion =>
+      !q ||
       [devotion.title, devotion.excerpt, devotion.body]
         .join(" ")
         .toLowerCase()
         .includes(q)
     );
-  }, [devotions, query]);
+
+    return next.sort((a, b) => {
+      if (sortBy === "title") return a.title.localeCompare(b.title);
+      if (sortBy === "oldest") return a.devotionDate.localeCompare(b.devotionDate);
+      return b.devotionDate.localeCompare(a.devotionDate);
+    });
+  }, [devotions, query, sortBy]);
 
   async function load() {
     setLoading(true);
@@ -146,7 +151,9 @@ export function DevotionsPage() {
   }
 
   async function remove(devotion: Devotion) {
-    const confirmed = confirm(`Delete "${devotion.title}"?`);
+    const confirmed = confirm(
+      `Delete "${devotion.title}"?\n\nThis removes the devotion from the app feed and favourites source list.`
+    );
     if (!confirmed) return;
 
     setSaving(true);
@@ -240,6 +247,18 @@ export function DevotionsPage() {
             <p className="muted">Uploading image...</p>
           ) : null}
 
+          {isValidAssetReference(form.imageUrl) ? (
+            <div className="media-preview-card">
+              <div className="section-title-row compact">
+                <h3>Cover Preview</h3>
+                <a href={form.imageUrl} target="_blank" rel="noreferrer">
+                  Open file
+                </a>
+              </div>
+              <img className="asset-preview-image" src={form.imageUrl} alt="Devotion cover preview" />
+            </div>
+          ) : null}
+
           <label>
             Excerpt
             <textarea
@@ -271,12 +290,33 @@ export function DevotionsPage() {
             <span className="count-pill">{filtered.length}</span>
           </div>
 
-          <input
-            className="search"
-            value={query}
-            onChange={event => setQuery(event.target.value)}
-            placeholder="Search devotions..."
-          />
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search devotions..."
+            />
+            <div className="filters-row">
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title A-Z</option>
+              </select>
+              {(query || sortBy !== "newest") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setSortBy("newest");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
 
           {loading ? (
             <p className="muted">Loading devotions...</p>
@@ -293,11 +333,11 @@ export function DevotionsPage() {
                   </div>
 
                   <div className="row-actions">
-                    <button className="secondary compact" onClick={() => startEdit(devotion)}>
+                    <button type="button" className="secondary compact" onClick={() => startEdit(devotion)}>
                       Edit
                     </button>
 
-                    <button className="danger compact" onClick={() => remove(devotion)}>
+                    <button type="button" className="danger compact" onClick={() => remove(devotion)}>
                       Delete
                     </button>
                   </div>
