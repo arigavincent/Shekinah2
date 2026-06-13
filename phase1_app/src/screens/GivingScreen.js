@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 
 import { C } from "../constants/theme";
 import { s } from "../styles/appStyles";
@@ -465,7 +466,14 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
         `${label === "receipt" ? "Receipt" : "Invoice"} Saved`,
         "The document has been downloaded to the app files and will open now."
       );
-      if (Platform.OS === "android") {
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: "application/pdf",
+          dialogTitle: label === "receipt" ? "Open receipt" : "Open invoice",
+          UTI: "com.adobe.pdf"
+        });
+      } else if (Platform.OS === "android") {
         const contentUri = await FileSystem.getContentUriAsync(fileUri);
         await Linking.openURL(contentUri);
       } else {
