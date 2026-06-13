@@ -10,7 +10,10 @@ import {
   updateDevotion
 } from "../api/adminDevotionsApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { isValidAssetReference, isValidDateString, hasMinLength } from "../lib/validation";
 
 const emptyForm: DevotionPayload = {
@@ -49,6 +52,12 @@ export function DevotionsPage() {
       return b.devotionDate.localeCompare(a.devotionDate);
     });
   }, [devotions, query, sortBy]);
+
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    6,
+    [query, sortBy, devotions.length]
+  );
 
   async function load() {
     setLoading(true);
@@ -205,7 +214,7 @@ export function DevotionsPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Devotions could not be updated" message={error} /> : null}
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>
@@ -340,7 +349,7 @@ export function DevotionsPage() {
             <p className="muted">No devotions found.</p>
           ) : (
             <div className="sermon-list">
-              {filtered.map(devotion => (
+              {pagedItems.map(devotion => (
                 <article key={devotion.id} className="sermon-row">
                   <div>
                     <h3>{devotion.title}</h3>
@@ -361,6 +370,15 @@ export function DevotionsPage() {
               ))}
             </div>
           )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="devotions"
+            onPageChange={setPage}
+          />
         </section>
       </section>
     </main>

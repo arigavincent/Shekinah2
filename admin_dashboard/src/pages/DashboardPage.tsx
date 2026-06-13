@@ -14,6 +14,7 @@ import { listNotificationMessages, type NotificationMessage } from "../api/admin
 import { listRecentCheckins, type AdminCheckin } from "../api/adminCheckinsApi";
 import { listAdminTestimonies, type AdminTestimony } from "../api/adminTestimoniesApi";
 import { listCommunityMessages, type AdminCommunityMessage } from "../api/adminCommunityApi";
+import { InlineAlert } from "../components/InlineAlert";
 
 type DashboardState = {
   sermons: Sermon[];
@@ -228,7 +229,7 @@ export function DashboardPage() {
         </div>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Dashboard metrics are partially unavailable" message={error} tone="info" /> : null}
 
       <section className="stats-grid">
         <article className="stat-card">

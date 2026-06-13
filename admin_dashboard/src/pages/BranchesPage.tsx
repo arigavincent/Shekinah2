@@ -10,7 +10,10 @@ import {
   updateBranch
 } from "../api/adminBranchesApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { isValidAssetReference, isValidPhone } from "../lib/validation";
 
 type BranchForm = {
@@ -85,6 +88,12 @@ export function BranchesPage() {
       return b.createdAt.localeCompare(a.createdAt);
     });
   }, [branches, query, sortBy]);
+
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    6,
+    [query, sortBy, branches.length]
+  );
 
   async function load() {
     setLoading(true);
@@ -244,7 +253,7 @@ export function BranchesPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Branches could not be updated" message={error} /> : null}
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>
@@ -400,7 +409,7 @@ export function BranchesPage() {
             <p className="muted">No branches found.</p>
           ) : (
             <div className="sermon-list">
-              {filtered.map(branch => (
+              {pagedItems.map(branch => (
                 <article key={branch.id} className="sermon-row">
                   <div>
                     <h3>{branch.name}</h3>
@@ -424,6 +433,15 @@ export function BranchesPage() {
               ))}
             </div>
           )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="branches"
+            onPageChange={setPage}
+          />
         </section>
       </section>
     </main>

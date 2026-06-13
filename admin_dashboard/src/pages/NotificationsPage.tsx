@@ -6,7 +6,10 @@ import {
   listNotificationMessages,
   type NotificationMessage
 } from "../api/adminNotificationsApi";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { hasMinLength } from "../lib/validation";
 
 const categories = [
@@ -59,6 +62,12 @@ export function NotificationsPage() {
         .includes(q)
     );
   }, [messages, query]);
+
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    8,
+    [query, messages.length]
+  );
 
   async function load() {
     setLoading(true);
@@ -138,7 +147,7 @@ export function NotificationsPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Notifications could not be updated" message={error} /> : null}
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>
@@ -210,7 +219,7 @@ export function NotificationsPage() {
             <p className="muted">No notification broadcasts found.</p>
           ) : (
             <div className="stack-list">
-              {filtered.map(message => (
+              {pagedItems.map(message => (
                 <article key={message.id} className="stack-item">
                   <div>
                     <strong>{message.title}</strong>
@@ -227,6 +236,15 @@ export function NotificationsPage() {
               ))}
             </div>
           )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={8}
+            totalItems={filtered.length}
+            itemLabel="broadcasts"
+            onPageChange={setPage}
+          />
         </section>
       </section>
     </main>

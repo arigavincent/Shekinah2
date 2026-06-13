@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { login } from "../api/authApi";
 import { saveSession } from "../auth/session";
+import { InlineAlert } from "../components/InlineAlert";
 import { useAdminTheme } from "../theme";
 
 export function LoginPage() {
@@ -70,7 +71,7 @@ export function LoginPage() {
           />
         </label>
 
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <InlineAlert title="Sign-in failed" message={error} /> : null}
 
         <button disabled={loading}>
           {loading ? "Signing in..." : "Sign In"}

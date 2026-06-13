@@ -7,6 +7,7 @@ import {
   type LiveConfigPayload,
   updateLiveConfig
 } from "../api/adminLiveConfigApi";
+import { InlineAlert } from "../components/InlineAlert";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { isValidYouTubeId } from "../lib/validation";
 
@@ -141,7 +142,7 @@ export function LiveConfigPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Live configuration could not be updated" message={error} /> : null}
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>

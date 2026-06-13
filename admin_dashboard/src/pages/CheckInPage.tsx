@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { listEvents } from "../api/adminEventsApi";
 import { listRecentCheckins, verifyCheckin, type AdminCheckin } from "../api/adminCheckinsApi";
+import { InlineAlert } from "../components/InlineAlert";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 
 function formatDate(value?: string) {
@@ -91,7 +92,7 @@ export function CheckInPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Check-in could not be completed" message={error} /> : null}
 
       <section className="content-grid">
         <section className="list-card">

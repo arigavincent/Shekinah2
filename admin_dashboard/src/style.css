@@ -583,6 +583,51 @@ textarea:focus {
   margin-bottom: 1rem;
 }
 
+.inline-alert {
+  display: grid;
+  gap: 0.3rem;
+  border-radius: 16px;
+  padding: 0.95rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.inline-alert strong {
+  font-size: 0.88rem;
+}
+
+.inline-alert.error {
+  color: var(--danger);
+  background: var(--danger-wash);
+  border: 1px solid var(--danger-border);
+}
+
+.inline-alert.info {
+  color: var(--text);
+  background: var(--accent-wash);
+  border: 1px solid color-mix(in srgb, var(--gold) 32%, transparent);
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.pagination-bar .small-muted {
+  margin: 0;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 980px) {
   .admin-shell {
     grid-template-columns: 1fr;
@@ -616,6 +661,11 @@ textarea:focus {
 
   .page-header {
     flex-direction: column;
+  }
+
+  .pagination-bar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

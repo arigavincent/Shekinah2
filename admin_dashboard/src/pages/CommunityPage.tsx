@@ -6,7 +6,10 @@ import {
   updateCommunityMessage,
   type AdminCommunityMessage
 } from "../api/adminCommunityApi";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -38,6 +41,12 @@ export function CommunityPage() {
       return b.createdAt.localeCompare(a.createdAt);
     });
   }, [messages, query, sortBy]);
+
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    8,
+    [query, channel, status, sortBy, messages.length]
+  );
 
   async function load() {
     setLoading(true);
@@ -116,7 +125,7 @@ export function CommunityPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Chat moderation could not be updated" message={error} /> : null}
 
       <section className="list-card" style={{ marginBottom: 18 }}>
         <div className="list-controls">
@@ -177,7 +186,7 @@ export function CommunityPage() {
           <p className="muted">No messages found.</p>
         ) : (
           <div className="sermon-list">
-            {filtered.map(item => (
+            {pagedItems.map(item => (
               <div key={item.id} className="sermon-row">
                 <div style={{ flex: 1 }}>
                   <h3 style={{ margin: "0 0 6px" }}>{item.displayName || "Member"}</h3>
@@ -203,6 +212,15 @@ export function CommunityPage() {
             ))}
           </div>
         )}
+
+        <PaginationBar
+          currentPage={page}
+          totalPages={totalPages}
+          pageSize={8}
+          totalItems={filtered.length}
+          itemLabel="messages"
+          onPageChange={setPage}
+        />
       </section>
     </main>
   );

@@ -10,7 +10,10 @@ import {
   updateEvent
 } from "../api/adminEventsApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { isValidAssetReference, isValidDateString, hasMinLength } from "../lib/validation";
 
 const emptyForm: EventPayload = {
@@ -50,6 +53,12 @@ export function EventsPage() {
       return b.eventDate.localeCompare(a.eventDate);
     });
   }, [events, query, sortBy]);
+
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    6,
+    [query, sortBy, events.length]
+  );
 
   async function load() {
     setLoading(true);
@@ -208,7 +217,7 @@ export function EventsPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Events could not be updated" message={error} /> : null}
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>
@@ -353,7 +362,7 @@ export function EventsPage() {
             <p className="muted">No events found.</p>
           ) : (
             <div className="sermon-list">
-              {filtered.map(event => (
+              {pagedItems.map(event => (
                 <article key={event.id} className="sermon-row">
                   <div>
                     <h3>{event.title}</h3>
@@ -376,6 +385,15 @@ export function EventsPage() {
               ))}
             </div>
           )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="events"
+            onPageChange={setPage}
+          />
         </section>
       </section>
     </main>

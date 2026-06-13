@@ -4,6 +4,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 
 import { changePassword } from "../api/authApi";
 import { getToken, getUser, saveSession } from "../auth/session";
+import { InlineAlert } from "../components/InlineAlert";
 import { useAdminTheme } from "../theme";
 
 export function ResetPasswordPage() {
@@ -93,7 +94,7 @@ export function ResetPasswordPage() {
           />
         </label>
 
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <InlineAlert title="Password reset failed" message={error} /> : null}
 
         <button disabled={saving}>
           {saving ? "Saving..." : "Save New Password"}

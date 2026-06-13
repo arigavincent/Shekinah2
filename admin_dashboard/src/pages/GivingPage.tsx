@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { API_BASE_URL } from "../api/client";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import {
   listGivingTransactions,
   type GivingTransaction
@@ -74,6 +77,12 @@ export function GivingPage() {
       return b.createdAt.localeCompare(a.createdAt);
     });
   }, [transactions, query, status, category, sortBy]);
+
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    10,
+    [query, status, category, sortBy, transactions.length]
+  );
 
   const categories = useMemo(
     () => Array.from(new Set(transactions.map(item => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -150,7 +159,7 @@ export function GivingPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Giving data could not be loaded" message={error} /> : null}
 
       <section className="stats-grid">
         <article className="stat-card">
@@ -254,7 +263,7 @@ export function GivingPage() {
               </thead>
 
               <tbody>
-                {filtered.map(transaction => (
+                {pagedItems.map(transaction => (
                   <tr key={transaction.id}>
                     <td>{formatDate(transaction.createdAt)}</td>
                     <td>
@@ -297,6 +306,15 @@ export function GivingPage() {
             </table>
           </div>
         )}
+
+        <PaginationBar
+          currentPage={page}
+          totalPages={totalPages}
+          pageSize={10}
+          totalItems={filtered.length}
+          itemLabel="transactions"
+          onPageChange={setPage}
+        />
       </section>
     </main>
   );

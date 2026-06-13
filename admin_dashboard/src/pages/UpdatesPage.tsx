@@ -10,7 +10,10 @@ import {
   updateUpdate
 } from "../api/adminUpdatesApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { isValidAssetReference, isValidDateString } from "../lib/validation";
 
 const emptyForm: UpdatePayload = {
@@ -48,6 +51,12 @@ export function UpdatesPage() {
       return b.updateDate.localeCompare(a.updateDate);
     });
   }, [updates, query, sortBy]);
+
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    6,
+    [query, sortBy, updates.length]
+  );
 
   async function load() {
     setLoading(true);
@@ -202,7 +211,7 @@ export function UpdatesPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Updates could not be updated" message={error} /> : null}
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>
@@ -329,7 +338,7 @@ export function UpdatesPage() {
             <p className="muted">No updates found.</p>
           ) : (
             <div className="sermon-list">
-              {filtered.map(update => (
+              {pagedItems.map(update => (
                 <article key={update.id} className="sermon-row">
                   <div>
                     <h3>{update.title}</h3>
@@ -350,6 +359,15 @@ export function UpdatesPage() {
               ))}
             </div>
           )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="announcements"
+            onPageChange={setPage}
+          />
         </section>
       </section>
     </main>

@@ -5,7 +5,10 @@ import {
   updatePrayer,
   type AdminPrayer
 } from "../api/adminPrayersApi";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 
 const STATUS_OPTIONS = [
   { value: "new", label: "New" },
@@ -114,6 +117,12 @@ export function PrayersPage() {
     });
   }, [prayers, query, scope, statusFilter, sortBy]);
 
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    8,
+    [query, scope, statusFilter, sortBy, prayers.length]
+  );
+
   const selectedPrayer = useMemo(
     () => prayers.find(prayer => prayer.id === selectedId) || null,
     [prayers, selectedId]
@@ -205,7 +214,7 @@ export function PrayersPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Prayer queue could not be updated" message={error} /> : null}
 
       <section className="content-grid">
         <section className="list-card">
@@ -267,7 +276,7 @@ export function PrayersPage() {
             <p className="muted">No prayer requests found.</p>
           ) : (
             <div className="sermon-list">
-              {filtered.map(prayer => {
+              {pagedItems.map(prayer => {
                 const active = prayer.id === selectedId;
 
                 return (
@@ -317,6 +326,15 @@ export function PrayersPage() {
               })}
             </div>
           )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={8}
+            totalItems={filtered.length}
+            itemLabel="prayer requests"
+            onPageChange={setPage}
+          />
         </section>
 
         <section className="editor-card">

@@ -10,7 +10,10 @@ import {
   updateSermon
 } from "../api/adminSermonsApi";
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { isValidAssetReference, isValidDateString } from "../lib/validation";
 
 const categories = [
@@ -65,6 +68,12 @@ export function SermonsPage() {
       return b.sermonDate.localeCompare(a.sermonDate);
     });
   }, [query, sermons, sortBy, typeFilter]);
+
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    6,
+    [query, sortBy, typeFilter, sermons.length]
+  );
 
   async function load() {
     setLoading(true);
@@ -235,7 +244,7 @@ export function SermonsPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Sermons could not be updated" message={error} /> : null}
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>
@@ -480,7 +489,7 @@ export function SermonsPage() {
             <p className="muted">No sermons found.</p>
           ) : (
             <div className="sermon-list">
-              {filtered.map(sermon => (
+              {pagedItems.map(sermon => (
                 <article key={sermon.id} className="sermon-row">
                   <div>
                     <h3>{sermon.title}</h3>
@@ -502,6 +511,15 @@ export function SermonsPage() {
               ))}
             </div>
           )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="sermons"
+            onPageChange={setPage}
+          />
         </section>
       </section>
     </main>

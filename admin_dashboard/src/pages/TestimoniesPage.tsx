@@ -5,7 +5,10 @@ import {
   updateAdminTestimony,
   type AdminTestimony
 } from "../api/adminTestimoniesApi";
+import { InlineAlert } from "../components/InlineAlert";
+import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
+import { usePaginatedItems } from "../hooks/usePaginatedItems";
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -35,6 +38,12 @@ export function TestimoniesPage() {
       return b.createdAt.localeCompare(a.createdAt);
     });
   }, [items, query, sortBy]);
+
+  const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
+    filtered,
+    8,
+    [query, status, sortBy, items.length]
+  );
 
   async function load() {
     setLoading(true);
@@ -86,7 +95,7 @@ export function TestimoniesPage() {
         </button>
       </header>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <InlineAlert title="Testimonies could not be updated" message={error} /> : null}
 
       <section className="list-card" style={{ marginBottom: 18 }}>
         <div className="list-controls">
@@ -140,7 +149,7 @@ export function TestimoniesPage() {
           <p className="muted">No testimonies found.</p>
         ) : (
           <div className="sermon-list">
-            {filtered.map(item => (
+            {pagedItems.map(item => (
               <div key={item.id} className="sermon-row">
                 <div style={{ flex: 1 }}>
                   <h3 style={{ margin: "0 0 6px" }}>{item.title}</h3>
@@ -166,6 +175,15 @@ export function TestimoniesPage() {
             ))}
           </div>
         )}
+
+        <PaginationBar
+          currentPage={page}
+          totalPages={totalPages}
+          pageSize={8}
+          totalItems={filtered.length}
+          itemLabel="testimonies"
+          onPageChange={setPage}
+        />
       </section>
     </main>
   );
