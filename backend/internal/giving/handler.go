@@ -550,6 +550,17 @@ func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, pho
 	password := base64.StdEncoding.EncodeToString([]byte(shortcode + env("MPESA_PASSKEY") + timestamp))
 	transactionType := firstNonEmpty(env("MPESA_TRANSACTION_TYPE"), "CustomerPayBillOnline")
 
+	log.Printf(
+		"mpesa stk start tx=%s phone=%s amount=%d type=%s shortcode=%s passkey=%s callback=%s",
+		txID,
+		phone,
+		amount,
+		transactionType,
+		secretFingerprint(shortcode),
+		secretFingerprint(env("MPESA_PASSKEY")),
+		strings.TrimSpace(env("MPESA_CALLBACK_URL")),
+	)
+
 	payload := stkPushPayload{
 		BusinessShortCode: shortcode,
 		Password:          password,
@@ -594,6 +605,14 @@ func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, pho
 
 	rawBytes, _ := json.Marshal(raw)
 	_ = json.Unmarshal(rawBytes, &result)
+
+	log.Printf(
+		"mpesa stk response status=%d body=%s code=%s error_code=%s",
+		resp.StatusCode,
+		sanitizeMpesaErrorBody(rawBytes),
+		result.ResponseCode,
+		result.ErrorCode,
+	)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return result, rawBytes, fmt.Errorf("%s", firstNonEmpty(result.ErrorMessage, result.ResponseDescription, "M-Pesa STK push failed"))
