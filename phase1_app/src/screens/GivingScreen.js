@@ -10,6 +10,7 @@ import {
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { C } from "../constants/theme";
 import { s } from "../styles/appStyles";
@@ -17,6 +18,7 @@ import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { Tabs } from "../components/Tabs";
 import { tr } from "../i18n/labels";
+import { API_CONFIG } from "../config/apiConfig";
 import {
   getGivingTransaction,
   startCardGiving,
@@ -32,6 +34,7 @@ import {
 const CATEGORIES = ["Tithe", "Offering", "Thanksgiving", "Project", "Special Seed"];
 const QUICK_AMOUNTS = [100, 500, 1000, 2000, 5000, 10000];
 const METHODS = ["M-Pesa", "Card"];
+const GIVING_DOCS_DIR = `${FileSystem.documentDirectory || FileSystem.cacheDirectory || ""}giving-docs/`;
 
 function normalizePhone(value) {
   return String(value || "").replace(/[\s-]+/g, "");
@@ -96,7 +99,7 @@ function Chip({ label, active, onPress }) {
   );
 }
 
-function GivingTransactionCard({ item, onRefresh, refreshing }) {
+function GivingTransactionCard({ item, onRefresh, refreshing, onDownloadReceipt, onDownloadInvoice, downloading }) {
   const color = statusColor(item.status);
 
   return (
@@ -155,6 +158,32 @@ function GivingTransactionCard({ item, onRefresh, refreshing }) {
           {refreshing ? "Checking..." : "Check Status"}
         </Text>
       </Pressable>
+
+      <View style={[s.rowTight, { marginTop: 10, gap: 10, flexWrap: "wrap" }]}>
+        {item.status === "success" ? (
+          <Pressable
+            style={s.secondaryBtn}
+            onPress={onDownloadReceipt}
+            disabled={downloading}
+          >
+            <Ionicons name="receipt-outline" size={18} color={C.gold} />
+            <Text style={[s.secondaryText, { color: C.gold }]}>
+              {downloading === "receipt" ? "Downloading..." : "Receipt"}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        <Pressable
+          style={s.secondaryBtn}
+          onPress={onDownloadInvoice}
+          disabled={Boolean(downloading)}
+        >
+          <Ionicons name="document-text-outline" size={18} color={C.gold} />
+          <Text style={[s.secondaryText, { color: C.gold }]}>
+            {downloading === "invoice" ? "Downloading..." : "Invoice"}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -171,6 +200,7 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
   const [submitting, setSubmitting] = useState(false);
   const [refreshingId, setRefreshingId] = useState("");
   const [historyRefreshing, setHistoryRefreshing] = useState(false);
+  const [downloadingDoc, setDownloadingDoc] = useState("");
 
   const cleanAmount = useMemo(() => normalizeAmount(amount), [amount]);
   const pendingTransactions = useMemo(
@@ -411,6 +441,40 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
     );
   }
 
+  async function downloadDocument(transaction, kind) {
+    if (!transaction?.id || !GIVING_DOCS_DIR) {
+      Alert.alert("Download Failed", "Document storage is not available on this device.");
+      return;
+    }
+
+    const label = kind === "receipt" ? "receipt" : "invoice";
+    setDownloadingDoc(`${transaction.id}:${label}`);
+
+    try {
+      const dirInfo = await FileSystem.getInfoAsync(GIVING_DOCS_DIR);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(GIVING_DOCS_DIR, { intermediates: true });
+      }
+
+      const fileUri = `${GIVING_DOCS_DIR}${label}-${transaction.id}.pdf`;
+      const url = `${API_CONFIG.baseUrl}/api/v1/giving/transactions/${transaction.id}/${label}.pdf`;
+      await FileSystem.downloadAsync(url, fileUri);
+
+      Alert.alert(
+        `${label === "receipt" ? "Receipt" : "Invoice"} Saved`,
+        "The document has been downloaded to the app files and will open now."
+      );
+      await Linking.openURL(fileUri);
+    } catch (error) {
+      Alert.alert(
+        "Download Failed",
+        error instanceof Error ? error.message : "Unable to download the giving document."
+      );
+    } finally {
+      setDownloadingDoc("");
+    }
+  }
+
   return (
     <Screen>
       <TopBar
@@ -635,6 +699,9 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
                   item={item}
                   refreshing={refreshingId === item.id}
                   onRefresh={() => refreshTransaction(item.id)}
+                  onDownloadReceipt={() => downloadDocument(item, "receipt")}
+                  onDownloadInvoice={() => downloadDocument(item, "invoice")}
+                  downloading={downloadingDoc === `${item.id}:receipt` ? "receipt" : downloadingDoc === `${item.id}:invoice` ? "invoice" : ""}
                 />
               ))
             )}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { API_BASE_URL } from "../api/client";
 import {
   listGivingTransactions,
   type GivingTransaction
@@ -114,6 +115,10 @@ export function GivingPage() {
     load();
   }, []);
 
+  function openDocument(transactionId: string, kind: "receipt" | "invoice") {
+    window.open(`${API_BASE_URL}/api/v1/admin/giving/transactions/${transactionId}/${kind}.pdf`, "_blank");
+  }
+
   return (
     <main>
       <header className="page-header">
@@ -200,6 +205,7 @@ export function GivingPage() {
                   <th>Receipt</th>
                   <th>Checkout ID</th>
                   <th>Result</th>
+                  <th>Documents</th>
                 </tr>
               </thead>
 
@@ -226,6 +232,20 @@ export function GivingPage() {
                       {transaction.note ? (
                         <p className="small-muted">Note: {transaction.note}</p>
                       ) : null}
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {transaction.status === "success" ? (
+                          <button className="secondary" onClick={() => openDocument(transaction.id, "receipt")}>
+                            Receipt
+                          </button>
+                        ) : (
+                          <span className="small-muted">Receipt after payment</span>
+                        )}
+                        <button className="secondary" onClick={() => openDocument(transaction.id, "invoice")}>
+                          Invoice
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
