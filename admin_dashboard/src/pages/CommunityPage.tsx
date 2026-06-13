@@ -6,6 +6,7 @@ import {
   updateCommunityMessage,
   type AdminCommunityMessage
 } from "../api/adminCommunityApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -15,6 +16,7 @@ function formatDate(value?: string) {
 }
 
 export function CommunityPage() {
+  const { confirm, showToast } = useAdminFeedback();
   const [messages, setMessages] = useState<AdminCommunityMessage[]>([]);
   const [channel, setChannel] = useState("global");
   const [status, setStatus] = useState("");
@@ -22,7 +24,6 @@ export function CommunityPage() {
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "member">("newest");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -61,7 +62,6 @@ export function CommunityPage() {
 
   async function update(item: AdminCommunityMessage, nextStatus: string) {
     setError("");
-    setSuccess("");
     try {
       const response = await updateCommunityMessage(item.id, {
         status: nextStatus,
@@ -69,24 +69,34 @@ export function CommunityPage() {
       });
 
       setMessages(current => current.map(row => (row.id === item.id ? response.message : row)));
-      setSuccess(`Message marked ${nextStatus}.`);
+      showToast({
+        title: "Message updated",
+        message: `${item.displayName || "Member"} message is now ${nextStatus}.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update message");
     }
   }
 
   async function remove(item: AdminCommunityMessage) {
-    const confirmed = confirm(
-      `Delete this message from ${item.displayName || "member"}?\n\nThis permanently removes it from the moderation queue.`
-    );
+    const confirmed = await confirm({
+      title: `Delete message from ${item.displayName || "member"}?`,
+      message: "This permanently removes the message from the moderation queue.",
+      confirmLabel: "Delete Message",
+      tone: "danger"
+    });
     if (!confirmed) return;
 
     setError("");
-    setSuccess("");
     try {
       await deleteCommunityMessage(item.id);
       setMessages(current => current.filter(row => row.id !== item.id));
-      setSuccess("Message deleted.");
+      showToast({
+        title: "Message deleted",
+        message: "The message was removed from the moderation queue.",
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete message");
     }
@@ -107,7 +117,6 @@ export function CommunityPage() {
       </header>
 
       {error ? <div className="error">{error}</div> : null}
-      {success ? <div className="success">{success}</div> : null}
 
       <section className="list-card" style={{ marginBottom: 18 }}>
         <div className="list-controls">

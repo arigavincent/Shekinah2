@@ -10,6 +10,7 @@ import {
   updateDevotion
 } from "../api/adminDevotionsApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { isValidAssetReference, isValidDateString, hasMinLength } from "../lib/validation";
 
 const emptyForm: DevotionPayload = {
@@ -21,6 +22,7 @@ const emptyForm: DevotionPayload = {
 };
 
 export function DevotionsPage() {
+  const { confirm, showToast } = useAdminFeedback();
   const [devotions, setDevotions] = useState<Devotion[]>([]);
   const [form, setForm] = useState<DevotionPayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -143,6 +145,11 @@ export function DevotionsPage() {
 
       resetForm();
       await load();
+      showToast({
+        title: editingId ? "Devotion updated" : "Devotion created",
+        message: `${form.title.trim()} is ready for members.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save devotion");
     } finally {
@@ -151,9 +158,12 @@ export function DevotionsPage() {
   }
 
   async function remove(devotion: Devotion) {
-    const confirmed = confirm(
-      `Delete "${devotion.title}"?\n\nThis removes the devotion from the app feed and favourites source list.`
-    );
+    const confirmed = await confirm({
+      title: `Delete "${devotion.title}"?`,
+      message: "This removes the devotion from the app feed and favourites source list.",
+      confirmLabel: "Delete Devotion",
+      tone: "danger"
+    });
     if (!confirmed) return;
 
     setSaving(true);
@@ -166,6 +176,12 @@ export function DevotionsPage() {
       if (editingId === devotion.id) {
         resetForm();
       }
+
+      showToast({
+        title: "Devotion deleted",
+        message: `${devotion.title} was removed from the mobile feed.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete devotion");
     } finally {

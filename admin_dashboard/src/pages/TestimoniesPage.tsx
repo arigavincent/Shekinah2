@@ -5,6 +5,7 @@ import {
   updateAdminTestimony,
   type AdminTestimony
 } from "../api/adminTestimoniesApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -14,13 +15,13 @@ function formatDate(value?: string) {
 }
 
 export function TestimoniesPage() {
+  const { showToast } = useAdminFeedback();
   const [items, setItems] = useState<AdminTestimony[]>([]);
   const [status, setStatus] = useState("");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "member">("newest");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -55,14 +56,17 @@ export function TestimoniesPage() {
 
   async function update(item: AdminTestimony, nextStatus: string, featured = item.featured) {
     setError("");
-    setSuccess("");
     try {
       const response = await updateAdminTestimony(item.id, {
         status: nextStatus,
         featured
       });
       setItems(current => current.map(row => (row.id === item.id ? response.testimony : row)));
-      setSuccess(`Testimony updated: ${nextStatus}${featured ? " · featured" : ""}.`);
+      showToast({
+        title: "Testimony updated",
+        message: `${item.title} is now ${nextStatus}${featured ? " and featured" : ""}.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update testimony");
     }
@@ -83,7 +87,6 @@ export function TestimoniesPage() {
       </header>
 
       {error ? <div className="error">{error}</div> : null}
-      {success ? <div className="success">{success}</div> : null}
 
       <section className="list-card" style={{ marginBottom: 18 }}>
         <div className="list-controls">

@@ -10,6 +10,7 @@ import {
   updateBranch
 } from "../api/adminBranchesApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { isValidAssetReference, isValidPhone } from "../lib/validation";
 
 type BranchForm = {
@@ -57,6 +58,7 @@ function toPayload(form: BranchForm): BranchPayload {
 }
 
 export function BranchesPage() {
+  const { confirm, showToast } = useAdminFeedback();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [form, setForm] = useState<BranchForm>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -182,6 +184,11 @@ export function BranchesPage() {
 
       resetForm();
       await load();
+      showToast({
+        title: editingId ? "Branch updated" : "Branch created",
+        message: `${form.name.trim()} is ready for members.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save branch");
     } finally {
@@ -190,9 +197,12 @@ export function BranchesPage() {
   }
 
   async function remove(branch: Branch) {
-    const confirmed = confirm(
-      `Delete "${branch.name}"?\n\nThis removes the branch and its public contact details from the app.`
-    );
+    const confirmed = await confirm({
+      title: `Delete "${branch.name}"?`,
+      message: "This removes the branch and its public contact details from the app.",
+      confirmLabel: "Delete Branch",
+      tone: "danger"
+    });
     if (!confirmed) return;
 
     setSaving(true);
@@ -205,6 +215,12 @@ export function BranchesPage() {
       if (editingId === branch.id) {
         resetForm();
       }
+
+      showToast({
+        title: "Branch deleted",
+        message: `${branch.name} was removed from the public branch list.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete branch");
     } finally {

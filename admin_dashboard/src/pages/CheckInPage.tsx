@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { listEvents } from "../api/adminEventsApi";
 import { listRecentCheckins, verifyCheckin, type AdminCheckin } from "../api/adminCheckinsApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -11,6 +12,7 @@ function formatDate(value?: string) {
 }
 
 export function CheckInPage() {
+  const { showToast } = useAdminFeedback();
   const [eventId, setEventId] = useState("");
   const [code, setCode] = useState("");
   const [notes, setNotes] = useState("");
@@ -19,7 +21,6 @@ export function CheckInPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   async function load() {
     setLoading(true);
@@ -53,7 +54,6 @@ export function CheckInPage() {
 
     setSaving(true);
     setError("");
-    setSuccess("");
 
     try {
       const response = await verifyCheckin({
@@ -62,7 +62,11 @@ export function CheckInPage() {
         notes: notes.trim()
       });
 
-      setSuccess(`${response.name} checked in for ${response.eventTitle}.`);
+      showToast({
+        title: "Member checked in",
+        message: `${response.name} checked in for ${response.eventTitle}.`,
+        tone: "success"
+      });
       setCode("");
       setNotes("");
       await load();
@@ -88,7 +92,6 @@ export function CheckInPage() {
       </header>
 
       {error ? <div className="error">{error}</div> : null}
-      {success ? <div className="success">{success}</div> : null}
 
       <section className="content-grid">
         <section className="list-card">

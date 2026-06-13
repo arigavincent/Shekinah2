@@ -10,6 +10,7 @@ import {
   updateUpdate
 } from "../api/adminUpdatesApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { isValidAssetReference, isValidDateString } from "../lib/validation";
 
 const emptyForm: UpdatePayload = {
@@ -20,6 +21,7 @@ const emptyForm: UpdatePayload = {
 };
 
 export function UpdatesPage() {
+  const { confirm, showToast } = useAdminFeedback();
   const [updates, setUpdates] = useState<UpdateItem[]>([]);
   const [form, setForm] = useState<UpdatePayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -140,6 +142,11 @@ export function UpdatesPage() {
 
       resetForm();
       await load();
+      showToast({
+        title: editingId ? "Announcement updated" : "Announcement created",
+        message: `${form.title.trim()} is ready in the updates feed.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save update");
     } finally {
@@ -148,9 +155,12 @@ export function UpdatesPage() {
   }
 
   async function remove(update: UpdateItem) {
-    const confirmed = confirm(
-      `Delete "${update.title}"?\n\nThis removes the announcement from the updates feed in the mobile app.`
-    );
+    const confirmed = await confirm({
+      title: `Delete "${update.title}"?`,
+      message: "This removes the announcement from the updates feed in the mobile app.",
+      confirmLabel: "Delete Announcement",
+      tone: "danger"
+    });
     if (!confirmed) return;
 
     setSaving(true);
@@ -163,6 +173,12 @@ export function UpdatesPage() {
       if (editingId === update.id) {
         resetForm();
       }
+
+      showToast({
+        title: "Announcement deleted",
+        message: `${update.title} was removed from the updates feed.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete update");
     } finally {

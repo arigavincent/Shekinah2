@@ -6,6 +6,7 @@ import {
   listNotificationMessages,
   type NotificationMessage
 } from "../api/adminNotificationsApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { hasMinLength } from "../lib/validation";
 
 const categories = [
@@ -34,13 +35,13 @@ function formatDate(value: string) {
 }
 
 export function NotificationsPage() {
+  const { showToast } = useAdminFeedback();
   const [messages, setMessages] = useState<NotificationMessage[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -96,7 +97,6 @@ export function NotificationsPage() {
 
     setSending(true);
     setError("");
-    setNotice("");
 
     try {
       const data = form.screen.trim() ? { screen: form.screen.trim() } : {};
@@ -108,9 +108,11 @@ export function NotificationsPage() {
         data
       });
 
-      setNotice(
-        `Sent to ${response.message.targetCount} device(s): ${response.message.successCount} successful, ${response.message.failureCount} failed.`
-      );
+      showToast({
+        title: "Notification broadcast sent",
+        message: `Sent to ${response.message.targetCount} device(s): ${response.message.successCount} successful, ${response.message.failureCount} failed.`,
+        tone: response.message.failureCount > 0 ? "info" : "success"
+      });
       setForm(emptyForm);
       await load();
     } catch (err) {
@@ -137,7 +139,6 @@ export function NotificationsPage() {
       </header>
 
       {error ? <div className="error">{error}</div> : null}
-      {notice ? <div className="success">{notice}</div> : null}
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>

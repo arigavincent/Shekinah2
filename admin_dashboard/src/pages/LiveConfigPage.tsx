@@ -7,6 +7,7 @@ import {
   type LiveConfigPayload,
   updateLiveConfig
 } from "../api/adminLiveConfigApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { isValidYouTubeId } from "../lib/validation";
 
 const emptyForm: LiveConfigPayload = {
@@ -31,17 +32,16 @@ function normalizeYouTubeInput(value: string) {
 }
 
 export function LiveConfigPage() {
+  const { showToast } = useAdminFeedback();
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null);
   const [form, setForm] = useState<LiveConfigPayload>({ ...emptyForm });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   async function load() {
     setLoading(true);
     setError("");
-    setSuccess("");
 
     try {
       const response = await getLiveConfig();
@@ -95,13 +95,11 @@ export function LiveConfigPage() {
     const validationError = validate();
     if (validationError) {
       setError(validationError);
-      setSuccess("");
       return;
     }
 
     setSaving(true);
     setError("");
-    setSuccess("");
 
     try {
       const response = await updateLiveConfig({
@@ -113,7 +111,13 @@ export function LiveConfigPage() {
       });
 
       setLiveConfig(response.liveConfig);
-      setSuccess("Live configuration updated.");
+      showToast({
+        title: "Live configuration updated",
+        message: form.isLive
+          ? "Members will now see the active livestream."
+          : "The app now shows the offline live-service state.",
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update live config");
     } finally {
@@ -138,7 +142,6 @@ export function LiveConfigPage() {
       </header>
 
       {error ? <div className="error">{error}</div> : null}
-      {success ? <div className="success">{success}</div> : null}
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>

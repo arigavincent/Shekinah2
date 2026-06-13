@@ -10,6 +10,7 @@ import {
   updateEvent
 } from "../api/adminEventsApi";
 import { uploadMedia } from "../api/adminMediaApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { isValidAssetReference, isValidDateString, hasMinLength } from "../lib/validation";
 
 const emptyForm: EventPayload = {
@@ -22,6 +23,7 @@ const emptyForm: EventPayload = {
 };
 
 export function EventsPage() {
+  const { confirm, showToast } = useAdminFeedback();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [form, setForm] = useState<EventPayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -146,6 +148,11 @@ export function EventsPage() {
 
       resetForm();
       await load();
+      showToast({
+        title: editingId ? "Event updated" : "Event created",
+        message: `${form.title.trim()} is ready in the events schedule.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save event");
     } finally {
@@ -154,9 +161,12 @@ export function EventsPage() {
   }
 
   async function remove(event: EventItem) {
-    const confirmed = confirm(
-      `Delete "${event.title}"?\n\nThis removes the event from the public schedule and detail views.`
-    );
+    const confirmed = await confirm({
+      title: `Delete "${event.title}"?`,
+      message: "This removes the event from the public schedule and detail views.",
+      confirmLabel: "Delete Event",
+      tone: "danger"
+    });
     if (!confirmed) return;
 
     setSaving(true);
@@ -169,6 +179,12 @@ export function EventsPage() {
       if (editingId === event.id) {
         resetForm();
       }
+
+      showToast({
+        title: "Event deleted",
+        message: `${event.title} was removed from the public schedule.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete event");
     } finally {

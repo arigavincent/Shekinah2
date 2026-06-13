@@ -10,6 +10,7 @@ import {
   updateSermon
 } from "../api/adminSermonsApi";
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { isValidAssetReference, isValidDateString } from "../lib/validation";
 
 const categories = [
@@ -33,6 +34,7 @@ const emptyForm: SermonPayload = {
 };
 
 export function SermonsPage() {
+  const { confirm, showToast } = useAdminFeedback();
   const [sermons, setSermons] = useState<Sermon[]>([]);
   const [form, setForm] = useState<SermonPayload>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -173,6 +175,11 @@ export function SermonsPage() {
 
       resetForm();
       await load();
+      showToast({
+        title: editingId ? "Sermon updated" : "Sermon created",
+        message: `${form.title.trim()} is ready in the content library.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save sermon");
     } finally {
@@ -181,9 +188,12 @@ export function SermonsPage() {
   }
 
   async function remove(sermon: Sermon) {
-    const confirmed = confirm(
-      `Delete "${sermon.title}"?\n\nThis removes the sermon from the admin list and the mobile app.`
-    );
+    const confirmed = await confirm({
+      title: `Delete "${sermon.title}"?`,
+      message: "This removes the sermon from the admin library and the mobile app.",
+      confirmLabel: "Delete Sermon",
+      tone: "danger"
+    });
     if (!confirmed) return;
 
     setSaving(true);
@@ -196,6 +206,12 @@ export function SermonsPage() {
       if (editingId === sermon.id) {
         resetForm();
       }
+
+      showToast({
+        title: "Sermon deleted",
+        message: `${sermon.title} was removed from the content library.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete sermon");
     } finally {

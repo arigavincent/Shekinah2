@@ -5,6 +5,7 @@ import {
   updatePrayer,
   type AdminPrayer
 } from "../api/adminPrayersApi";
+import { useAdminFeedback } from "../feedback/AdminFeedback";
 
 const STATUS_OPTIONS = [
   { value: "new", label: "New" },
@@ -73,6 +74,7 @@ function summaryText(prayer: AdminPrayer) {
 }
 
 export function PrayersPage() {
+  const { showToast } = useAdminFeedback();
   const [prayers, setPrayers] = useState<AdminPrayer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -82,7 +84,6 @@ export function PrayersPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [draftStatus, setDraftStatus] = useState("new");
   const [draftAdminNote, setDraftAdminNote] = useState("");
 
@@ -165,7 +166,6 @@ export function PrayersPage() {
 
     setSaving(true);
     setError("");
-    setSuccess("");
 
     try {
       const response = await updatePrayer(selectedPrayer.id, {
@@ -177,7 +177,11 @@ export function PrayersPage() {
       setPrayers(current =>
         current.map(item => (item.id === nextPrayer.id ? nextPrayer : item))
       );
-      setSuccess("Prayer request updated.");
+      showToast({
+        title: "Prayer request updated",
+        message: `Status set to ${statusLabel(nextPrayer.status)}.`,
+        tone: "success"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update prayer request");
     } finally {
@@ -202,7 +206,6 @@ export function PrayersPage() {
       </header>
 
       {error ? <div className="error">{error}</div> : null}
-      {success ? <div className="success">{success}</div> : null}
 
       <section className="content-grid">
         <section className="list-card">
