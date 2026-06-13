@@ -29,10 +29,10 @@ func (s Service) Get(ctx context.Context) (LiveConfig, error) {
 	command := Command{
 		ID:          "default",
 		IsLive:      false,
-		Title:       "Sunday Celebration Service",
+		Title:       "Live Stream",
 		Viewers:     "0",
-		NextService: "Sunday, 9:00 AM",
-		YoutubeID:   "jfKfPfyJRdk",
+		NextService: "Schedule will be updated soon.",
+		YoutubeID:   "",
 	}
 
 	return s.repository.Upsert(ctx, command)
@@ -81,10 +81,15 @@ func (s Service) Update(ctx context.Context, req UpdateRequest) (LiveConfig, err
 }
 
 func validateCommand(command Command) error {
-	if command.ID == "" ||
-		command.Title == "" ||
-		command.NextService == "" ||
-		command.YoutubeID == "" {
+	if command.ID == "" || command.NextService == "" {
+		return ErrInvalidInput
+	}
+
+	if command.Viewers == "" {
+		command.Viewers = "0"
+	}
+
+	if command.IsLive && (command.Title == "" || command.YoutubeID == "") {
 		return ErrInvalidInput
 	}
 

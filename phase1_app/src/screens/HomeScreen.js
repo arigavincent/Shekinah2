@@ -109,10 +109,31 @@ function playableClipFromContent(item) {
   };
 }
 
+function cleanViewerCount(value) {
+  const raw = cleanText(value);
+  if (!raw) return "";
+
+  const numeric = Number(raw.replace(/,/g, ""));
+  if (Number.isFinite(numeric) && numeric <= 0) {
+    return "";
+  }
+
+  return raw;
+}
+
 function HomeHero({ live, featuredVideo, go, appLanguage }) {
   const heroImage = featuredVideo
     ? sermonThumbnail(featuredVideo, PHASE1_IMAGES.sermon)
     : PHASE1_IMAGES.crowd;
+  const liveViewerCount = live?.isLive ? cleanViewerCount(live?.viewers) : "";
+  const heroTitle = live?.isLive
+    ? cleanText(live?.title) || "Live Stream"
+    : tr(appLanguage, "NEXT SERVICE");
+  const heroSubtitle = live?.isLive
+    ? tr(appLanguage, "Join the service now.")
+    : cleanText(live?.nextService)
+      ? `${tr(appLanguage, "Next service:")} ${cleanText(live?.nextService)}`
+      : tr(appLanguage, "Stay connected to the word, worship, and prayer.");
 
   return (
     <ImageBackground
@@ -143,27 +164,31 @@ function HomeHero({ live, featuredVideo, go, appLanguage }) {
           </Text>
         </View>
 
-        <View
-          style={{
-            backgroundColor: "rgba(0,0,0,0.65)",
-            borderRadius: 999,
-            paddingHorizontal: 12,
-            paddingVertical: 7
-          }}
-        >
-          <Text style={{ color: C.gold, fontWeight: "900", fontSize: 12 }}>
-            {live?.viewers || "Shekinah"}
-          </Text>
-        </View>
+        {liveViewerCount ? (
+          <View
+            style={{
+              backgroundColor: "rgba(0,0,0,0.65)",
+              borderRadius: 999,
+              paddingHorizontal: 12,
+              paddingVertical: 7
+            }}
+          >
+            <Text style={{ color: C.gold, fontWeight: "900", fontSize: 12 }}>
+              {liveViewerCount}
+            </Text>
+          </View>
+        ) : (
+          <View />
+        )}
       </View>
 
       <View style={{ padding: 16 }}>
         <Text style={{ color: C.textOnBrand, fontSize: 28, fontWeight: "900" }}>
-          {live?.title || "Shekinah Sons Global"}
+          {heroTitle}
         </Text>
 
         <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 14, fontWeight: "800", marginTop: 8 }}>
-          {live?.isLive ? tr(appLanguage, "Join the service now.") : live?.nextService || tr(appLanguage, "Stay connected to the word, worship, and prayer.")}
+          {heroSubtitle}
         </Text>
 
         <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>

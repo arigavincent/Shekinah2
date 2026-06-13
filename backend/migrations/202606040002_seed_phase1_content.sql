@@ -304,11 +304,11 @@ INSERT INTO live_stream_config (
 ) VALUES
 (
     'main',
-    true,
-    'Sunday Celebration Service',
-    '1,284',
+    false,
+    'Live Stream',
+    '0',
     'Sunday, 9:00 AM',
-    'jfKfPfyJRdk'
+    ''
 )
 ON CONFLICT (id) DO UPDATE SET
 is_live = EXCLUDED.is_live,

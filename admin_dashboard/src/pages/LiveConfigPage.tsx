@@ -11,10 +11,10 @@ import { isValidYouTubeId } from "../lib/validation";
 
 const emptyForm: LiveConfigPayload = {
   isLive: false,
-  title: "Sunday Celebration Service",
+  title: "Live Stream",
   viewers: "0",
-  nextService: "Sunday, 9:00 AM",
-  youtubeId: "jfKfPfyJRdk"
+  nextService: "",
+  youtubeId: ""
 };
 
 function normalizeYouTubeInput(value: string) {
@@ -77,10 +77,14 @@ export function LiveConfigPage() {
   }
 
   function validate() {
-    if (!form.title.trim()) return "Live title is required.";
     if (!form.nextService.trim()) return "Next service is required.";
-    if (!form.youtubeId.trim()) return "YouTube video/live ID is required.";
-    if (!isValidYouTubeId(form.youtubeId)) return "YouTube video/live ID is invalid.";
+    if (form.isLive) {
+      if (!form.title.trim()) return "Live title is required.";
+      if (!form.youtubeId.trim()) return "YouTube video/live ID is required.";
+      if (!isValidYouTubeId(form.youtubeId)) return "YouTube video/live ID is invalid.";
+    } else if (form.youtubeId.trim() && !isValidYouTubeId(form.youtubeId)) {
+      return "YouTube video/live ID is invalid.";
+    }
 
     return "";
   }
@@ -164,7 +168,7 @@ export function LiveConfigPage() {
                 <input
                   value={form.title}
                   onChange={event => updateField("title", event.target.value)}
-                  placeholder="Sunday Celebration Service"
+                  placeholder="Live Stream"
                 />
               </label>
 
@@ -174,7 +178,7 @@ export function LiveConfigPage() {
                   <input
                     value={form.viewers}
                     onChange={event => updateField("viewers", event.target.value)}
-                    placeholder="1,284"
+                    placeholder="0"
                   />
                 </label>
 
@@ -193,7 +197,7 @@ export function LiveConfigPage() {
                 <input
                   value={form.youtubeId}
                   onChange={event => updateField("youtubeId", normalizeYouTubeInput(event.target.value))}
-                  placeholder="jfKfPfyJRdk"
+                  placeholder="Optional until service is live"
                 />
               </label>
 

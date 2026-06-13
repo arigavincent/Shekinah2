@@ -3,6 +3,14 @@ import { useCallback, useEffect, useState } from "react";
 import { getHomeContent } from "../api/contentApi";
 import { DATA } from "../content";
 
+const EMPTY_LIVE = {
+  isLive: false,
+  title: "",
+  viewers: "",
+  nextService: "",
+  youtubeId: ""
+};
+
 function normalizeHomeContent(payload) {
   if (!payload || typeof payload !== "object") {
     return DATA;
@@ -10,7 +18,7 @@ function normalizeHomeContent(payload) {
 
   return {
     scripture: payload.scripture || DATA.scripture,
-    live: payload.live || DATA.live,
+    live: payload.live && typeof payload.live === "object" ? { ...EMPTY_LIVE, ...payload.live } : EMPTY_LIVE,
     devotions: Array.isArray(payload.devotions) ? payload.devotions : DATA.devotions,
     sermons: Array.isArray(payload.sermons) ? payload.sermons : DATA.sermons,
     categories: Array.isArray(payload.categories) ? payload.categories : DATA.categories,
