@@ -368,37 +368,42 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
 
   return (
     <Screen>
-      <Image source={{ uri: thumbnail }} style={s.audioBg} />
+      <Image source={{ uri: thumbnail }} style={s.audioBg} blurRadius={22} />
       <View style={s.audioShade} />
+      <View style={s.audioGlow} />
 
       <TopBar title="Audio Player" go={go} back="Sermons" appLanguage={appLanguage} />
 
       <ScrollView contentContainerStyle={s.audioContent}>
-        <Image source={{ uri: thumbnail }} style={s.albumLarge} />
-
-        <Text style={s.audioTitle}>{sermon.title}</Text>
-        <Text style={s.mutedText}>{sermon.speaker}</Text>
-
-        <View style={s.progressTrack}>
-          <View style={[s.progressFill, { width: `${progress}%` }]} />
+        <View style={s.albumFrame}>
+          <Image source={{ uri: thumbnail }} style={s.albumLarge} />
         </View>
 
-        <View style={s.timeRow}>
-          <Text style={s.mutedText}>{formatTime(positionMs)}</Text>
-          <Text style={s.mutedText}>
-            {durationMs > 0 ? formatTime(durationMs) : sermon.duration || "0:00"}
-          </Text>
-        </View>
+        <View style={s.audioInfoBlock}>
+          <Text style={s.audioTitle}>{sermon.title}</Text>
+          <Text style={[s.mutedText, { textAlign: "center" }]}>{sermon.speaker}</Text>
 
-        {error ? <Text style={s.mutedText}>{error}</Text> : null}
-        {statusText ? <Text style={s.mutedText}>{statusText}</Text> : null}
-        {!remoteMediaUrl ? (
-          <Text style={[s.mutedText, { color: C.gold }]}>No backend audio URL detected.</Text>
-        ) : null}
-        {downloadProgress > 0 && downloadProgress < 100 ? (
-          <Text style={s.mutedText}>Downloading... {downloadProgress}%</Text>
-        ) : null}
-        {!playbackUrl ? <Text style={s.mutedText}>No uploaded audio URL found.</Text> : null}
+          <View style={s.progressTrack}>
+            <View style={[s.progressFill, { width: `${progress}%` }]} />
+          </View>
+
+          <View style={s.timeRow}>
+            <Text style={s.mutedText}>{formatTime(positionMs)}</Text>
+            <Text style={s.mutedText}>
+              {durationMs > 0 ? formatTime(durationMs) : sermon.duration || "0:00"}
+            </Text>
+          </View>
+
+          {error ? <Text style={[s.mutedText, { textAlign: "center" }]}>{error}</Text> : null}
+          {statusText ? <Text style={[s.mutedText, { textAlign: "center" }]}>{statusText}</Text> : null}
+          {!remoteMediaUrl ? (
+            <Text style={[s.mutedText, { color: C.gold, textAlign: "center" }]}>No backend audio URL detected.</Text>
+          ) : null}
+          {downloadProgress > 0 && downloadProgress < 100 ? (
+            <Text style={[s.mutedText, { textAlign: "center" }]}>Downloading... {downloadProgress}%</Text>
+          ) : null}
+          {!playbackUrl ? <Text style={[s.mutedText, { textAlign: "center" }]}>No uploaded audio URL found.</Text> : null}
+        </View>
 
         <View style={s.controls}>
           <Pressable style={s.controlBtn} onPress={previousTrack}>

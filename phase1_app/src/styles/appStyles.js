@@ -107,11 +107,39 @@ export const s = makeThemedStyles(C => ({
   detailTitle: { color: C.white, fontSize: 25, fontWeight: "900", lineHeight: 31, marginTop: 18 },
   detailBody: { color: C.white, fontSize: 15, lineHeight: 24, marginTop: 14 },
   detailImage: { width: "100%", height: 220, borderRadius: 8, backgroundColor: C.surface2 },
-  audioBg: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%", opacity: 0.25 },
-  audioShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.76)" },
-  audioContent: { flex: 1, alignItems: "center", paddingHorizontal: 24, paddingTop: 20 },
-  albumLarge: { width: 240, height: 240, borderRadius: 12, marginTop: 10 },
-  audioTitle: { color: C.textOnBrand, fontSize: 24, fontWeight: "900", textAlign: "center", marginTop: 20 },
+  audioBg: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+    opacity: 0.62,
+    transform: [{ scale: 1.16 }]
+  },
+  audioShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
+  audioGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(9,43,87,0.18)"
+  },
+  audioContent: { flex: 1, alignItems: "center", paddingHorizontal: 24, paddingTop: 20, paddingBottom: 120 },
+  albumFrame: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)"
+  },
+  albumLarge: { width: 240, height: 240, borderRadius: 18 },
+  audioInfoBlock: {
+    width: "100%",
+    marginTop: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    borderRadius: 24,
+    backgroundColor: "rgba(10,10,10,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)"
+  },
+  audioTitle: { color: C.textOnBrand, fontSize: 24, fontWeight: "900", textAlign: "center" },
   progressTrack: { width: "100%", height: 6, borderRadius: 4, backgroundColor: C.surface2, marginTop: 24 },
   progressFill: { width: "38%", height: "100%", borderRadius: 4, backgroundColor: C.gold },
   timeRow: { width: "100%", flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
