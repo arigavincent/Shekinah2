@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -471,16 +472,38 @@ func (h Handler) accessToken(ctx context.Context) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	var payload mpesaTokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return "", err
 	}
 
+	var payload mpesaTokenResponse
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return "", fmt.Errorf("mpesa token response parse failed: %w", err)
+		}
+	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || payload.AccessToken == "" {
-		return "", fmt.Errorf("mpesa token request failed")
+		return "", fmt.Errorf("mpesa token request failed: status=%d body=%s", resp.StatusCode, sanitizeMpesaErrorBody(body))
 	}
 
 	return payload.AccessToken, nil
+}
+
+func sanitizeMpesaErrorBody(body []byte) string {
+	text := strings.TrimSpace(string(body))
+	if text == "" {
+		return "<empty>"
+	}
+
+	text = strings.ReplaceAll(text, "\n", " ")
+	text = strings.ReplaceAll(text, "\r", " ")
+	if len(text) > 280 {
+		return text[:280] + "..."
+	}
+
+	return text
 }
 
 func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, phone string, amount int, givingCategory string) (stkPushResponse, []byte, error) {
