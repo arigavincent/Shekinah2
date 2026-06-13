@@ -164,7 +164,7 @@ function GivingTransactionCard({ item, onRefresh, refreshing, onDownloadReceipt,
           <Pressable
             style={s.secondaryBtn}
             onPress={onDownloadReceipt}
-            disabled={downloading}
+            disabled={downloading === "receipt"}
           >
             <Ionicons name="receipt-outline" size={18} color={C.gold} />
             <Text style={[s.secondaryText, { color: C.gold }]}>
@@ -176,7 +176,7 @@ function GivingTransactionCard({ item, onRefresh, refreshing, onDownloadReceipt,
         <Pressable
           style={s.secondaryBtn}
           onPress={onDownloadInvoice}
-          disabled={Boolean(downloading)}
+          disabled={downloading === "invoice" || downloading === "receipt"}
         >
           <Ionicons name="document-text-outline" size={18} color={C.gold} />
           <Text style={[s.secondaryText, { color: C.gold }]}>
