@@ -1,5 +1,9 @@
 # Android Release Runbook
 
+For Render sandbox deployment before mobile release, use:
+
+- [`RENDER_SANDBOX_DEPLOY.md`](./RENDER_SANDBOX_DEPLOY.md)
+
 ## 1. Prepare Production Data
 
 1. Complete `docs/production/CONTENT_INVENTORY.md`.
