@@ -232,12 +232,12 @@ export async function installBibleVersion(version) {
     throw new Error("Downloaded version text could not be parsed.");
   }
 
-  await db.withExclusiveTransactionAsync(async txn => {
-    await txn.runAsync(`DELETE FROM verses WHERE version_id = ?`, [versionId]);
-    await txn.runAsync(`DELETE FROM book_labels WHERE version_id = ?`, [versionId]);
-    await txn.runAsync(`DELETE FROM versions WHERE id = ?`, [versionId]);
+  await db.withExclusiveTransactionAsync(async () => {
+    await db.runAsync(`DELETE FROM verses WHERE version_id = ?`, [versionId]);
+    await db.runAsync(`DELETE FROM book_labels WHERE version_id = ?`, [versionId]);
+    await db.runAsync(`DELETE FROM versions WHERE id = ?`, [versionId]);
 
-    await txn.runAsync(
+    await db.runAsync(
       `
         INSERT INTO versions (id, name, short_label, abbreviation, language_code, license, attribution)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -245,7 +245,7 @@ export async function installBibleVersion(version) {
       [versionId, versionName, versionShortLabel, versionAbbreviation, languageCode, license, attribution]
     );
 
-    await txn.runAsync(
+    await db.runAsync(
       `
         INSERT INTO book_labels (version_id, book_id, name)
         SELECT ?, book_id, name
@@ -258,7 +258,7 @@ export async function installBibleVersion(version) {
     for (let index = 0; index < resolvedVerses.length; index += INSERT_BATCH_SIZE) {
       const batch = resolvedVerses.slice(index, index + INSERT_BATCH_SIZE);
       const { sql, params } = buildVerseInsertBatch(versionId, batch);
-      await txn.runAsync(sql, params);
+      await db.runAsync(sql, params);
     }
   });
 
