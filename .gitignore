@@ -13,6 +13,7 @@ node_modules/
 android/build/
 **/android/build/
 **/build/
+**/.cxx/
 .gradle/
 *.so
 
