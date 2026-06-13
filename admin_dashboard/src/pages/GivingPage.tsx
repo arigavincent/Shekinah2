@@ -116,7 +116,7 @@ export function GivingPage() {
   }, []);
 
   function openDocument(transactionId: string, kind: "receipt" | "invoice") {
-    window.open(`${API_BASE_URL}/api/v1/admin/giving/transactions/${transactionId}/${kind}.pdf`, "_blank");
+    window.open(`${API_BASE_URL}/api/v1/giving/transactions/${transactionId}/${kind}.pdf`, "_blank");
   }
 
   return (

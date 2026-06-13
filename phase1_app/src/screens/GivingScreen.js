@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Linking,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -464,7 +465,12 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
         `${label === "receipt" ? "Receipt" : "Invoice"} Saved`,
         "The document has been downloaded to the app files and will open now."
       );
-      await Linking.openURL(fileUri);
+      if (Platform.OS === "android") {
+        const contentUri = await FileSystem.getContentUriAsync(fileUri);
+        await Linking.openURL(contentUri);
+      } else {
+        await Linking.openURL(fileUri);
+      }
     } catch (error) {
       Alert.alert(
         "Download Failed",
