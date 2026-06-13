@@ -17,16 +17,23 @@ export function TestimoniesPage() {
   const [items, setItems] = useState<AdminTestimony[]>([]);
   const [status, setStatus] = useState("");
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "member">("newest");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items.filter(item => {
+    const next = items.filter(item => {
       if (!q) return true;
       return [item.title, item.body, item.displayName, item.ownerEmail].join(" ").toLowerCase().includes(q);
     });
-  }, [items, query]);
+    return next.sort((a, b) => {
+      if (sortBy === "oldest") return a.createdAt.localeCompare(b.createdAt);
+      if (sortBy === "member") return (a.displayName || "").localeCompare(b.displayName || "");
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }, [items, query, sortBy]);
 
   async function load() {
     setLoading(true);
@@ -47,12 +54,15 @@ export function TestimoniesPage() {
   }, [status]);
 
   async function update(item: AdminTestimony, nextStatus: string, featured = item.featured) {
+    setError("");
+    setSuccess("");
     try {
       const response = await updateAdminTestimony(item.id, {
         status: nextStatus,
         featured
       });
       setItems(current => current.map(row => (row.id === item.id ? response.testimony : row)));
+      setSuccess(`Testimony updated: ${nextStatus}${featured ? " · featured" : ""}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update testimony");
     }
@@ -73,23 +83,45 @@ export function TestimoniesPage() {
       </header>
 
       {error ? <div className="error">{error}</div> : null}
+      {success ? <div className="success">{success}</div> : null}
 
       <section className="list-card" style={{ marginBottom: 18 }}>
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 220px" }}>
+        <div className="list-controls">
           <input
             className="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
             placeholder="Search title, story text, or member email..."
-            style={{ marginBottom: 0 }}
           />
 
-          <select value={status} onChange={event => setStatus(event.target.value)}>
-            <option value="">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
+          <div className="filters-row">
+            <select value={status} onChange={event => setStatus(event.target.value)}>
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+
+            <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "member")}>
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="member">Member A-Z</option>
+            </select>
+
+            {(query || status || sortBy !== "newest") ? (
+              <button
+                type="button"
+                className="secondary compact"
+                onClick={() => {
+                  setQuery("");
+                  setStatus("");
+                  setSortBy("newest");
+                }}
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -117,13 +149,13 @@ export function TestimoniesPage() {
 
                 <div style={{ display: "grid", gap: 8, minWidth: 160 }}>
                   <span className="status-pill">{item.status}</span>
-                  <button className="secondary" onClick={() => update(item, "approved")}>
+                  <button type="button" className="secondary" onClick={() => update(item, "approved")}>
                     Approve
                   </button>
-                  <button className="secondary" onClick={() => update(item, "rejected", false)}>
+                  <button type="button" className="secondary" onClick={() => update(item, "rejected", false)}>
                     Reject
                   </button>
-                  <button className="secondary" onClick={() => update(item, item.status, !item.featured)}>
+                  <button type="button" className="secondary" onClick={() => update(item, item.status, !item.featured)}>
                     {item.featured ? "Unfeature" : "Feature"}
                   </button>
                 </div>

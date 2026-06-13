@@ -19,16 +19,24 @@ export function CommunityPage() {
   const [channel, setChannel] = useState("global");
   const [status, setStatus] = useState("");
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "member">("newest");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return messages.filter(item => {
+    const next = messages.filter(item => {
       if (!q) return true;
       return [item.displayName, item.message, item.userEmail].join(" ").toLowerCase().includes(q);
     });
-  }, [messages, query]);
+
+    return next.sort((a, b) => {
+      if (sortBy === "oldest") return a.createdAt.localeCompare(b.createdAt);
+      if (sortBy === "member") return (a.displayName || "").localeCompare(b.displayName || "");
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }, [messages, query, sortBy]);
 
   async function load() {
     setLoading(true);
@@ -52,6 +60,8 @@ export function CommunityPage() {
   }, [channel, status]);
 
   async function update(item: AdminCommunityMessage, nextStatus: string) {
+    setError("");
+    setSuccess("");
     try {
       const response = await updateCommunityMessage(item.id, {
         status: nextStatus,
@@ -59,15 +69,24 @@ export function CommunityPage() {
       });
 
       setMessages(current => current.map(row => (row.id === item.id ? response.message : row)));
+      setSuccess(`Message marked ${nextStatus}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update message");
     }
   }
 
   async function remove(item: AdminCommunityMessage) {
+    const confirmed = confirm(
+      `Delete this message from ${item.displayName || "member"}?\n\nThis permanently removes it from the moderation queue.`
+    );
+    if (!confirmed) return;
+
+    setError("");
+    setSuccess("");
     try {
       await deleteCommunityMessage(item.id);
       setMessages(current => current.filter(row => row.id !== item.id));
+      setSuccess("Message deleted.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete message");
     }
@@ -88,29 +107,52 @@ export function CommunityPage() {
       </header>
 
       {error ? <div className="error">{error}</div> : null}
+      {success ? <div className="success">{success}</div> : null}
 
       <section className="list-card" style={{ marginBottom: 18 }}>
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 180px 180px" }}>
+        <div className="list-controls">
           <input
             className="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
             placeholder="Search message text or member email..."
-            style={{ marginBottom: 0 }}
           />
 
-          <select value={channel} onChange={event => setChannel(event.target.value)}>
-            <option value="global">Global chat</option>
-            <option value="live">Live chat</option>
-            <option value="">All channels</option>
-          </select>
+          <div className="filters-row">
+            <select value={channel} onChange={event => setChannel(event.target.value)}>
+              <option value="global">Global chat</option>
+              <option value="live">Live chat</option>
+              <option value="">All channels</option>
+            </select>
 
-          <select value={status} onChange={event => setStatus(event.target.value)}>
-            <option value="">All statuses</option>
-            <option value="approved">Approved</option>
-            <option value="pending">Pending</option>
-            <option value="hidden">Hidden</option>
-          </select>
+            <select value={status} onChange={event => setStatus(event.target.value)}>
+              <option value="">All statuses</option>
+              <option value="approved">Approved</option>
+              <option value="pending">Pending</option>
+              <option value="hidden">Hidden</option>
+            </select>
+
+            <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "member")}>
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="member">Member A-Z</option>
+            </select>
+
+            {(query || channel !== "global" || status || sortBy !== "newest") ? (
+              <button
+                type="button"
+                className="secondary compact"
+                onClick={() => {
+                  setQuery("");
+                  setChannel("global");
+                  setStatus("");
+                  setSortBy("newest");
+                }}
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -138,13 +180,13 @@ export function CommunityPage() {
 
                 <div style={{ display: "grid", gap: 8, minWidth: 140 }}>
                   <span className="status-pill">{item.status}</span>
-                  <button className="secondary" onClick={() => update(item, "approved")}>
+                  <button type="button" className="secondary" onClick={() => update(item, "approved")}>
                     Approve
                   </button>
-                  <button className="secondary" onClick={() => update(item, "hidden")}>
+                  <button type="button" className="secondary" onClick={() => update(item, "hidden")}>
                     Hide
                   </button>
-                  <button className="secondary danger" onClick={() => remove(item)}>
+                  <button type="button" className="secondary danger" onClick={() => remove(item)}>
                     Delete
                   </button>
                 </div>

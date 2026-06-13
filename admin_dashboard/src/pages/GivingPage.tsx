@@ -37,14 +37,17 @@ export function GivingPage() {
   const [transactions, setTransactions] = useState<GivingTransaction[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [category, setCategory] = useState("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "amount_high" | "amount_low">("newest");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
 
-    return transactions.filter(transaction => {
+    const next = transactions.filter(transaction => {
       const matchesStatus = status === "all" || transaction.status === status;
+      const matchesCategory = category === "all" || transaction.category === category;
 
       const searchable = [
         transaction.id,
@@ -61,9 +64,21 @@ export function GivingPage() {
         .join(" ")
         .toLowerCase();
 
-      return matchesStatus && (!q || searchable.includes(q));
+      return matchesStatus && matchesCategory && (!q || searchable.includes(q));
     });
-  }, [transactions, query, status]);
+
+    return next.sort((a, b) => {
+      if (sortBy === "oldest") return a.createdAt.localeCompare(b.createdAt);
+      if (sortBy === "amount_high") return Number(b.amount || 0) - Number(a.amount || 0);
+      if (sortBy === "amount_low") return Number(a.amount || 0) - Number(b.amount || 0);
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }, [transactions, query, status, category, sortBy]);
+
+  const categories = useMemo(
+    () => Array.from(new Set(transactions.map(item => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [transactions]
+  );
 
   const totals = useMemo(() => {
     return transactions.reduce(
@@ -167,7 +182,7 @@ export function GivingPage() {
           <span className="count-pill">{filtered.length}</span>
         </div>
 
-        <div className="toolbar-row">
+        <div className="list-controls">
           <input
             className="search"
             value={query}
@@ -175,17 +190,46 @@ export function GivingPage() {
             placeholder="Search phone, receipt, category, transaction id..."
           />
 
-          <select
-            className="search"
-            value={status}
-            onChange={event => setStatus(event.target.value)}
-          >
-            <option value="all">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="success">Paid</option>
-            <option value="failed">Failed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+          <div className="filters-row">
+            <select value={status} onChange={event => setStatus(event.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="success">Paid</option>
+              <option value="failed">Failed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+
+            <select value={category} onChange={event => setCategory(event.target.value)}>
+              <option value="all">All categories</option>
+              {categories.map(item => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+
+            <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "amount_high" | "amount_low")}>
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="amount_high">Amount High-Low</option>
+              <option value="amount_low">Amount Low-High</option>
+            </select>
+
+            {(query || status !== "all" || category !== "all" || sortBy !== "newest") ? (
+              <button
+                type="button"
+                className="secondary compact"
+                onClick={() => {
+                  setQuery("");
+                  setStatus("all");
+                  setCategory("all");
+                  setSortBy("newest");
+                }}
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {loading ? (
@@ -236,13 +280,13 @@ export function GivingPage() {
                     <td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         {transaction.status === "success" ? (
-                          <button className="secondary" onClick={() => openDocument(transaction.id, "receipt")}>
+                          <button type="button" className="secondary" onClick={() => openDocument(transaction.id, "receipt")}>
                             Receipt
                           </button>
                         ) : (
                           <span className="small-muted">Receipt after payment</span>
                         )}
-                        <button className="secondary" onClick={() => openDocument(transaction.id, "invoice")}>
+                        <button type="button" className="secondary" onClick={() => openDocument(transaction.id, "invoice")}>
                           Invoice
                         </button>
                       </div>

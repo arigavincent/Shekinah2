@@ -77,6 +77,8 @@ export function PrayersPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("private");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "status">("newest");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -91,6 +93,7 @@ export function PrayersPage() {
       const matchesScope =
         scope === "all" ||
         (scope === "private" ? !prayer.isPublic : prayer.isPublic);
+      const matchesStatus = statusFilter === "all" || prayer.status === statusFilter;
 
       const searchable = [
         prayer.name,
@@ -102,9 +105,13 @@ export function PrayersPage() {
         .join(" ")
         .toLowerCase();
 
-      return matchesScope && (!q || searchable.includes(q));
+      return matchesScope && matchesStatus && (!q || searchable.includes(q));
+    }).sort((a, b) => {
+      if (sortBy === "oldest") return a.createdAt.localeCompare(b.createdAt);
+      if (sortBy === "status") return a.status.localeCompare(b.status);
+      return b.createdAt.localeCompare(a.createdAt);
     });
-  }, [prayers, query, scope]);
+  }, [prayers, query, scope, statusFilter, sortBy]);
 
   const selectedPrayer = useMemo(
     () => prayers.find(prayer => prayer.id === selectedId) || null,
@@ -204,20 +211,51 @@ export function PrayersPage() {
             <span className="count-pill">{filtered.length}</span>
           </div>
 
-          <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
+          <div className="list-controls">
             <input
               className="search"
               value={query}
               onChange={event => setQuery(event.target.value)}
               placeholder="Search prayer text, member email, category..."
-              style={{ marginBottom: 0 }}
             />
 
-            <select value={scope} onChange={handleSelect}>
-              <option value="private">Private only</option>
-              <option value="public">Public only</option>
-              <option value="all">All requests</option>
-            </select>
+            <div className="filters-row">
+              <select value={scope} onChange={handleSelect}>
+                <option value="private">Private only</option>
+                <option value="public">Public only</option>
+                <option value="all">All requests</option>
+              </select>
+
+              <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+                <option value="all">All statuses</option>
+                {STATUS_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "status")}>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="status">Status A-Z</option>
+              </select>
+
+              {(query || scope !== "private" || statusFilter !== "all" || sortBy !== "newest") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setScope("private");
+                    setStatusFilter("all");
+                    setSortBy("newest");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
           </div>
 
           {loading ? (
