@@ -11,9 +11,17 @@ const EMPTY_LIVE = {
   youtubeId: ""
 };
 
+const LOCAL_FALLBACK = {
+  ...DATA,
+  live: {
+    ...EMPTY_LIVE,
+    nextService: DATA.live?.nextService || ""
+  }
+};
+
 function normalizeHomeContent(payload) {
   if (!payload || typeof payload !== "object") {
-    return DATA;
+    return LOCAL_FALLBACK;
   }
 
   return {
@@ -34,14 +42,14 @@ function normalizeHomeContent(payload) {
 }
 
 export function useHomeContent({ enabled = false } = {}) {
-  const [data, setData] = useState(DATA);
+  const [data, setData] = useState(LOCAL_FALLBACK);
   const [source, setSource] = useState("local");
   const [loading, setLoading] = useState(Boolean(enabled));
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
     if (!enabled) {
-      setData(DATA);
+      setData(LOCAL_FALLBACK);
       setSource("local");
       setLoading(false);
       setError(null);
@@ -57,7 +65,7 @@ export function useHomeContent({ enabled = false } = {}) {
       setSource("api");
     } catch (err) {
       console.warn("Falling back to local content", err);
-      setData(DATA);
+      setData(LOCAL_FALLBACK);
       setSource("local");
       setError(err);
     } finally {
@@ -69,9 +77,9 @@ export function useHomeContent({ enabled = false } = {}) {
     let mounted = true;
 
     async function run() {
-      if (!enabled) {
-        if (!mounted) return;
-        setData(DATA);
+        if (!enabled) {
+          if (!mounted) return;
+        setData(LOCAL_FALLBACK);
         setSource("local");
         setLoading(false);
         setError(null);
@@ -93,7 +101,7 @@ export function useHomeContent({ enabled = false } = {}) {
         if (!mounted) return;
 
         console.warn("Falling back to local content", err);
-        setData(DATA);
+        setData(LOCAL_FALLBACK);
         setSource("local");
         setError(err);
       } finally {

@@ -235,11 +235,11 @@ export const DATA = {
   },
 
   live: {
-    isLive: true,
-    title: "Sunday Celebration Service",
-    viewers: "1,284",
+    isLive: false,
+    title: "Live Stream",
+    viewers: "",
     nextService: "Sunday, 9:00 AM",
-    youtubeId: "jfKfPfyJRdk"
+    youtubeId: ""
   },
 
   devotions: [
