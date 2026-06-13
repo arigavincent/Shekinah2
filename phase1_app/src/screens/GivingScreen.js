@@ -220,6 +220,10 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
   }
 
   async function submitGiving() {
+    if (submitting) {
+      return;
+    }
+
     const validationError = validate();
 
     if (validationError) {
@@ -282,9 +286,23 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
         );
       }
     } catch (error) {
+      const retryable = Boolean(error?.payload?.retryable);
+      const failedTransaction = error?.payload?.transaction;
+
+      if (failedTransaction?.id) {
+        await upsertGivingTransaction(failedTransaction);
+        const next = await listGivingHistory();
+        setTransactions(next);
+        setTab("Give History");
+      }
+
       Alert.alert(
-        "Giving Failed",
-        error instanceof Error ? error.message : "Unable to start the giving flow."
+        retryable ? "M-Pesa Busy" : "Giving Failed",
+        retryable
+          ? `${error instanceof Error ? error.message : "M-Pesa is temporarily busy."} The attempt has been saved in Giving History so you can retry after a short wait.`
+          : error instanceof Error
+            ? error.message
+            : "Unable to start the giving flow."
       );
     } finally {
       setSubmitting(false);

@@ -73,6 +73,12 @@ type stkPushResponse struct {
 	ErrorMessage        string `json:"errorMessage"`
 }
 
+type givingErrorResponse struct {
+	Message     string `json:"message"`
+	Retryable   bool   `json:"retryable,omitempty"`
+	Transaction gin.H  `json:"transaction,omitempty"`
+}
+
 var phonePattern = regexp.MustCompile(`^(?:\+254|254|0)?[17]\d{8}$`)
 
 func NewHandler(db *pgxpool.Pool) Handler {
@@ -203,8 +209,24 @@ func (h Handler) STKPush(c *gin.Context) {
 
 	stkResponse, rawResponse, err := h.sendSTKPush(c.Request.Context(), token, txID, phone, req.Amount, category(req.Category))
 	if err != nil {
-		_ = h.markTransactionFailed(c.Request.Context(), txID, err.Error())
-		c.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
+		description := humanizeMpesaError(err.Error())
+		_ = h.markTransactionFailed(c.Request.Context(), txID, description)
+
+		transaction, ok, loadErr := h.getTransaction(c.Request.Context(), txID)
+		if loadErr != nil {
+			c.JSON(http.StatusBadGateway, givingErrorResponse{Message: description, Retryable: isRetryableMpesaError(err.Error())})
+			return
+		}
+		if !ok {
+			c.JSON(http.StatusBadGateway, givingErrorResponse{Message: description, Retryable: isRetryableMpesaError(err.Error())})
+			return
+		}
+
+		c.JSON(http.StatusBadGateway, givingErrorResponse{
+			Message:     description,
+			Retryable:   isRetryableMpesaError(err.Error()),
+			Transaction: transaction,
+		})
 		return
 	}
 
@@ -520,6 +542,23 @@ func sanitizeMpesaErrorBody(body []byte) string {
 	}
 
 	return text
+}
+
+func isRetryableMpesaError(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(message, "500.003.02") || strings.Contains(message, "system is busy")
+}
+
+func humanizeMpesaError(message string) string {
+	if isRetryableMpesaError(message) {
+		return "M-Pesa is temporarily busy. Retry in a few minutes."
+	}
+
+	if strings.Contains(strings.ToLower(message), "wrong credentials") {
+		return "M-Pesa credentials are not configured correctly for STK Push."
+	}
+
+	return strings.TrimSpace(message)
 }
 
 func secretFingerprint(value string) string {
