@@ -1,27 +1,43 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { clearSession, getUser } from "../auth/session";
 import { useAdminTheme } from "../theme";
 
-const navItems = [
-  { label: "Overview", to: "/" },
-  { label: "Sermons", to: "/sermons" },
-  { label: "Devotions", to: "/devotions" },
-  { label: "Events", to: "/events" },
-  { label: "Updates", to: "/updates" },
-  { label: "Branches", to: "/branches" },
-  { label: "Live", to: "/live" },
-  { label: "Prayer", to: "/prayers" },
-  { label: "Chat", to: "/community" },
-  { label: "Testimonies", to: "/testimonies" },
-  { label: "Check-In", to: "/checkins" },
-  { label: "Giving", to: "/giving" },
-  { label: "Notifications", to: "/notifications" }
+const navSections = [
+  {
+    label: "Content",
+    items: [
+      { label: "Overview", to: "/" },
+      { label: "Sermons", to: "/sermons" },
+      { label: "Devotions", to: "/devotions" },
+      { label: "Events", to: "/events" },
+      { label: "Updates", to: "/updates" },
+      { label: "Branches", to: "/branches" }
+    ]
+  },
+  {
+    label: "Care",
+    items: [
+      { label: "Prayer", to: "/prayers" },
+      { label: "Chat", to: "/community" },
+      { label: "Testimonies", to: "/testimonies" }
+    ]
+  },
+  {
+    label: "Operations",
+    items: [
+      { label: "Live", to: "/live" },
+      { label: "Check-In", to: "/checkins" },
+      { label: "Giving", to: "/giving" },
+      { label: "Notifications", to: "/notifications" }
+    ]
+  }
 ];
 
 export function AdminLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = getUser();
   const { mode, toggleTheme } = useAdminTheme();
 
@@ -58,6 +74,12 @@ export function AdminLayout() {
     navigate("/login");
   }
 
+  const currentItem =
+    navSections
+      .flatMap(section => section.items)
+      .find(item => (item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to))) ||
+    navSections[0].items[0];
+
   return (
     <div className={sidebarOpen ? "admin-shell" : "admin-shell sidebar-hidden"}>
       <aside className={sidebarOpen ? "sidebar open" : "sidebar"}>
@@ -73,18 +95,24 @@ export function AdminLayout() {
         </div>
 
         <nav className="sidebar-nav">
-          {navItems.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              onClick={closeSidebarOnMobile}
-              className={({ isActive }) =>
-                isActive ? "nav-link active" : "nav-link"
-              }
-            >
-              {item.label}
-            </NavLink>
+          {navSections.map(section => (
+            <div key={section.label} className="nav-group">
+              <p className="nav-group-label">{section.label}</p>
+
+              {section.items.map(item => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === "/"}
+                  onClick={closeSidebarOnMobile}
+                  className={({ isActive }) =>
+                    isActive ? "nav-link active" : "nav-link"
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -112,7 +140,7 @@ export function AdminLayout() {
 
           <div className="workspace-title">
             <strong>Shekinah Admin</strong>
-            <span>Content dashboard</span>
+            <span>{currentItem.label}</span>
           </div>
 
           <div className="topbar-actions">
