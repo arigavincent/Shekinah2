@@ -193,8 +193,8 @@ func (h Handler) STKPush(c *gin.Context) {
 
 	token, err := h.accessToken(c.Request.Context())
 	if err != nil {
-		_ = h.markTransactionFailed(c.Request.Context(), txID, "Failed to authenticate with M-Pesa")
-		c.JSON(http.StatusBadGateway, gin.H{"message": "Failed to authenticate with M-Pesa"})
+		_ = h.markTransactionFailed(c.Request.Context(), txID, err.Error())
+		c.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
 		return
 	}
 
