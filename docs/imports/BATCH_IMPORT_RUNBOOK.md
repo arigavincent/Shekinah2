@@ -2,6 +2,16 @@
 
 This import flow is designed to behave more like a content-ingestion pipeline than a raw CSV paste tool.
 
+For sermons, the preferred operator path is now:
+
+1. `Batch Import Wizard`
+2. select source videos from the Shekinah channel catalog
+3. fill metadata row by row
+4. preview
+5. apply
+
+The raw CSV editor still exists as an advanced fallback.
+
 ## What changed
 
 - every sermon and devotion now has a stable `externalId`
@@ -40,7 +50,21 @@ externalId,title,excerpt,devotionDate,publishedAt,imageUrl,body
 
 ## Operator test flow
 
-### 1. First sermon import
+### 1. First sermon import via wizard
+
+1. Open `Admin -> Sermons`
+2. Click `Batch Import Wizard`
+3. Select all 8 source videos
+4. Click `Continue`
+5. Review metadata
+6. Click `Preview Batch`
+7. Expected:
+   - `create = 8`
+   - `update = 0`
+   - `reject = 0`
+8. Click `Apply Import`
+
+### 2. First sermon import via CSV
 
 1. Open `Admin -> Sermons`
 2. In `Batch Import`, load `docs/imports/shekinah_youtube_sermons_batch.csv`
@@ -51,7 +75,7 @@ externalId,title,excerpt,devotionDate,publishedAt,imageUrl,body
    - `reject = 0`
 5. Click `Apply Import`
 
-### 2. Idempotency check
+### 3. Idempotency check
 
 1. Load the exact same sermon CSV again
 2. Click `Preview CSV`
@@ -62,7 +86,7 @@ externalId,title,excerpt,devotionDate,publishedAt,imageUrl,body
 4. Click `Apply Import`
 5. No duplicates should be created
 
-### 3. Update behavior check
+### 4. Update behavior check
 
 1. Open the sermon CSV in a text editor
 2. Change one row only:
@@ -75,7 +99,7 @@ externalId,title,excerpt,devotionDate,publishedAt,imageUrl,body
    - that row is `update`
    - apply updates the existing sermon instead of creating a new one
 
-### 4. Scheduling check
+### 5. Scheduling check
 
 The provided sermon fixture intentionally mixes already-publishable rows and future rows.
 
@@ -92,7 +116,7 @@ GET /api/v1/admin/sermons
 
 Admin should show all imported rows. Public APIs should only show rows whose `publishedAt` has already passed.
 
-### 5. Devotion import
+### 6. Devotion import
 
 1. Open `Admin -> Devotions`
 2. Load `docs/imports/shekinah_monthly_devotions_batch.csv`
@@ -100,7 +124,7 @@ Admin should show all imported rows. Public APIs should only show rows whose `pu
 4. Apply
 5. Repeat the same file to confirm all rows come back as `update`
 
-### 6. Rejection check
+### 7. Rejection check
 
 Create a broken copy of either file and test:
 - remove `externalId`

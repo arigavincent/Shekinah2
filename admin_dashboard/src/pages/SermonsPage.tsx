@@ -15,6 +15,7 @@ import {
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
 import { InlineAlert } from "../components/InlineAlert";
 import { PaginationBar } from "../components/PaginationBar";
+import { shekinahYoutubeCatalog, type ShekinahYoutubeCatalogItem } from "../data/shekinahYoutubeCatalog";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { isValidAssetReference, isValidDateString, isValidDateTimeString } from "../lib/validation";
@@ -41,6 +42,22 @@ const emptyForm: SermonPayload = {
   mediaUrl: ""
 };
 
+type WizardRow = {
+  source: ShekinahYoutubeCatalogItem;
+  externalId: string;
+  type: "video" | "audio";
+  title: string;
+  speaker: string;
+  sermonDate: string;
+  publishedAt: string;
+  categoryId: string;
+  isLive: boolean;
+  thumbnailUrl: string;
+  duration: string;
+  description: string;
+  mediaUrl: string;
+};
+
 export function SermonsPage() {
   const { confirm, showToast } = useAdminFeedback();
   const [sermons, setSermons] = useState<Sermon[]>([]);
@@ -54,6 +71,12 @@ export function SermonsPage() {
   const [uploading, setUploading] = useState<MediaKind | "">("");
   const [csvImport, setCsvImport] = useState("");
   const [importPreview, setImportPreview] = useState<SermonImportPreview | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [wizardQuery, setWizardQuery] = useState("");
+  const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
+  const [wizardRows, setWizardRows] = useState<WizardRow[]>([]);
+  const [wizardPreview, setWizardPreview] = useState<SermonImportPreview | null>(null);
   const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
@@ -82,6 +105,17 @@ export function SermonsPage() {
     [query, sortBy, typeFilter, sermons.length]
   );
 
+  const filteredCatalog = useMemo(() => {
+    const q = wizardQuery.trim().toLowerCase();
+    return shekinahYoutubeCatalog.filter(item =>
+      !q ||
+      [item.title, item.speaker, item.videoId]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [wizardQuery]);
+
   async function load() {
     setLoading(true);
     setError("");
@@ -99,6 +133,166 @@ export function SermonsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  function defaultWizardRow(item: ShekinahYoutubeCatalogItem): WizardRow {
+    return {
+      source: item,
+      externalId: `shekinah-yt-${item.videoId}`,
+      type: "video",
+      title: item.title,
+      speaker: item.speaker,
+      sermonDate: item.suggestedDate,
+      publishedAt: item.suggestedPublishAt,
+      categoryId: item.suggestedCategoryId,
+      isLive: false,
+      thumbnailUrl: item.thumbnailUrl,
+      duration: item.duration,
+      description: item.description,
+      mediaUrl: item.mediaUrl
+    };
+  }
+
+  function resetWizard() {
+    setWizardOpen(false);
+    setWizardStep(1);
+    setWizardQuery("");
+    setSelectedVideoIds([]);
+    setWizardRows([]);
+    setWizardPreview(null);
+  }
+
+  function openWizard() {
+    setError("");
+    setWizardOpen(true);
+    setWizardStep(1);
+    setSelectedVideoIds([]);
+    setWizardRows([]);
+    setWizardPreview(null);
+    setWizardQuery("");
+  }
+
+  function toggleVideoSelection(videoId: string) {
+    setSelectedVideoIds(current =>
+      current.includes(videoId)
+        ? current.filter(item => item !== videoId)
+        : [...current, videoId]
+    );
+  }
+
+  function startWizardMetadataStep() {
+    if (!selectedVideoIds.length) {
+      setError("Select at least one source video before continuing.");
+      return;
+    }
+
+    const selected = shekinahYoutubeCatalog
+      .filter(item => selectedVideoIds.includes(item.videoId))
+      .map(defaultWizardRow);
+
+    setWizardRows(selected);
+    setWizardPreview(null);
+    setWizardStep(2);
+  }
+
+  function updateWizardRow(index: number, patch: Partial<WizardRow>) {
+    setWizardRows(current =>
+      current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row))
+    );
+    setWizardPreview(null);
+  }
+
+  function buildWizardCsv() {
+    const escapeCsv = (value: string) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+    const header = [
+      "externalId",
+      "type",
+      "title",
+      "speaker",
+      "sermonDate",
+      "publishedAt",
+      "categoryId",
+      "isLive",
+      "thumbnailUrl",
+      "duration",
+      "description",
+      "mediaUrl"
+    ];
+
+    const rows = wizardRows.map(row =>
+      [
+        row.externalId,
+        row.type,
+        row.title,
+        row.speaker,
+        row.sermonDate,
+        row.publishedAt,
+        row.categoryId,
+        row.isLive ? "true" : "false",
+        row.thumbnailUrl,
+        row.duration,
+        row.description,
+        row.mediaUrl
+      ]
+        .map(escapeCsv)
+        .join(",")
+    );
+
+    return [header.join(","), ...rows].join("\n");
+  }
+
+  async function previewWizardImport() {
+    if (!wizardRows.length) {
+      setError("Add at least one configured sermon before previewing.");
+      return;
+    }
+
+    const csv = buildWizardCsv();
+    setSaving(true);
+    setError("");
+    try {
+      const response = await previewSermonImport(csv);
+      setWizardPreview(response.preview);
+      setWizardStep(3);
+      if (response.preview.rejected > 0) {
+        const rejected = response.preview.rows
+          .filter(item => item.action === "reject")
+          .slice(0, 8)
+          .map(item => `Row ${item.rowNumber}: ${(item.errors || []).join(", ")}`)
+          .join(" | ");
+        setError(rejected);
+      }
+    } catch (err) {
+      setWizardPreview(null);
+      setError(err instanceof Error ? err.message : "Failed to preview import wizard batch");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function applyWizardImport() {
+    if (!wizardPreview) {
+      setError("Preview the selected videos before applying the import.");
+      return;
+    }
+
+    const csv = buildWizardCsv();
+    setSaving(true);
+    setError("");
+    try {
+      const response = await importSermons(csv);
+      await load();
+      showToast({
+        title: "Wizard import applied",
+        message: `${response.result.created.length} created, ${response.result.updated.length} updated, ${response.result.rejected.length} rejected.`,
+        tone: response.result.rejected.length ? "info" : "success"
+      });
+      resetWizard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to apply wizard import");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function updateField<K extends keyof SermonPayload>(key: K, value: SermonPayload[K]) {
     setForm(current => ({ ...current, [key]: value }));
@@ -331,9 +525,14 @@ export function SermonsPage() {
           </p>
         </div>
 
-        <button className="secondary" onClick={load}>
-          Refresh
-        </button>
+        <div className="row-actions">
+          <button type="button" className="secondary" onClick={openWizard}>
+            Batch Import Wizard
+          </button>
+          <button className="secondary" onClick={load}>
+            Refresh
+          </button>
+        </div>
       </header>
 
       {error ? <InlineAlert title="Sermons could not be updated" message={error} /> : null}
@@ -551,7 +750,7 @@ export function SermonsPage() {
 
           <div className="subeditor-card">
             <div className="section-title-row compact">
-              <h3>Batch Import</h3>
+              <h3>Advanced CSV Import</h3>
               <div className="row-actions">
                 <button type="button" className="secondary compact" onClick={previewImport} disabled={saving}>
                   Preview CSV
@@ -704,6 +903,242 @@ export function SermonsPage() {
           />
         </section>
       </section>
+
+      {wizardOpen ? (
+        <div className="modal-backdrop" role="presentation" onClick={resetWizard}>
+          <section
+            className="wizard-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sermon-import-wizard-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="section-title-row">
+              <div>
+                <p className="eyebrow">Batch Import Wizard</p>
+                <h2 id="sermon-import-wizard-title">Sermon Ingestion</h2>
+                <p className="muted">
+                  Select source videos, enrich the metadata, then preview and apply the batch.
+                </p>
+              </div>
+              <button type="button" className="secondary compact" onClick={resetWizard}>
+                Close
+              </button>
+            </div>
+
+            <div className="wizard-steps">
+              <span className={`status-chip ${wizardStep === 1 ? "warning" : "neutral"}`}>1. Source</span>
+              <span className={`status-chip ${wizardStep === 2 ? "warning" : wizardStep > 2 ? "success" : "neutral"}`}>2. Metadata</span>
+              <span className={`status-chip ${wizardStep === 3 ? "warning" : "neutral"}`}>3. Preview</span>
+            </div>
+
+            {wizardStep === 1 ? (
+              <div className="wizard-pane">
+                <div className="section-title-row compact">
+                  <h3>Source Catalog</h3>
+                  <span className="count-pill">{selectedVideoIds.length} selected</span>
+                </div>
+                <p className="muted">
+                  Source: Shekinah Sons Global YouTube channel catalog prepared for guided import.
+                </p>
+                <input
+                  className="search"
+                  value={wizardQuery}
+                  onChange={event => setWizardQuery(event.target.value)}
+                  placeholder="Search source videos..."
+                />
+                <div className="wizard-source-list">
+                  {filteredCatalog.map(item => {
+                    const selected = selectedVideoIds.includes(item.videoId);
+                    return (
+                      <label key={item.videoId} className={`wizard-source-card ${selected ? "selected" : ""}`}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleVideoSelection(item.videoId)}
+                        />
+                        <img src={item.thumbnailUrl} alt={item.title} />
+                        <div>
+                          <strong>{item.title}</strong>
+                          <p className="small-muted">{item.speaker}</p>
+                          <p className="small-muted">{item.duration} · {item.videoId}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="confirm-actions">
+                  <button type="button" className="secondary" onClick={resetWizard}>
+                    Cancel
+                  </button>
+                  <button type="button" onClick={startWizardMetadataStep}>
+                    Continue
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {wizardStep === 2 ? (
+              <div className="wizard-pane">
+                <div className="section-title-row compact">
+                  <h3>Metadata Builder</h3>
+                  <span className="count-pill">{wizardRows.length} rows</span>
+                </div>
+                <div className="wizard-metadata-list">
+                  {wizardRows.map((row, index) => (
+                    <article key={row.source.videoId} className="wizard-metadata-card">
+                      <div className="section-title-row compact">
+                        <div>
+                          <strong>{row.source.title}</strong>
+                          <p className="small-muted">{row.source.videoId} · {row.duration}</p>
+                        </div>
+                        <a href={row.mediaUrl} target="_blank" rel="noreferrer">
+                          Open video
+                        </a>
+                      </div>
+                      <div className="three-col">
+                        <label>
+                          External ID
+                          <input
+                            value={row.externalId}
+                            onChange={event => updateWizardRow(index, { externalId: event.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Category
+                          <select
+                            value={row.categoryId}
+                            onChange={event => updateWizardRow(index, { categoryId: event.target.value })}
+                          >
+                            {categories.map(category => (
+                              <option key={category.id} value={category.id}>
+                                {category.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Type
+                          <select
+                            value={row.type}
+                            onChange={event => updateWizardRow(index, { type: event.target.value as "video" | "audio" })}
+                          >
+                            <option value="video">Video</option>
+                            <option value="audio">Audio</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="two-col">
+                        <label>
+                          Title
+                          <input
+                            value={row.title}
+                            onChange={event => updateWizardRow(index, { title: event.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Speaker
+                          <input
+                            value={row.speaker}
+                            onChange={event => updateWizardRow(index, { speaker: event.target.value })}
+                          />
+                        </label>
+                      </div>
+                      <div className="two-col">
+                        <label>
+                          Sermon Date
+                          <input
+                            value={row.sermonDate}
+                            onChange={event => updateWizardRow(index, { sermonDate: event.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Publish At
+                          <input
+                            type="datetime-local"
+                            value={row.publishedAt}
+                            onChange={event => updateWizardRow(index, { publishedAt: event.target.value })}
+                          />
+                        </label>
+                      </div>
+                      <label>
+                        Description
+                        <textarea
+                          rows={3}
+                          value={row.description}
+                          onChange={event => updateWizardRow(index, { description: event.target.value })}
+                        />
+                      </label>
+                    </article>
+                  ))}
+                </div>
+                <div className="confirm-actions">
+                  <button type="button" className="secondary" onClick={() => setWizardStep(1)}>
+                    Back
+                  </button>
+                  <button type="button" onClick={previewWizardImport} disabled={saving}>
+                    Preview Batch
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {wizardStep === 3 ? (
+              <div className="wizard-pane">
+                <div className="section-title-row compact">
+                  <h3>Import Preview</h3>
+                  <span className="count-pill">{wizardRows.length} rows</span>
+                </div>
+                {wizardPreview ? (
+                  <div className="import-preview-card">
+                    <div className="stats-grid compact">
+                      <article className="stat-card">
+                        <span>Create</span>
+                        <strong>{wizardPreview.creates}</strong>
+                      </article>
+                      <article className="stat-card">
+                        <span>Update</span>
+                        <strong>{wizardPreview.updates}</strong>
+                      </article>
+                      <article className="stat-card">
+                        <span>Reject</span>
+                        <strong>{wizardPreview.rejected}</strong>
+                      </article>
+                    </div>
+                    <div className="preview-list">
+                      {wizardPreview.rows.map(row => (
+                        <article key={`${row.rowNumber}-${row.externalId}`} className="preview-row">
+                          <div>
+                            <strong>{row.title}</strong>
+                            <p className="small-muted">{row.externalId}</p>
+                            {row.publishedAt ? <p className="small-muted">Publishes {row.publishedAt}</p> : null}
+                          </div>
+                          <div className="preview-row-meta">
+                            <span className={`status-chip ${row.action === "reject" ? "danger" : row.action === "update" ? "warning" : "success"}`}>
+                              {row.action}
+                            </span>
+                            {row.errors?.length ? <p className="small-muted">{row.errors.join(", ")}</p> : null}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted">Preview not ready yet.</p>
+                )}
+                <div className="confirm-actions">
+                  <button type="button" className="secondary" onClick={() => setWizardStep(2)}>
+                    Back
+                  </button>
+                  <button type="button" onClick={applyWizardImport} disabled={saving || !wizardPreview}>
+                    Apply Import
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
