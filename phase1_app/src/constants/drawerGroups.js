@@ -12,6 +12,7 @@ export const DRAWER_GROUPS = [
     "MEDIA",
     [
       ["Downloads", "Downloads"],
+      ["Library", "Library"],
       ["Our Platforms", "Platforms"],
       ["Chat", "Chat"],
       ["Testimonies", "Testimonies"]

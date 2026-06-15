@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createSermon,
   deleteSermon,
+  importSermons,
   listSermons,
   type Sermon,
   type SermonPayload,
@@ -14,7 +15,7 @@ import { InlineAlert } from "../components/InlineAlert";
 import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { usePaginatedItems } from "../hooks/usePaginatedItems";
-import { isValidAssetReference, isValidDateString } from "../lib/validation";
+import { isValidAssetReference, isValidDateString, isValidDateTimeString } from "../lib/validation";
 
 const categories = [
   { id: "cat-1", name: "Faith" },
@@ -28,6 +29,7 @@ const emptyForm: SermonPayload = {
   title: "",
   speaker: "Shekinah Sons Global",
   sermonDate: "2026-06-10",
+  publishedAt: "2026-06-10T06:00",
   categoryId: "cat-1",
   isLive: false,
   thumbnailUrl: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?q=80&w=900",
@@ -47,6 +49,7 @@ export function SermonsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<MediaKind | "">("");
+  const [csvImport, setCsvImport] = useState("");
   const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
@@ -109,6 +112,7 @@ export function SermonsPage() {
       title: sermon.title,
       speaker: sermon.speaker,
       sermonDate: sermon.sermonDate,
+      publishedAt: sermon.publishedAt.slice(0, 16),
       categoryId: sermon.categoryId || "cat-1",
       isLive: sermon.isLive,
       thumbnailUrl: sermon.thumbnailUrl || "",
@@ -145,6 +149,7 @@ export function SermonsPage() {
     if (!form.title.trim()) return "Title is required.";
     if (!form.speaker.trim()) return "Speaker is required.";
     if (!isValidDateString(form.sermonDate)) return "Date must be a real YYYY-MM-DD date.";
+    if (!isValidDateTimeString(form.publishedAt)) return "Publish time must be a valid date-time.";
     if (!isValidAssetReference(form.thumbnailUrl)) {
       return "Thumbnail must be an uploaded file path or a valid http(s) URL.";
     }
@@ -161,6 +166,38 @@ export function SermonsPage() {
     }
 
     return "";
+  }
+
+  async function submitImport() {
+    if (!csvImport.trim()) {
+      setError("Paste sermon CSV before importing.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const response = await importSermons(csvImport);
+      await load();
+      setCsvImport("");
+      showToast({
+        title: "Sermon import complete",
+        message: `${response.result.imported.length} imported, ${response.result.rejected.length} rejected.`,
+        tone: response.result.rejected.length ? "info" : "success"
+      });
+      if (response.result.rejected.length) {
+        setError(
+          response.result.rejected
+            .map(item => `Row ${item.rowNumber}: ${item.error}`)
+            .slice(0, 8)
+            .join(" | ")
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to import sermons");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -314,6 +351,15 @@ export function SermonsPage() {
           </div>
 
           <label>
+            Publish At
+            <input
+              type="datetime-local"
+              value={form.publishedAt}
+              onChange={event => updateField("publishedAt", event.target.value)}
+            />
+          </label>
+
+          <label>
             Thumbnail URL
             <input
               value={form.thumbnailUrl}
@@ -438,6 +484,24 @@ export function SermonsPage() {
           <button disabled={saving}>
             {saving ? "Saving..." : editingId ? "Update Sermon" : "Create Sermon"}
           </button>
+
+          <div className="subeditor-card">
+            <div className="section-title-row compact">
+              <h3>Batch Import</h3>
+              <button type="button" className="secondary compact" onClick={submitImport} disabled={saving}>
+                Import CSV
+              </button>
+            </div>
+            <p className="muted">
+              Columns: type,title,speaker,sermonDate,publishedAt,categoryId,isLive,thumbnailUrl,duration,description,mediaUrl
+            </p>
+            <textarea
+              value={csvImport}
+              onChange={event => setCsvImport(event.target.value)}
+              rows={8}
+              placeholder="Paste sermon CSV here"
+            />
+          </div>
         </form>
 
         <section className="list-card">

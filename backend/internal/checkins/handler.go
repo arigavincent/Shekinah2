@@ -235,3 +235,61 @@ func (h Handler) Recent(c *gin.Context) {
 
 	httpx.OK(c, gin.H{"checkins": items})
 }
+
+func (h Handler) Mine(c *gin.Context) {
+	userID, ok := auth.UserIDFromContext(c)
+	if !ok {
+		httpx.Error(c, http.StatusUnauthorized, "unauthorized", "authentication required")
+		return
+	}
+
+	rows, err := h.db.Query(
+		c.Request.Context(),
+		`
+			SELECT
+				ch.id,
+				e.title,
+				to_char(e.event_date, 'FMMonth FMDD, YYYY') AS event_date,
+				ch.source,
+				ch.notes,
+				ch.created_at
+			FROM event_checkins ch
+			JOIN events e ON e.id = ch.event_id
+			WHERE ch.user_id = $1
+			ORDER BY ch.created_at DESC
+			LIMIT 50
+		`,
+		userID,
+	)
+	if err != nil {
+		httpx.Error(c, http.StatusInternalServerError, "checkins_failed", "failed to load your check-in history")
+		return
+	}
+	defer rows.Close()
+
+	items := make([]gin.H, 0)
+	for rows.Next() {
+		var id, eventTitle, eventDate, source, notes string
+		var createdAt time.Time
+		if err := rows.Scan(&id, &eventTitle, &eventDate, &source, &notes, &createdAt); err != nil {
+			httpx.Error(c, http.StatusInternalServerError, "checkins_failed", "failed to load your check-in history")
+			return
+		}
+
+		items = append(items, gin.H{
+			"id":         id,
+			"eventTitle": eventTitle,
+			"eventDate":  eventDate,
+			"source":     source,
+			"notes":      notes,
+			"createdAt":  createdAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		httpx.Error(c, http.StatusInternalServerError, "checkins_failed", "failed to load your check-in history")
+		return
+	}
+
+	httpx.OK(c, gin.H{"checkins": items})
+}

@@ -8,6 +8,7 @@ const SWAHILI_LABELS = {
   Giving: "Kutoa",
   Updates: "Matangazo",
   Downloads: "Vipakuliwa",
+  Library: "Maktaba",
   "Our Platforms": "Majukwaa Yetu",
   Chat: "Mazungumzo",
   Events: "Matukio",

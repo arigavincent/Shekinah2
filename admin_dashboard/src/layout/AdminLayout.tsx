@@ -10,7 +10,9 @@ const navSections = [
     items: [
       { label: "Overview", to: "/" },
       { label: "Sermons", to: "/sermons" },
+      { label: "Library", to: "/library" },
       { label: "Devotions", to: "/devotions" },
+      { label: "Reading Plans", to: "/reading-plans" },
       { label: "Events", to: "/events" },
       { label: "Updates", to: "/updates" },
       { label: "Branches", to: "/branches" }

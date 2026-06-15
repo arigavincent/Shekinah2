@@ -259,6 +259,10 @@ func validateUpload(kind string, ext string) error {
 		".webp": true,
 	}
 
+	document := map[string]bool{
+		".pdf": true,
+	}
+
 	switch kind {
 	case "video":
 		if video[ext] {
@@ -275,8 +279,13 @@ func validateUpload(kind string, ext string) error {
 			return nil
 		}
 		return errors.New("image uploads must be jpg, jpeg, png, or webp")
+	case "document":
+		if document[ext] {
+			return nil
+		}
+		return errors.New("document uploads must be pdf")
 	default:
-		return errors.New("kind must be video, audio, or image")
+		return errors.New("kind must be video, audio, image, or document")
 	}
 }
 

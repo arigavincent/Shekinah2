@@ -2,7 +2,7 @@ import { getToken } from "../auth/session";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-export type MediaKind = "image" | "video" | "audio";
+export type MediaKind = "image" | "video" | "audio" | "document";
 
 export type UploadedMedia = {
   kind: MediaKind;

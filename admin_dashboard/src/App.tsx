@@ -18,6 +18,8 @@ import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { CommunityPage } from "./pages/CommunityPage";
 import { TestimoniesPage } from "./pages/TestimoniesPage";
 import { CheckInPage } from "./pages/CheckInPage";
+import { LibraryPage } from "./pages/LibraryPage";
+import { ReadingPlansPage } from "./pages/ReadingPlansPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const token = getToken();
@@ -58,8 +60,10 @@ export default function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="sermons" element={<SermonsPage />} />
+        <Route path="library" element={<LibraryPage />} />
 
         <Route path="devotions" element={<DevotionsPage />} />
+        <Route path="reading-plans" element={<ReadingPlansPage />} />
 
         <Route path="events" element={<EventsPage />} />
 

@@ -40,6 +40,7 @@ import { EventsScreen } from "../screens/EventsScreen";
 import { GivingScreen } from "../screens/GivingScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { LiveScreen } from "../screens/LiveScreen";
+import { LibraryScreen } from "../screens/LibraryScreen";
 import { MemberProfileScreen } from "../screens/MemberProfileScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { PlatformsScreen } from "../screens/PlatformsScreen";
@@ -69,6 +70,7 @@ const NOTIFICATION_SCREENS = new Set([
   "Profile",
   "Notifications",
   "Downloads",
+  "Library",
   "Chat",
   "Testimonies",
   "ReadingPlans",
@@ -438,6 +440,8 @@ useEffect(() => {
         return <DownloadsScreen go={go} tab={downloadsTab} setTab={setDownloadsTab} appLanguage={appLanguage} />;
       case "Chat":
         return <ChatScreen go={go} openDrawer={openDrawer} tab={chatTab} setTab={setChatTab} detail={detail} appLanguage={appLanguage} />;
+      case "Library":
+        return <LibraryScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
       case "MemberProfile":
         return <MemberProfileScreen go={go} detail={detail} appLanguage={appLanguage} />;
       case "PrivateChatThread":

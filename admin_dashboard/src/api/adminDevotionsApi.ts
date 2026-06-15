@@ -6,6 +6,7 @@ export type Devotion = {
   title: string;
   excerpt: string;
   devotionDate: string;
+  publishedAt: string;
   imageUrl: string;
   body: string;
   createdAt: string;
@@ -16,6 +17,7 @@ export type DevotionPayload = {
   title: string;
   excerpt: string;
   devotionDate: string;
+  publishedAt: string;
   imageUrl: string;
   body: string;
 };
@@ -42,6 +44,17 @@ export function createDevotion(payload: DevotionPayload) {
     token: adminToken(),
     body: payload
   });
+}
+
+export function importDevotions(csv: string) {
+  return apiRequest<{ result: { imported: Devotion[]; rejected: { rowNumber: number; error: string }[] } }>(
+    "/api/v1/admin/devotions/import",
+    {
+      method: "POST",
+      token: adminToken(),
+      body: { csv }
+    }
+  );
 }
 
 export function updateDevotion(id: string, payload: Partial<DevotionPayload>) {

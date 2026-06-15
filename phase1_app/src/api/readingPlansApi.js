@@ -15,3 +15,17 @@ export function completeReadingPlanDay(id, dayNumber) {
     method: "POST"
   });
 }
+
+export function saveReadingPlanNote(id, dayNumber, note) {
+  return requestWithAuth(`/api/v1/reading-plans/${id}/days/${dayNumber}/note`, {
+    method: "PUT",
+    body: { note }
+  });
+}
+
+export function updateReadingPlanReminder(id, enabled, reminderTime) {
+  return requestWithAuth(`/api/v1/reading-plans/${id}/reminder`, {
+    method: "PATCH",
+    body: { enabled, reminderTime }
+  });
+}

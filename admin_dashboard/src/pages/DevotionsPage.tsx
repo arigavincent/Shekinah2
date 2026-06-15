@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createDevotion,
   deleteDevotion,
+  importDevotions,
   listDevotions,
   type Devotion,
   type DevotionPayload,
@@ -14,12 +15,13 @@ import { InlineAlert } from "../components/InlineAlert";
 import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { usePaginatedItems } from "../hooks/usePaginatedItems";
-import { isValidAssetReference, isValidDateString, hasMinLength } from "../lib/validation";
+import { isValidAssetReference, isValidDateString, isValidDateTimeString, hasMinLength } from "../lib/validation";
 
 const emptyForm: DevotionPayload = {
   title: "",
   excerpt: "",
   devotionDate: "2026-06-11",
+  publishedAt: "2026-06-11T05:00",
   imageUrl: "https://images.unsplash.com/photo-1504052434569-70ad5836ab65?q=80&w=600",
   body: ""
 };
@@ -34,6 +36,7 @@ export function DevotionsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [csvImport, setCsvImport] = useState("");
   const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
@@ -98,6 +101,7 @@ export function DevotionsPage() {
       title: devotion.title,
       excerpt: devotion.excerpt,
       devotionDate: devotion.devotionDate,
+      publishedAt: devotion.publishedAt.slice(0, 16),
       imageUrl: devotion.imageUrl || "",
       body: devotion.body
     });
@@ -125,12 +129,47 @@ export function DevotionsPage() {
     if (!isValidDateString(form.devotionDate)) {
       return "Date must be a real YYYY-MM-DD date.";
     }
+    if (!isValidDateTimeString(form.publishedAt)) {
+      return "Publish time must be a valid date-time.";
+    }
     if (!isValidAssetReference(form.imageUrl)) {
       return "Cover image must be an uploaded file path or a valid http(s) URL.";
     }
     if (!hasMinLength(form.body, 40)) return "Body must be at least 40 characters.";
 
     return "";
+  }
+
+  async function submitImport() {
+    if (!csvImport.trim()) {
+      setError("Paste devotion CSV before importing.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const response = await importDevotions(csvImport);
+      await load();
+      setCsvImport("");
+      showToast({
+        title: "Devotion import complete",
+        message: `${response.result.imported.length} imported, ${response.result.rejected.length} rejected.`,
+        tone: response.result.rejected.length ? "info" : "success"
+      });
+      if (response.result.rejected.length) {
+        setError(
+          response.result.rejected
+            .map(item => `Row ${item.rowNumber}: ${item.error}`)
+            .slice(0, 8)
+            .join(" | ")
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to import devotions");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -247,6 +286,15 @@ export function DevotionsPage() {
           </label>
 
           <label>
+            Publish At
+            <input
+              type="datetime-local"
+              value={form.publishedAt}
+              onChange={event => updateField("publishedAt", event.target.value)}
+            />
+          </label>
+
+          <label>
             Image URL
             <input
               value={form.imageUrl}
@@ -307,6 +355,24 @@ export function DevotionsPage() {
           <button disabled={saving}>
             {saving ? "Saving..." : editingId ? "Update Devotion" : "Create Devotion"}
           </button>
+
+          <div className="subeditor-card">
+            <div className="section-title-row compact">
+              <h3>Batch Import</h3>
+              <button type="button" className="secondary compact" onClick={submitImport} disabled={saving}>
+                Import CSV
+              </button>
+            </div>
+            <p className="muted">
+              Columns: title,excerpt,devotionDate,publishedAt,imageUrl,body
+            </p>
+            <textarea
+              value={csvImport}
+              onChange={event => setCsvImport(event.target.value)}
+              rows={8}
+              placeholder="Paste devotion CSV here"
+            />
+          </div>
         </form>
 
         <section className="list-card">

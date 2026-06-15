@@ -7,6 +7,14 @@ export function isValidDateString(value: string) {
   return date.toISOString().slice(0, 10) === value;
 }
 
+export function isValidDateTimeString(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+
+  const parsed = new Date(trimmed.endsWith("Z") ? trimmed : trimmed.replace(" ", "T"));
+  return !Number.isNaN(parsed.getTime());
+}
+
 export function isValidAssetReference(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return false;

@@ -53,6 +53,28 @@ func (h Handler) Create(c *gin.Context) {
 	})
 }
 
+func (h Handler) Import(c *gin.Context) {
+	var req ImportRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
+	}
+
+	result, err := h.service.Import(c.Request.Context(), req.CSV)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			httpx.Error(c, http.StatusBadRequest, "invalid_input", "valid CSV with scheduling columns is required")
+		default:
+			httpx.Error(c, http.StatusInternalServerError, "sermon_import_failed", "failed to import sermons")
+		}
+		return
+	}
+
+	httpx.OK(c, gin.H{"result": result})
+}
+
 func (h Handler) Update(c *gin.Context) {
 	id := c.Param("id")
 

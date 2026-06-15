@@ -5,9 +5,11 @@ import (
 	adminbranches "github.com/ariga/shekinah-backend/internal/admin/branches"
 	admindevotions "github.com/ariga/shekinah-backend/internal/admin/devotions"
 	adminevents "github.com/ariga/shekinah-backend/internal/admin/events"
+	adminlibrary "github.com/ariga/shekinah-backend/internal/admin/library"
 	adminliveconfig "github.com/ariga/shekinah-backend/internal/admin/liveconfig"
 	adminmedia "github.com/ariga/shekinah-backend/internal/admin/media"
 	adminprayers "github.com/ariga/shekinah-backend/internal/admin/prayers"
+	adminreadingplans "github.com/ariga/shekinah-backend/internal/admin/readingplans"
 	adminsermons "github.com/ariga/shekinah-backend/internal/admin/sermons"
 	adminupdates "github.com/ariga/shekinah-backend/internal/admin/updates"
 	"github.com/ariga/shekinah-backend/internal/auth"
@@ -19,6 +21,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/giving"
 	"github.com/ariga/shekinah-backend/internal/health"
 	"github.com/ariga/shekinah-backend/internal/httpx"
+	"github.com/ariga/shekinah-backend/internal/library"
 	"github.com/ariga/shekinah-backend/internal/notifications"
 	"github.com/ariga/shekinah-backend/internal/prayers"
 	"github.com/ariga/shekinah-backend/internal/privatechat"
@@ -75,6 +78,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	adminPrayerRepository := adminprayers.NewRepository(db)
 	adminPrayerService := adminprayers.NewService(adminPrayerRepository)
 	adminPrayerHandler := adminprayers.NewHandler(adminPrayerService)
+	adminLibraryHandler := adminlibrary.NewHandler(db)
+	adminReadingPlanHandler := adminreadingplans.NewHandler(db)
 	adminMediaHandler := adminmedia.NewHandler()
 	givingHandler := giving.NewHandler(db)
 	notificationHandler := notifications.NewHandler(db)
@@ -85,6 +90,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	checkinHandler := checkins.NewHandler(db)
 	bibleVersionsHandler := bibleversions.NewHandler(db, cfg)
 	privateChatHandler := privatechat.NewHandler(db)
+	libraryHandler := library.NewHandler(db)
 
 	r.GET("/healthz", health.HandleHealthz(cfg, db))
 	r.Static("/uploads", "./uploads")
@@ -120,7 +126,12 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/reading-plans/:id", readingPlanHandler.Detail)
 		api.GET("/reading-plans/:id/mine", auth.RequireAuth(authService), readingPlanHandler.Detail)
 		api.POST("/reading-plans/:id/days/:day/complete", auth.RequireAuth(authService), readingPlanHandler.CompleteDay)
+		api.PUT("/reading-plans/:id/days/:day/note", auth.RequireAuth(authService), readingPlanHandler.SaveNote)
+		api.PATCH("/reading-plans/:id/reminder", auth.RequireAuth(authService), readingPlanHandler.UpdateReminder)
 		api.GET("/checkin/code", auth.RequireAuth(authService), checkinHandler.MemberCode)
+		api.GET("/checkin/history", auth.RequireAuth(authService), checkinHandler.Mine)
+		api.GET("/library", libraryHandler.List)
+		api.GET("/library/:id", libraryHandler.Detail)
 		api.GET("/bible/versions", bibleVersionsHandler.List)
 		api.GET("/bible/versions/:id/download", bibleVersionsHandler.Download)
 		api.GET("/bible/installs", auth.RequireAuth(authService), bibleVersionsHandler.ListInstalled)
@@ -151,13 +162,25 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 
 			adminGroup.GET("/sermons", adminSermonHandler.List)
 			adminGroup.POST("/sermons", adminSermonHandler.Create)
+			adminGroup.POST("/sermons/import", adminSermonHandler.Import)
 			adminGroup.PATCH("/sermons/:id", adminSermonHandler.Update)
 			adminGroup.DELETE("/sermons/:id", adminSermonHandler.Delete)
 
 			adminGroup.GET("/devotions", adminDevotionHandler.List)
 			adminGroup.POST("/devotions", adminDevotionHandler.Create)
+			adminGroup.POST("/devotions/import", adminDevotionHandler.Import)
 			adminGroup.PATCH("/devotions/:id", adminDevotionHandler.Update)
 			adminGroup.DELETE("/devotions/:id", adminDevotionHandler.Delete)
+
+			adminGroup.GET("/library", adminLibraryHandler.List)
+			adminGroup.POST("/library", adminLibraryHandler.Create)
+			adminGroup.PATCH("/library/:id", adminLibraryHandler.Update)
+			adminGroup.DELETE("/library/:id", adminLibraryHandler.Delete)
+
+			adminGroup.GET("/reading-plans", adminReadingPlanHandler.List)
+			adminGroup.POST("/reading-plans", adminReadingPlanHandler.Create)
+			adminGroup.PATCH("/reading-plans/:id", adminReadingPlanHandler.Update)
+			adminGroup.DELETE("/reading-plans/:id", adminReadingPlanHandler.Delete)
 
 			adminGroup.GET("/events", adminEventHandler.List)
 			adminGroup.POST("/events", adminEventHandler.Create)

@@ -5,7 +5,9 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Switch,
   Text,
+  TextInput,
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,7 +15,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { C } from "../constants/theme";
-import { completeReadingPlanDay, getReadingPlan, listReadingPlans } from "../api/readingPlansApi";
+import {
+  completeReadingPlanDay,
+  getReadingPlan,
+  listReadingPlans,
+  saveReadingPlanNote,
+  updateReadingPlanReminder
+} from "../api/readingPlansApi";
 import { s } from "../styles/appStyles";
 
 export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
@@ -21,6 +29,8 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [savingNoteFor, setSavingNoteFor] = useState(0);
+  const [savingReminder, setSavingReminder] = useState(false);
 
   async function loadPlans(showRefresh = false) {
     if (showRefresh) setRefreshing(true);
@@ -171,6 +181,62 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
               <Text style={[s.goldSmall, { marginTop: 12 }]}>
                 {selectedPlan.completedDays || 0} / {selectedPlan.durationDays} completed
               </Text>
+              <Text style={[s.mutedText, { color: C.muted, marginTop: 6 }]}>
+                Current streak: {selectedPlan.streakDays || 0} day(s)
+              </Text>
+              <View style={[s.plainCard, { marginTop: 16, backgroundColor: C.surface2 }]}>
+                <View style={[s.rowTight, { justifyContent: "space-between" }]}>
+                  <Text style={[s.rowTitle, { color: C.white }]}>Reminder</Text>
+                  <Switch
+                    value={Boolean(selectedPlan.reminderOn)}
+                    onValueChange={async value => {
+                      try {
+                        setSavingReminder(true);
+                        await updateReadingPlanReminder(
+                          selectedPlan.id,
+                          value,
+                          selectedPlan.reminderTime || "06:00"
+                        );
+                        const response = await getReadingPlan(selectedPlan.id, { mine: true });
+                        setSelectedPlan(response?.plan || null);
+                      } catch (error) {
+                        Alert.alert("Reminder", error instanceof Error ? error.message : "Unable to update reminder.");
+                      } finally {
+                        setSavingReminder(false);
+                      }
+                    }}
+                    thumbColor={C.gold}
+                  />
+                </View>
+                <Text style={[s.mutedText, { color: C.muted, marginBottom: 8 }]}>
+                  Daily reminder time (24h format)
+                </Text>
+                <TextInput
+                  style={[s.searchInput, { color: C.white }]}
+                  placeholder="06:00"
+                  placeholderTextColor={C.muted}
+                  selectionColor={C.gold}
+                  value={selectedPlan.reminderTime || "06:00"}
+                  editable={!savingReminder}
+                  onChangeText={value =>
+                    setSelectedPlan(current => (current ? { ...current, reminderTime: value } : current))
+                  }
+                  onEndEditing={async () => {
+                    try {
+                      setSavingReminder(true);
+                      await updateReadingPlanReminder(
+                        selectedPlan.id,
+                        Boolean(selectedPlan.reminderOn),
+                        selectedPlan.reminderTime || "06:00"
+                      );
+                    } catch (error) {
+                      Alert.alert("Reminder", error instanceof Error ? error.message : "Unable to save reminder time.");
+                    } finally {
+                      setSavingReminder(false);
+                    }
+                  }}
+                />
+              </View>
             </View>
 
             {selectedPlan.days?.map(day => (
@@ -190,6 +256,56 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
                   </Text>
                 ) : null}
 
+                <Text style={s.inputLabel}>My Note</Text>
+                <TextInput
+                  style={[
+                    s.searchInput,
+                    {
+                      minHeight: 100,
+                      textAlignVertical: "top",
+                      paddingTop: 12,
+                      color: C.white
+                    }
+                  ]}
+                  placeholder="Write what stood out, a prayer, or next step..."
+                  placeholderTextColor={C.muted}
+                  selectionColor={C.gold}
+                  multiline
+                  value={day.note || ""}
+                  onChangeText={value =>
+                    setSelectedPlan(current =>
+                      current
+                        ? {
+                            ...current,
+                            days: current.days.map(item =>
+                              item.dayNumber === day.dayNumber ? { ...item, note: value } : item
+                            )
+                          }
+                        : current
+                    )
+                  }
+                />
+
+                <Pressable
+                  style={[s.secondaryBtn, savingNoteFor === day.dayNumber && { opacity: 0.65 }]}
+                  onPress={async () => {
+                    try {
+                      setSavingNoteFor(day.dayNumber);
+                      await saveReadingPlanNote(selectedPlan.id, day.dayNumber, day.note || "");
+                      showSaved(day.dayNumber);
+                    } catch (error) {
+                      Alert.alert("Reading Note", error instanceof Error ? error.message : "Unable to save this note.");
+                    } finally {
+                      setSavingNoteFor(0);
+                    }
+                  }}
+                  disabled={savingNoteFor === day.dayNumber}
+                >
+                  <Text style={s.secondaryText}>
+                    {savingNoteFor === day.dayNumber ? "Saving..." : "Save Note"}
+                  </Text>
+                </Pressable>
+
                 {!day.completed ? (
                   <Pressable style={s.primaryBtn} onPress={() => completeDay(day.dayNumber)}>
                     <Text style={s.primaryText}>Mark Complete</Text>
@@ -202,4 +318,8 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
       </ScrollView>
     </Screen>
   );
+}
+
+function showSaved(dayNumber) {
+  Alert.alert("Saved", `Your note for day ${dayNumber} was saved.`);
 }

@@ -7,6 +7,7 @@ export type Sermon = {
   title: string;
   speaker: string;
   sermonDate: string;
+  publishedAt: string;
   categoryId: string;
   category: string;
   isLive: boolean;
@@ -23,6 +24,7 @@ export type SermonPayload = {
   title: string;
   speaker: string;
   sermonDate: string;
+  publishedAt: string;
   categoryId: string;
   isLive: boolean;
   thumbnailUrl: string;
@@ -53,6 +55,17 @@ export function createSermon(payload: SermonPayload) {
     token: adminToken(),
     body: payload
   });
+}
+
+export function importSermons(csv: string) {
+  return apiRequest<{ result: { imported: Sermon[]; rejected: { rowNumber: number; error: string }[] } }>(
+    "/api/v1/admin/sermons/import",
+    {
+      method: "POST",
+      token: adminToken(),
+      body: { csv }
+    }
+  );
 }
 
 export function updateSermon(id: string, payload: Partial<SermonPayload>) {

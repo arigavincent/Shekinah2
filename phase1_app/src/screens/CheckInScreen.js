@@ -13,11 +13,12 @@ import * as Clipboard from "expo-clipboard";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { C } from "../constants/theme";
-import { getMyCheckInCode } from "../api/checkinApi";
+import { getMyCheckInCode, listMyCheckInHistory } from "../api/checkinApi";
 import { s } from "../styles/appStyles";
 
 export function CheckInScreen({ go, openDrawer, appLanguage = "en" }) {
   const [payload, setPayload] = useState(null);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -28,6 +29,8 @@ export function CheckInScreen({ go, openDrawer, appLanguage = "en" }) {
     try {
       const response = await getMyCheckInCode();
       setPayload(response || null);
+      const historyResponse = await listMyCheckInHistory().catch(() => ({ checkins: [] }));
+      setHistory(Array.isArray(historyResponse?.checkins) ? historyResponse.checkins : []);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to prepare your check-in code.";
       if (/sign in/i.test(message) || /authorization/i.test(message)) {
@@ -110,6 +113,29 @@ export function CheckInScreen({ go, openDrawer, appLanguage = "en" }) {
               Sign in first and refresh this screen to generate your code.
             </Text>
           </View>
+        )}
+
+        <View style={[s.sectionHeader, { marginTop: 28 }]}>
+          <Text style={s.sectionTitle}>My Check-In History</Text>
+        </View>
+
+        {history.length === 0 ? (
+          <View style={s.plainCard}>
+            <Text style={[s.mutedText, { color: C.muted }]}>
+              Your recent event attendance will appear here after staff verify your QR code.
+            </Text>
+          </View>
+        ) : (
+          history.map(item => (
+            <View key={item.id} style={s.plainCard}>
+              <Text style={[s.rowTitle, { color: C.white }]}>{item.eventTitle}</Text>
+              <Text style={[s.goldSmall, { marginTop: 6 }]}>{item.eventDate}</Text>
+              <Text style={[s.mutedText, { color: C.muted, marginTop: 6 }]}>
+                Checked in {new Date(item.createdAt).toLocaleString()}
+              </Text>
+              {item.notes ? <Text style={s.detailBody}>{item.notes}</Text> : null}
+            </View>
+          ))
         )}
       </ScrollView>
     </Screen>

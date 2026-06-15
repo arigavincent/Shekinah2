@@ -70,6 +70,7 @@ func (r Repository) Devotions(ctx context.Context) ([]Devotion, error) {
 			image_url,
 			body
 		FROM devotions
+		WHERE published_at <= NOW()
 		ORDER BY devotion_date DESC
 	`
 
@@ -123,6 +124,7 @@ func (r Repository) Sermons(ctx context.Context) ([]Sermon, error) {
 			s.media_url
 		FROM sermons s
 		LEFT JOIN sermon_categories c ON c.id = s.category_id
+		WHERE s.published_at <= NOW()
 		ORDER BY s.sermon_date DESC
 	`
 
@@ -171,7 +173,9 @@ func (r Repository) Categories(ctx context.Context) ([]Category, error) {
 			COUNT(s.id)::int AS count,
 			c.image_url
 		FROM sermon_categories c
-		LEFT JOIN sermons s ON s.category_id = c.id
+		LEFT JOIN sermons s
+		  ON s.category_id = c.id
+		 AND s.published_at <= NOW()
 		GROUP BY c.id, c.name, c.image_url
 		ORDER BY c.name ASC
 	`

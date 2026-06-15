@@ -26,6 +26,7 @@ func (r Repository) List(ctx context.Context) ([]Devotion, error) {
 			title,
 			excerpt,
 			devotion_date::text,
+			to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 			image_url,
 			body,
 			created_at,
@@ -65,6 +66,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (Devotion, error) {
 			title,
 			excerpt,
 			devotion_date::text,
+			to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 			image_url,
 			body,
 			created_at,
@@ -93,15 +95,17 @@ func (r Repository) Create(ctx context.Context, command Command) (Devotion, erro
 			title,
 			excerpt,
 			devotion_date,
+			published_at,
 			image_url,
 			body
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING
 			id,
 			title,
 			excerpt,
 			devotion_date::text,
+			to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 			image_url,
 			body,
 			created_at,
@@ -116,6 +120,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Devotion, erro
 			command.Title,
 			command.Excerpt,
 			command.DevotionDate,
+			command.PublishedAt,
 			command.ImageURL,
 			command.Body,
 		),
@@ -134,8 +139,9 @@ func (r Repository) Update(ctx context.Context, command Command) (Devotion, erro
 			title = $2,
 			excerpt = $3,
 			devotion_date = $4,
-			image_url = $5,
-			body = $6,
+			published_at = $5,
+			image_url = $6,
+			body = $7,
 			updated_at = now()
 		WHERE id = $1
 		RETURNING
@@ -143,6 +149,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Devotion, erro
 			title,
 			excerpt,
 			devotion_date::text,
+			to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 			image_url,
 			body,
 			created_at,
@@ -157,6 +164,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Devotion, erro
 			command.Title,
 			command.Excerpt,
 			command.DevotionDate,
+			command.PublishedAt,
 			command.ImageURL,
 			command.Body,
 		),
@@ -202,6 +210,7 @@ func scanDevotion(row devotionScanner) (Devotion, error) {
 		&item.Title,
 		&item.Excerpt,
 		&item.DevotionDate,
+		&item.PublishedAt,
 		&item.ImageURL,
 		&item.Body,
 		&item.CreatedAt,
