@@ -3,6 +3,7 @@ import { getToken } from "../auth/session";
 
 export type Devotion = {
   id: string;
+  externalId: string;
   title: string;
   excerpt: string;
   devotionDate: string;
@@ -14,6 +15,7 @@ export type Devotion = {
 };
 
 export type DevotionPayload = {
+  externalId?: string;
   title: string;
   excerpt: string;
   devotionDate: string;
@@ -47,7 +49,7 @@ export function createDevotion(payload: DevotionPayload) {
 }
 
 export function importDevotions(csv: string) {
-  return apiRequest<{ result: { imported: Devotion[]; rejected: { rowNumber: number; error: string }[] } }>(
+  return apiRequest<{ result: DevotionImportResult }>(
     "/api/v1/admin/devotions/import",
     {
       method: "POST",
@@ -55,6 +57,14 @@ export function importDevotions(csv: string) {
       body: { csv }
     }
   );
+}
+
+export function previewDevotionImport(csv: string) {
+  return apiRequest<{ preview: DevotionImportPreview }>("/api/v1/admin/devotions/import/preview", {
+    method: "POST",
+    token: adminToken(),
+    body: { csv }
+  });
 }
 
 export function updateDevotion(id: string, payload: Partial<DevotionPayload>) {
@@ -71,3 +81,25 @@ export function deleteDevotion(id: string) {
     token: adminToken()
   });
 }
+export type ImportPreviewRow = {
+  rowNumber: number;
+  externalId: string;
+  title: string;
+  action: "create" | "update" | "reject";
+  existingId?: string;
+  publishedAt?: string;
+  errors?: string[];
+};
+
+export type DevotionImportPreview = {
+  rows: ImportPreviewRow[];
+  creates: number;
+  updates: number;
+  rejected: number;
+};
+
+export type DevotionImportResult = {
+  created: Devotion[];
+  updated: Devotion[];
+  rejected: { rowNumber: number; externalId?: string; title?: string; error: string }[];
+};

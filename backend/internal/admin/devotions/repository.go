@@ -23,6 +23,7 @@ func (r Repository) List(ctx context.Context) ([]Devotion, error) {
 	const query = `
 		SELECT
 			id,
+			external_id,
 			title,
 			excerpt,
 			devotion_date::text,
@@ -63,6 +64,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (Devotion, error) {
 	const query = `
 		SELECT
 			id,
+			external_id,
 			title,
 			excerpt,
 			devotion_date::text,
@@ -92,6 +94,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Devotion, erro
 	const query = `
 		INSERT INTO devotions (
 			id,
+			external_id,
 			title,
 			excerpt,
 			devotion_date,
@@ -99,9 +102,10 @@ func (r Repository) Create(ctx context.Context, command Command) (Devotion, erro
 			image_url,
 			body
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING
 			id,
+			external_id,
 			title,
 			excerpt,
 			devotion_date::text,
@@ -117,6 +121,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Devotion, erro
 			ctx,
 			query,
 			command.ID,
+			command.ExternalID,
 			command.Title,
 			command.Excerpt,
 			command.DevotionDate,
@@ -136,16 +141,18 @@ func (r Repository) Update(ctx context.Context, command Command) (Devotion, erro
 	const query = `
 		UPDATE devotions
 		SET
-			title = $2,
-			excerpt = $3,
-			devotion_date = $4,
-			published_at = $5,
-			image_url = $6,
-			body = $7,
+			external_id = $2,
+			title = $3,
+			excerpt = $4,
+			devotion_date = $5,
+			published_at = $6,
+			image_url = $7,
+			body = $8,
 			updated_at = now()
 		WHERE id = $1
 		RETURNING
 			id,
+			external_id,
 			title,
 			excerpt,
 			devotion_date::text,
@@ -161,6 +168,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Devotion, erro
 			ctx,
 			query,
 			command.ID,
+			command.ExternalID,
 			command.Title,
 			command.Excerpt,
 			command.DevotionDate,
@@ -175,6 +183,35 @@ func (r Repository) Update(ctx context.Context, command Command) (Devotion, erro
 		}
 
 		return Devotion{}, fmt.Errorf("update devotion: %w", err)
+	}
+
+	return item, nil
+}
+
+func (r Repository) FindByExternalID(ctx context.Context, externalID string) (Devotion, error) {
+	const query = `
+		SELECT
+			id,
+			external_id,
+			title,
+			excerpt,
+			devotion_date::text,
+			to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+			image_url,
+			body,
+			created_at,
+			updated_at
+		FROM devotions
+		WHERE external_id = $1
+		LIMIT 1
+	`
+
+	item, err := scanDevotion(r.db.QueryRow(ctx, query, externalID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Devotion{}, ErrNotFound
+		}
+		return Devotion{}, fmt.Errorf("find devotion by external id: %w", err)
 	}
 
 	return item, nil
@@ -207,6 +244,7 @@ func scanDevotion(row devotionScanner) (Devotion, error) {
 
 	if err := row.Scan(
 		&item.ID,
+		&item.ExternalID,
 		&item.Title,
 		&item.Excerpt,
 		&item.DevotionDate,

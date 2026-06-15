@@ -4,6 +4,7 @@ import "time"
 
 type Sermon struct {
 	ID           string    `json:"id"`
+	ExternalID   string    `json:"externalId"`
 	Type         string    `json:"type"`
 	Title        string    `json:"title"`
 	Speaker      string    `json:"speaker"`
@@ -22,6 +23,7 @@ type Sermon struct {
 
 type CreateRequest struct {
 	ID           string `json:"id"`
+	ExternalID   string `json:"externalId"`
 	Type         string `json:"type"`
 	Title        string `json:"title"`
 	Speaker      string `json:"speaker"`
@@ -36,6 +38,7 @@ type CreateRequest struct {
 }
 
 type UpdateRequest struct {
+	ExternalID   *string `json:"externalId"`
 	Type         *string `json:"type"`
 	Title        *string `json:"title"`
 	Speaker      *string `json:"speaker"`
@@ -53,18 +56,39 @@ type ImportRequest struct {
 	CSV string `json:"csv"`
 }
 
+type ImportPreviewRow struct {
+	RowNumber   int      `json:"rowNumber"`
+	ExternalID  string   `json:"externalId"`
+	Title       string   `json:"title"`
+	Action      string   `json:"action"`
+	ExistingID  string   `json:"existingId,omitempty"`
+	PublishedAt string   `json:"publishedAt,omitempty"`
+	Errors      []string `json:"errors,omitempty"`
+}
+
+type ImportPreview struct {
+	Rows     []ImportPreviewRow `json:"rows"`
+	Creates  int                `json:"creates"`
+	Updates  int                `json:"updates"`
+	Rejected int                `json:"rejected"`
+}
+
 type ImportRowError struct {
-	RowNumber int    `json:"rowNumber"`
-	Error     string `json:"error"`
+	RowNumber  int    `json:"rowNumber"`
+	ExternalID string `json:"externalId,omitempty"`
+	Title      string `json:"title,omitempty"`
+	Error      string `json:"error"`
 }
 
 type ImportResult struct {
-	Imported []Sermon         `json:"imported"`
+	Created  []Sermon         `json:"created"`
+	Updated  []Sermon         `json:"updated"`
 	Rejected []ImportRowError `json:"rejected"`
 }
 
 type Command struct {
 	ID           string
+	ExternalID   string
 	Type         string
 	Title        string
 	Speaker      string

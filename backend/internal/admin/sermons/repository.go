@@ -23,6 +23,7 @@ func (r Repository) List(ctx context.Context) ([]Sermon, error) {
 	const query = `
 		SELECT
 			s.id,
+			s.external_id,
 			s.type,
 			s.title,
 			s.speaker,
@@ -70,6 +71,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (Sermon, error) {
 	const query = `
 		SELECT
 			s.id,
+			s.external_id,
 			s.type,
 			s.title,
 			s.speaker,
@@ -108,6 +110,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Sermon, error)
 	const query = `
 		INSERT INTO sermons (
 			id,
+			external_id,
 			type,
 			title,
 			speaker,
@@ -120,9 +123,10 @@ func (r Repository) Create(ctx context.Context, command Command) (Sermon, error)
 			description,
 			media_url
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10, $11, $12, $13)
 		RETURNING
 			id,
+			external_id,
 			type,
 			title,
 			speaker,
@@ -143,6 +147,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Sermon, error)
 		ctx,
 		query,
 		command.ID,
+		command.ExternalID,
 		command.Type,
 		command.Title,
 		command.Speaker,
@@ -168,21 +173,23 @@ func (r Repository) Update(ctx context.Context, command Command) (Sermon, error)
 	const query = `
 		UPDATE sermons
 		SET
-			type = $2,
-			title = $3,
-			speaker = $4,
-			sermon_date = $5,
-			published_at = $6,
-			category_id = NULLIF($7, ''),
-			is_live = $8,
-			thumbnail_url = $9,
-			duration = $10,
-			description = $11,
-			media_url = $12,
+			external_id = $2,
+			type = $3,
+			title = $4,
+			speaker = $5,
+			sermon_date = $6,
+			published_at = $7,
+			category_id = NULLIF($8, ''),
+			is_live = $9,
+			thumbnail_url = $10,
+			duration = $11,
+			description = $12,
+			media_url = $13,
 			updated_at = now()
 		WHERE id = $1
 		RETURNING
 			id,
+			external_id,
 			type,
 			title,
 			speaker,
@@ -203,6 +210,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Sermon, error)
 		ctx,
 		query,
 		command.ID,
+		command.ExternalID,
 		command.Type,
 		command.Title,
 		command.Speaker,
@@ -226,6 +234,42 @@ func (r Repository) Update(ctx context.Context, command Command) (Sermon, error)
 	}
 
 	return r.FindByID(ctx, item.ID)
+}
+
+func (r Repository) FindByExternalID(ctx context.Context, externalID string) (Sermon, error) {
+	const query = `
+		SELECT
+			s.id,
+			s.external_id,
+			s.type,
+			s.title,
+			s.speaker,
+			s.sermon_date::text,
+			to_char(s.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+			COALESCE(s.category_id, ''),
+			COALESCE(c.name, ''),
+			s.is_live,
+			s.thumbnail_url,
+			s.duration,
+			s.description,
+			s.media_url,
+			s.created_at,
+			s.updated_at
+		FROM sermons s
+		LEFT JOIN sermon_categories c ON c.id = s.category_id
+		WHERE s.external_id = $1
+		LIMIT 1
+	`
+
+	row := r.db.QueryRow(ctx, query, externalID)
+	item, err := scanSermon(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Sermon{}, ErrNotFound
+		}
+		return Sermon{}, fmt.Errorf("find sermon by external id: %w", err)
+	}
+	return item, nil
 }
 
 func (r Repository) Delete(ctx context.Context, id string) error {
@@ -255,6 +299,7 @@ func scanSermon(row sermonScanner) (Sermon, error) {
 
 	if err := row.Scan(
 		&item.ID,
+		&item.ExternalID,
 		&item.Type,
 		&item.Title,
 		&item.Speaker,

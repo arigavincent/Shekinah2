@@ -6,6 +6,8 @@ import {
   deleteSermon,
   importSermons,
   listSermons,
+  previewSermonImport,
+  type SermonImportPreview,
   type Sermon,
   type SermonPayload,
   updateSermon
@@ -25,6 +27,7 @@ const categories = [
 ];
 
 const emptyForm: SermonPayload = {
+  externalId: "",
   type: "video",
   title: "",
   speaker: "Shekinah Sons Global",
@@ -50,6 +53,7 @@ export function SermonsPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<MediaKind | "">("");
   const [csvImport, setCsvImport] = useState("");
+  const [importPreview, setImportPreview] = useState<SermonImportPreview | null>(null);
   const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
@@ -109,6 +113,7 @@ export function SermonsPage() {
     setEditingId(sermon.id);
     setForm({
       type: sermon.type,
+      externalId: sermon.externalId || "",
       title: sermon.title,
       speaker: sermon.speaker,
       sermonDate: sermon.sermonDate,
@@ -145,6 +150,13 @@ export function SermonsPage() {
     }
   }
 
+  async function loadCsvFile(file: File | null) {
+    if (!file) return;
+    const text = await file.text();
+    setCsvImport(text);
+    setImportPreview(null);
+  }
+
   function validate() {
     if (!form.title.trim()) return "Title is required.";
     if (!form.speaker.trim()) return "Speaker is required.";
@@ -169,6 +181,16 @@ export function SermonsPage() {
   }
 
   async function submitImport() {
+    if (!importPreview) {
+      setError("Run import preview before applying the batch.");
+      return;
+    }
+
+    if (importPreview.creates === 0 && importPreview.updates === 0) {
+      setError("There are no valid create or update rows to apply.");
+      return;
+    }
+
     if (!csvImport.trim()) {
       setError("Paste sermon CSV before importing.");
       return;
@@ -180,9 +202,10 @@ export function SermonsPage() {
       const response = await importSermons(csvImport);
       await load();
       setCsvImport("");
+      setImportPreview(null);
       showToast({
-        title: "Sermon import complete",
-        message: `${response.result.imported.length} imported, ${response.result.rejected.length} rejected.`,
+        title: "Sermon import applied",
+        message: `${response.result.created.length} created, ${response.result.updated.length} updated, ${response.result.rejected.length} rejected.`,
         tone: response.result.rejected.length ? "info" : "success"
       });
       if (response.result.rejected.length) {
@@ -195,6 +218,38 @@ export function SermonsPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import sermons");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function previewImport() {
+    if (!csvImport.trim()) {
+      setError("Paste or load sermon CSV before previewing.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const response = await previewSermonImport(csvImport);
+      setImportPreview(response.preview);
+      if (response.preview.rejected > 0) {
+        const rejected = response.preview.rows
+          .filter(item => item.action === "reject")
+          .slice(0, 8)
+          .map(item => `Row ${item.rowNumber}: ${(item.errors || []).join(", ")}`)
+          .join(" | ");
+        setError(rejected);
+      }
+      showToast({
+        title: "Sermon import preview ready",
+        message: `${response.preview.creates} create, ${response.preview.updates} update, ${response.preview.rejected} reject.`,
+        tone: response.preview.rejected ? "info" : "success"
+      });
+    } catch (err) {
+      setImportPreview(null);
+      setError(err instanceof Error ? err.message : "Failed to preview sermons");
     } finally {
       setSaving(false);
     }
@@ -321,6 +376,15 @@ export function SermonsPage() {
               </select>
             </label>
           </div>
+
+          <label>
+            External ID
+            <input
+              value={form.externalId || ""}
+              onChange={event => updateField("externalId", event.target.value)}
+              placeholder="shekinah-yt-asQFM1unI8Q"
+            />
+          </label>
 
           <label>
             Title
@@ -488,19 +552,73 @@ export function SermonsPage() {
           <div className="subeditor-card">
             <div className="section-title-row compact">
               <h3>Batch Import</h3>
-              <button type="button" className="secondary compact" onClick={submitImport} disabled={saving}>
-                Import CSV
-              </button>
+              <div className="row-actions">
+                <button type="button" className="secondary compact" onClick={previewImport} disabled={saving}>
+                  Preview CSV
+                </button>
+                <button type="button" className="secondary compact" onClick={submitImport} disabled={saving || !importPreview}>
+                  Apply Import
+                </button>
+              </div>
             </div>
             <p className="muted">
-              Columns: type,title,speaker,sermonDate,publishedAt,categoryId,isLive,thumbnailUrl,duration,description,mediaUrl
+              Columns: externalId,type,title,speaker,sermonDate,publishedAt,categoryId,isLive,thumbnailUrl,duration,description,mediaUrl
             </p>
+            <label>
+              Load CSV File
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={async event => {
+                  await loadCsvFile(event.target.files?.[0] || null);
+                  event.target.value = "";
+                }}
+              />
+            </label>
             <textarea
               value={csvImport}
-              onChange={event => setCsvImport(event.target.value)}
+              onChange={event => {
+                setCsvImport(event.target.value);
+                setImportPreview(null);
+              }}
               rows={8}
               placeholder="Paste sermon CSV here"
             />
+            {importPreview ? (
+              <div className="import-preview-card">
+                <div className="stats-grid compact">
+                  <article className="stat-card">
+                    <span>Create</span>
+                    <strong>{importPreview.creates}</strong>
+                  </article>
+                  <article className="stat-card">
+                    <span>Update</span>
+                    <strong>{importPreview.updates}</strong>
+                  </article>
+                  <article className="stat-card">
+                    <span>Reject</span>
+                    <strong>{importPreview.rejected}</strong>
+                  </article>
+                </div>
+                <div className="preview-list">
+                  {importPreview.rows.slice(0, 12).map(row => (
+                    <article key={`${row.rowNumber}-${row.externalId}`} className="preview-row">
+                      <div>
+                        <strong>Row {row.rowNumber}</strong>
+                        <p className="small-muted">{row.externalId || "missing externalId"}</p>
+                        <p>{row.title || "Untitled row"}</p>
+                      </div>
+                      <div className="preview-row-meta">
+                        <span className={`status-chip ${row.action === "reject" ? "danger" : row.action === "update" ? "warning" : "success"}`}>
+                          {row.action}
+                        </span>
+                        {row.errors?.length ? <p className="small-muted">{row.errors.join(", ")}</p> : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </form>
 

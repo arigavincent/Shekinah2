@@ -291,6 +291,38 @@ h1 {
   padding: 1.25rem;
 }
 
+.import-preview-card {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.preview-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.preview-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.preview-row p {
+  margin: 0.2rem 0 0;
+}
+
+.preview-row-meta {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+  text-align: right;
+}
+
 .stat-card span {
   color: var(--gold);
   font-size: 0.8rem;

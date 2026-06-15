@@ -162,12 +162,14 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 
 			adminGroup.GET("/sermons", adminSermonHandler.List)
 			adminGroup.POST("/sermons", adminSermonHandler.Create)
+			adminGroup.POST("/sermons/import/preview", adminSermonHandler.PreviewImport)
 			adminGroup.POST("/sermons/import", adminSermonHandler.Import)
 			adminGroup.PATCH("/sermons/:id", adminSermonHandler.Update)
 			adminGroup.DELETE("/sermons/:id", adminSermonHandler.Delete)
 
 			adminGroup.GET("/devotions", adminDevotionHandler.List)
 			adminGroup.POST("/devotions", adminDevotionHandler.Create)
+			adminGroup.POST("/devotions/import/preview", adminDevotionHandler.PreviewImport)
 			adminGroup.POST("/devotions/import", adminDevotionHandler.Import)
 			adminGroup.PATCH("/devotions/:id", adminDevotionHandler.Update)
 			adminGroup.DELETE("/devotions/:id", adminDevotionHandler.Delete)

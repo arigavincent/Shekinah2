@@ -16,6 +16,14 @@ type Service struct {
 	repository Repository
 }
 
+type importPlan struct {
+	rowNumber int
+	req       CreateRequest
+	existing  *Devotion
+	action    string
+	errors    []string
+}
+
 func NewService(repository Repository) Service {
 	return Service{repository: repository}
 }
@@ -33,63 +41,85 @@ func (s Service) Create(ctx context.Context, req CreateRequest) (Devotion, error
 	return s.repository.Create(ctx, command)
 }
 
-func (s Service) Import(ctx context.Context, csvPayload string) (ImportResult, error) {
-	reader := csv.NewReader(strings.NewReader(strings.TrimSpace(csvPayload)))
-	reader.TrimLeadingSpace = true
-
-	header, err := reader.Read()
+func (s Service) PreviewImport(ctx context.Context, csvPayload string) (ImportPreview, error) {
+	plans, err := s.buildImportPlans(ctx, csvPayload)
 	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return ImportResult{}, ErrInvalidInput
-		}
-		return ImportResult{}, ErrInvalidInput
+		return ImportPreview{}, err
 	}
 
-	indexByName := make(map[string]int, len(header))
-	for idx, name := range header {
-		indexByName[strings.TrimSpace(strings.ToLower(name))] = idx
+	preview := ImportPreview{
+		Rows: make([]ImportPreviewRow, 0, len(plans)),
 	}
 
-	required := []string{"title", "excerpt", "devotiondate", "publishedat", "imageurl", "body"}
-	for _, key := range required {
-		if _, ok := indexByName[key]; !ok {
-			return ImportResult{}, ErrInvalidInput
+	for _, plan := range plans {
+		row := ImportPreviewRow{
+			RowNumber:   plan.rowNumber,
+			ExternalID:  plan.req.ExternalID,
+			Title:       plan.req.Title,
+			Action:      plan.action,
+			PublishedAt: plan.req.PublishedAt,
+			Errors:      append([]string(nil), plan.errors...),
 		}
+
+		if plan.existing != nil {
+			row.ExistingID = plan.existing.ID
+		}
+
+		switch plan.action {
+		case "create":
+			preview.Creates++
+		case "update":
+			preview.Updates++
+		default:
+			preview.Rejected++
+		}
+
+		preview.Rows = append(preview.Rows, row)
+	}
+
+	return preview, nil
+}
+
+func (s Service) Import(ctx context.Context, csvPayload string) (ImportResult, error) {
+	plans, err := s.buildImportPlans(ctx, csvPayload)
+	if err != nil {
+		return ImportResult{}, err
 	}
 
 	result := ImportResult{
-		Imported: make([]Devotion, 0),
+		Created:  make([]Devotion, 0),
+		Updated:  make([]Devotion, 0),
 		Rejected: make([]ImportRowError, 0),
 	}
 
-	rowNumber := 1
-	for {
-		rowNumber++
-		record, err := reader.Read()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			result.Rejected = append(result.Rejected, ImportRowError{RowNumber: rowNumber, Error: "invalid CSV row"})
+	for _, plan := range plans {
+		if len(plan.errors) > 0 || plan.action == "reject" {
+			result.Rejected = append(result.Rejected, ImportRowError{
+				RowNumber:  plan.rowNumber,
+				ExternalID: plan.req.ExternalID,
+				Title:      plan.req.Title,
+				Error:      strings.Join(plan.errors, "; "),
+			})
 			continue
 		}
 
-		req := CreateRequest{
-			Title:        csvValue(record, indexByName, "title"),
-			Excerpt:      csvValue(record, indexByName, "excerpt"),
-			DevotionDate: csvValue(record, indexByName, "devotiondate"),
-			PublishedAt:  csvValue(record, indexByName, "publishedat"),
-			ImageURL:     csvValue(record, indexByName, "imageurl"),
-			Body:         csvValue(record, indexByName, "body"),
-		}
-
-		item, err := s.Create(ctx, req)
+		item, err := s.applyImportPlan(ctx, plan)
 		if err != nil {
-			result.Rejected = append(result.Rejected, ImportRowError{RowNumber: rowNumber, Error: "invalid devotion row"})
+			result.Rejected = append(result.Rejected, ImportRowError{
+				RowNumber:  plan.rowNumber,
+				ExternalID: plan.req.ExternalID,
+				Title:      plan.req.Title,
+				Error:      err.Error(),
+			})
 			continue
 		}
 
-		result.Imported = append(result.Imported, item)
+		if plan.action == "update" {
+			result.Updated = append(result.Updated, item)
+			continue
+		}
+
+		result.Created = append(result.Created, item)
 	}
 
 	return result, nil
@@ -118,12 +148,17 @@ func (s Service) Update(ctx context.Context, id string, req UpdateRequest) (Devo
 
 	command := Command{
 		ID:           current.ID,
+		ExternalID:   current.ExternalID,
 		Title:        current.Title,
 		Excerpt:      current.Excerpt,
 		DevotionDate: currentDate,
 		PublishedAt:  publishedAt,
 		ImageURL:     current.ImageURL,
 		Body:         current.Body,
+	}
+
+	if req.ExternalID != nil {
+		command.ExternalID = strings.TrimSpace(*req.ExternalID)
 	}
 
 	if req.Title != nil {
@@ -175,6 +210,117 @@ func (s Service) Delete(ctx context.Context, id string) error {
 	return s.repository.Delete(ctx, id)
 }
 
+func (s Service) applyImportPlan(ctx context.Context, plan importPlan) (Devotion, error) {
+	req := plan.req
+	if plan.existing != nil {
+		req.ExternalID = plan.existing.ExternalID
+	}
+
+	command, err := createCommandFromRequest(req)
+	if err != nil {
+		return Devotion{}, ErrInvalidInput
+	}
+
+	if plan.existing != nil {
+		command.ID = plan.existing.ID
+		return s.repository.Update(ctx, command)
+	}
+
+	return s.repository.Create(ctx, command)
+}
+
+func (s Service) buildImportPlans(ctx context.Context, csvPayload string) ([]importPlan, error) {
+	reader := csv.NewReader(strings.NewReader(strings.TrimSpace(csvPayload)))
+	reader.TrimLeadingSpace = true
+
+	header, err := reader.Read()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, ErrInvalidInput
+		}
+		return nil, ErrInvalidInput
+	}
+
+	indexByName := make(map[string]int, len(header))
+	for idx, name := range header {
+		indexByName[strings.TrimSpace(strings.ToLower(name))] = idx
+	}
+
+	required := []string{"externalid", "title", "excerpt", "devotiondate", "publishedat", "imageurl", "body"}
+	for _, key := range required {
+		if _, ok := indexByName[key]; !ok {
+			return nil, ErrInvalidInput
+		}
+	}
+
+	plans := make([]importPlan, 0)
+	rowNumber := 1
+	for {
+		rowNumber++
+		record, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			plans = append(plans, importPlan{
+				rowNumber: rowNumber,
+				action:    "reject",
+				errors:    []string{"invalid CSV row"},
+			})
+			continue
+		}
+
+		req := CreateRequest{
+			ExternalID:   csvValue(record, indexByName, "externalid"),
+			Title:        csvValue(record, indexByName, "title"),
+			Excerpt:      csvValue(record, indexByName, "excerpt"),
+			DevotionDate: csvValue(record, indexByName, "devotiondate"),
+			PublishedAt:  csvValue(record, indexByName, "publishedat"),
+			ImageURL:     csvValue(record, indexByName, "imageurl"),
+			Body:         csvValue(record, indexByName, "body"),
+		}
+
+		plan := importPlan{
+			rowNumber: rowNumber,
+			req:       req,
+		}
+
+		if strings.TrimSpace(req.ExternalID) == "" {
+			plan.action = "reject"
+			plan.errors = []string{"externalId is required for idempotent batch import"}
+			plans = append(plans, plan)
+			continue
+		}
+
+		if _, err := createCommandFromRequest(req); err != nil {
+			plan.action = "reject"
+			plan.errors = []string{"row failed validation. Check externalId, date, publish time, title, excerpt, imageUrl, and body."}
+			plans = append(plans, plan)
+			continue
+		}
+
+		existing, err := s.repository.FindByExternalID(ctx, req.ExternalID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				plan.action = "create"
+				plans = append(plans, plan)
+				continue
+			}
+			return nil, err
+		}
+
+		plan.action = "update"
+		plan.existing = &existing
+		plans = append(plans, plan)
+	}
+
+	if len(plans) == 0 {
+		return nil, ErrInvalidInput
+	}
+
+	return plans, nil
+}
+
 func createCommandFromRequest(req CreateRequest) (Command, error) {
 	devotionDate, err := parseDate(req.DevotionDate)
 	if err != nil {
@@ -186,8 +332,15 @@ func createCommandFromRequest(req CreateRequest) (Command, error) {
 		return Command{}, ErrInvalidInput
 	}
 
+	id := generateID("dev")
+	externalID := strings.TrimSpace(req.ExternalID)
+	if externalID == "" {
+		externalID = id
+	}
+
 	command := Command{
-		ID:           generateID("dev"),
+		ID:           id,
+		ExternalID:   externalID,
 		Title:        strings.TrimSpace(req.Title),
 		Excerpt:      strings.TrimSpace(req.Excerpt),
 		DevotionDate: devotionDate,
@@ -205,6 +358,7 @@ func createCommandFromRequest(req CreateRequest) (Command, error) {
 
 func validateCommand(command Command) error {
 	if command.ID == "" ||
+		command.ExternalID == "" ||
 		command.Title == "" ||
 		command.Excerpt == "" ||
 		command.Body == "" ||

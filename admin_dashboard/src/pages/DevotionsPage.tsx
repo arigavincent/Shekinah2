@@ -6,6 +6,8 @@ import {
   deleteDevotion,
   importDevotions,
   listDevotions,
+  previewDevotionImport,
+  type DevotionImportPreview,
   type Devotion,
   type DevotionPayload,
   updateDevotion
@@ -18,6 +20,7 @@ import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { isValidAssetReference, isValidDateString, isValidDateTimeString, hasMinLength } from "../lib/validation";
 
 const emptyForm: DevotionPayload = {
+  externalId: "",
   title: "",
   excerpt: "",
   devotionDate: "2026-06-11",
@@ -37,6 +40,7 @@ export function DevotionsPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [csvImport, setCsvImport] = useState("");
+  const [importPreview, setImportPreview] = useState<DevotionImportPreview | null>(null);
   const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
@@ -98,6 +102,7 @@ export function DevotionsPage() {
   function startEdit(devotion: Devotion) {
     setEditingId(devotion.id);
     setForm({
+      externalId: devotion.externalId || "",
       title: devotion.title,
       excerpt: devotion.excerpt,
       devotionDate: devotion.devotionDate,
@@ -123,6 +128,13 @@ export function DevotionsPage() {
     }
   }
 
+  async function loadCsvFile(file: File | null) {
+    if (!file) return;
+    const text = await file.text();
+    setCsvImport(text);
+    setImportPreview(null);
+  }
+
   function validate() {
     if (!form.title.trim()) return "Title is required.";
     if (!form.excerpt.trim()) return "Excerpt is required.";
@@ -141,6 +153,16 @@ export function DevotionsPage() {
   }
 
   async function submitImport() {
+    if (!importPreview) {
+      setError("Run import preview before applying the batch.");
+      return;
+    }
+
+    if (importPreview.creates === 0 && importPreview.updates === 0) {
+      setError("There are no valid create or update rows to apply.");
+      return;
+    }
+
     if (!csvImport.trim()) {
       setError("Paste devotion CSV before importing.");
       return;
@@ -152,9 +174,10 @@ export function DevotionsPage() {
       const response = await importDevotions(csvImport);
       await load();
       setCsvImport("");
+      setImportPreview(null);
       showToast({
-        title: "Devotion import complete",
-        message: `${response.result.imported.length} imported, ${response.result.rejected.length} rejected.`,
+        title: "Devotion import applied",
+        message: `${response.result.created.length} created, ${response.result.updated.length} updated, ${response.result.rejected.length} rejected.`,
         tone: response.result.rejected.length ? "info" : "success"
       });
       if (response.result.rejected.length) {
@@ -167,6 +190,38 @@ export function DevotionsPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import devotions");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function previewImport() {
+    if (!csvImport.trim()) {
+      setError("Paste or load devotion CSV before previewing.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const response = await previewDevotionImport(csvImport);
+      setImportPreview(response.preview);
+      if (response.preview.rejected > 0) {
+        const rejected = response.preview.rows
+          .filter(item => item.action === "reject")
+          .slice(0, 8)
+          .map(item => `Row ${item.rowNumber}: ${(item.errors || []).join(", ")}`)
+          .join(" | ");
+        setError(rejected);
+      }
+      showToast({
+        title: "Devotion import preview ready",
+        message: `${response.preview.creates} create, ${response.preview.updates} update, ${response.preview.rejected} reject.`,
+        tone: response.preview.rejected ? "info" : "success"
+      });
+    } catch (err) {
+      setImportPreview(null);
+      setError(err instanceof Error ? err.message : "Failed to preview devotions");
     } finally {
       setSaving(false);
     }
@@ -268,6 +323,15 @@ export function DevotionsPage() {
           </div>
 
           <label>
+            External ID
+            <input
+              value={form.externalId || ""}
+              onChange={event => updateField("externalId", event.target.value)}
+              placeholder="shekinah-dev-2026-07-01"
+            />
+          </label>
+
+          <label>
             Title
             <input
               value={form.title}
@@ -359,19 +423,73 @@ export function DevotionsPage() {
           <div className="subeditor-card">
             <div className="section-title-row compact">
               <h3>Batch Import</h3>
-              <button type="button" className="secondary compact" onClick={submitImport} disabled={saving}>
-                Import CSV
-              </button>
+              <div className="row-actions">
+                <button type="button" className="secondary compact" onClick={previewImport} disabled={saving}>
+                  Preview CSV
+                </button>
+                <button type="button" className="secondary compact" onClick={submitImport} disabled={saving || !importPreview}>
+                  Apply Import
+                </button>
+              </div>
             </div>
             <p className="muted">
-              Columns: title,excerpt,devotionDate,publishedAt,imageUrl,body
+              Columns: externalId,title,excerpt,devotionDate,publishedAt,imageUrl,body
             </p>
+            <label>
+              Load CSV File
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={async event => {
+                  await loadCsvFile(event.target.files?.[0] || null);
+                  event.target.value = "";
+                }}
+              />
+            </label>
             <textarea
               value={csvImport}
-              onChange={event => setCsvImport(event.target.value)}
+              onChange={event => {
+                setCsvImport(event.target.value);
+                setImportPreview(null);
+              }}
               rows={8}
               placeholder="Paste devotion CSV here"
             />
+            {importPreview ? (
+              <div className="import-preview-card">
+                <div className="stats-grid compact">
+                  <article className="stat-card">
+                    <span>Create</span>
+                    <strong>{importPreview.creates}</strong>
+                  </article>
+                  <article className="stat-card">
+                    <span>Update</span>
+                    <strong>{importPreview.updates}</strong>
+                  </article>
+                  <article className="stat-card">
+                    <span>Reject</span>
+                    <strong>{importPreview.rejected}</strong>
+                  </article>
+                </div>
+                <div className="preview-list">
+                  {importPreview.rows.slice(0, 12).map(row => (
+                    <article key={`${row.rowNumber}-${row.externalId}`} className="preview-row">
+                      <div>
+                        <strong>Row {row.rowNumber}</strong>
+                        <p className="small-muted">{row.externalId || "missing externalId"}</p>
+                        <p>{row.title || "Untitled row"}</p>
+                      </div>
+                      <div className="preview-row-meta">
+                        <span className={`status-chip ${row.action === "reject" ? "danger" : row.action === "update" ? "warning" : "success"}`}>
+                          {row.action}
+                        </span>
+                        {row.errors?.length ? <p className="small-muted">{row.errors.join(", ")}</p> : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </form>
 
