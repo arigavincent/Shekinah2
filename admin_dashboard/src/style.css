@@ -1082,6 +1082,19 @@ textarea:focus {
   border-radius: 12px;
 }
 
+.wizard-local-icon {
+  width: 112px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--accent-wash);
+  color: var(--gold);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
 .wizard-source-card p,
 .wizard-metadata-card p {
   margin: 0.2rem 0 0;

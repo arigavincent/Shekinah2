@@ -43,7 +43,10 @@ const emptyForm: SermonPayload = {
 };
 
 type WizardRow = {
-  source: ShekinahYoutubeCatalogItem;
+  source: ShekinahYoutubeCatalogItem | null;
+  sourceLabel: string;
+  sourceKind: "youtube" | "local";
+  localFile?: File | null;
   externalId: string;
   type: "video" | "audio";
   title: string;
@@ -73,8 +76,10 @@ export function SermonsPage() {
   const [importPreview, setImportPreview] = useState<SermonImportPreview | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [wizardSourceMode, setWizardSourceMode] = useState<"youtube" | "local">("youtube");
   const [wizardQuery, setWizardQuery] = useState("");
   const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
+  const [selectedLocalFiles, setSelectedLocalFiles] = useState<File[]>([]);
   const [wizardRows, setWizardRows] = useState<WizardRow[]>([]);
   const [wizardPreview, setWizardPreview] = useState<SermonImportPreview | null>(null);
   const [error, setError] = useState("");
@@ -137,7 +142,10 @@ export function SermonsPage() {
   function defaultWizardRow(item: ShekinahYoutubeCatalogItem): WizardRow {
     return {
       source: item,
+      sourceLabel: item.title,
+      sourceKind: "youtube",
       externalId: `shekinah-yt-${item.videoId}`,
+      localFile: null,
       type: "video",
       title: item.title,
       speaker: item.speaker,
@@ -152,11 +160,42 @@ export function SermonsPage() {
     };
   }
 
+  function inferLocalMediaKind(file: File): "video" | "audio" {
+    return file.type.startsWith("audio/") ? "audio" : "video";
+  }
+
+  function defaultLocalWizardRow(file: File, index: number): WizardRow {
+    const normalizedBase = file.name.replace(/\.[^.]+$/, "").trim() || `local-file-${index + 1}`;
+    const safeSlug = normalizedBase.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const type = inferLocalMediaKind(file);
+    const defaultDate = "2026-06-15";
+    return {
+      source: null,
+      sourceLabel: file.name,
+      sourceKind: "local",
+      localFile: file,
+      externalId: `shekinah-local-${safeSlug || index + 1}`,
+      type,
+      title: normalizedBase,
+      speaker: "Shekinah Sons Global",
+      sermonDate: defaultDate,
+      publishedAt: `${defaultDate}T06:00`,
+      categoryId: "cat-1",
+      isLive: false,
+      thumbnailUrl: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?q=80&w=900",
+      duration: "",
+      description: "Local sermon upload prepared through the batch import wizard.",
+      mediaUrl: ""
+    };
+  }
+
   function resetWizard() {
     setWizardOpen(false);
     setWizardStep(1);
+    setWizardSourceMode("youtube");
     setWizardQuery("");
     setSelectedVideoIds([]);
+    setSelectedLocalFiles([]);
     setWizardRows([]);
     setWizardPreview(null);
   }
@@ -165,7 +204,9 @@ export function SermonsPage() {
     setError("");
     setWizardOpen(true);
     setWizardStep(1);
+    setWizardSourceMode("youtube");
     setSelectedVideoIds([]);
+    setSelectedLocalFiles([]);
     setWizardRows([]);
     setWizardPreview(null);
     setWizardQuery("");
@@ -180,14 +221,25 @@ export function SermonsPage() {
   }
 
   function startWizardMetadataStep() {
-    if (!selectedVideoIds.length) {
-      setError("Select at least one source video before continuing.");
-      return;
-    }
+    let selected: WizardRow[] = [];
 
-    const selected = shekinahYoutubeCatalog
-      .filter(item => selectedVideoIds.includes(item.videoId))
-      .map(defaultWizardRow);
+    if (wizardSourceMode === "youtube") {
+      if (!selectedVideoIds.length) {
+        setError("Select at least one source video before continuing.");
+        return;
+      }
+
+      selected = shekinahYoutubeCatalog
+        .filter(item => selectedVideoIds.includes(item.videoId))
+        .map(defaultWizardRow);
+    } else {
+      if (!selectedLocalFiles.length) {
+        setError("Select at least one local audio or video file before continuing.");
+        return;
+      }
+
+      selected = selectedLocalFiles.map(defaultLocalWizardRow);
+    }
 
     setWizardRows(selected);
     setWizardPreview(null);
@@ -201,43 +253,32 @@ export function SermonsPage() {
     setWizardPreview(null);
   }
 
-  function buildWizardCsv() {
-    const escapeCsv = (value: string) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
-    const header = [
-      "externalId",
-      "type",
-      "title",
-      "speaker",
-      "sermonDate",
-      "publishedAt",
-      "categoryId",
-      "isLive",
-      "thumbnailUrl",
-      "duration",
-      "description",
-      "mediaUrl"
-    ];
+  async function loadLocalSourceFiles(fileList: FileList | null) {
+    if (!fileList) return;
+    setSelectedLocalFiles(Array.from(fileList));
+    setSelectedVideoIds([]);
+    setWizardPreview(null);
+  }
 
-    const rows = wizardRows.map(row =>
-      [
-        row.externalId,
-        row.type,
-        row.title,
-        row.speaker,
-        row.sermonDate,
-        row.publishedAt,
-        row.categoryId,
-        row.isLive ? "true" : "false",
-        row.thumbnailUrl,
-        row.duration,
-        row.description,
-        row.mediaUrl
-      ]
-        .map(escapeCsv)
-        .join(",")
-    );
+  async function ensureWizardAssetsUploaded() {
+    const nextRows = [...wizardRows];
 
-    return [header.join(","), ...rows].join("\n");
+    for (let index = 0; index < nextRows.length; index += 1) {
+      const row = nextRows[index];
+      if (row.sourceKind !== "local" || !row.localFile || row.mediaUrl.trim()) {
+        continue;
+      }
+
+      const uploadKind: MediaKind = row.type === "audio" ? "audio" : "video";
+      const response = await uploadMedia(uploadKind, row.localFile);
+      nextRows[index] = {
+        ...row,
+        mediaUrl: response.media.path || response.media.url
+      };
+    }
+
+    setWizardRows(nextRows);
+    return nextRows;
   }
 
   async function previewWizardImport() {
@@ -246,10 +287,48 @@ export function SermonsPage() {
       return;
     }
 
-    const csv = buildWizardCsv();
     setSaving(true);
     setError("");
     try {
+      const uploadedRows = await ensureWizardAssetsUploaded();
+      const csv = (() => {
+        const currentRows = uploadedRows;
+        const escapeCsv = (value: string) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+        const header = [
+          "externalId",
+          "type",
+          "title",
+          "speaker",
+          "sermonDate",
+          "publishedAt",
+          "categoryId",
+          "isLive",
+          "thumbnailUrl",
+          "duration",
+          "description",
+          "mediaUrl"
+        ];
+
+        const rows = currentRows.map(row =>
+          [
+            row.externalId,
+            row.type,
+            row.title,
+            row.speaker,
+            row.sermonDate,
+            row.publishedAt,
+            row.categoryId,
+            row.isLive ? "true" : "false",
+            row.thumbnailUrl,
+            row.duration,
+            row.description,
+            row.mediaUrl
+          ]
+            .map(escapeCsv)
+            .join(",")
+        );
+        return [header.join(","), ...rows].join("\n");
+      })();
       const response = await previewSermonImport(csv);
       setWizardPreview(response.preview);
       setWizardStep(3);
@@ -275,10 +354,48 @@ export function SermonsPage() {
       return;
     }
 
-    const csv = buildWizardCsv();
     setSaving(true);
     setError("");
     try {
+      const uploadedRows = await ensureWizardAssetsUploaded();
+      const csv = (() => {
+        const currentRows = uploadedRows;
+        const escapeCsv = (value: string) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+        const header = [
+          "externalId",
+          "type",
+          "title",
+          "speaker",
+          "sermonDate",
+          "publishedAt",
+          "categoryId",
+          "isLive",
+          "thumbnailUrl",
+          "duration",
+          "description",
+          "mediaUrl"
+        ];
+
+        const rows = currentRows.map(row =>
+          [
+            row.externalId,
+            row.type,
+            row.title,
+            row.speaker,
+            row.sermonDate,
+            row.publishedAt,
+            row.categoryId,
+            row.isLive ? "true" : "false",
+            row.thumbnailUrl,
+            row.duration,
+            row.description,
+            row.mediaUrl
+          ]
+            .map(escapeCsv)
+            .join(",")
+        );
+        return [header.join(","), ...rows].join("\n");
+      })();
       const response = await importSermons(csv);
       await load();
       showToast({
@@ -936,37 +1053,99 @@ export function SermonsPage() {
               <div className="wizard-pane">
                 <div className="section-title-row compact">
                   <h3>Source Catalog</h3>
-                  <span className="count-pill">{selectedVideoIds.length} selected</span>
+                  <span className="count-pill">
+                    {wizardSourceMode === "youtube" ? selectedVideoIds.length : selectedLocalFiles.length} selected
+                  </span>
                 </div>
-                <p className="muted">
-                  Source: Shekinah Sons Global YouTube channel catalog prepared for guided import.
-                </p>
-                <input
-                  className="search"
-                  value={wizardQuery}
-                  onChange={event => setWizardQuery(event.target.value)}
-                  placeholder="Search source videos..."
-                />
-                <div className="wizard-source-list">
-                  {filteredCatalog.map(item => {
-                    const selected = selectedVideoIds.includes(item.videoId);
-                    return (
-                      <label key={item.videoId} className={`wizard-source-card ${selected ? "selected" : ""}`}>
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => toggleVideoSelection(item.videoId)}
-                        />
-                        <img src={item.thumbnailUrl} alt={item.title} />
-                        <div>
-                          <strong>{item.title}</strong>
-                          <p className="small-muted">{item.speaker}</p>
-                          <p className="small-muted">{item.duration} · {item.videoId}</p>
-                        </div>
-                      </label>
-                    );
-                  })}
+                <div className="filters-row">
+                  <button
+                    type="button"
+                    className={wizardSourceMode === "youtube" ? "" : "secondary"}
+                    onClick={() => {
+                      setWizardSourceMode("youtube");
+                      setSelectedLocalFiles([]);
+                    }}
+                  >
+                    Shekinah YouTube
+                  </button>
+                  <button
+                    type="button"
+                    className={wizardSourceMode === "local" ? "" : "secondary"}
+                    onClick={() => {
+                      setWizardSourceMode("local");
+                      setSelectedVideoIds([]);
+                    }}
+                  >
+                    Local Files
+                  </button>
                 </div>
+
+                {wizardSourceMode === "youtube" ? (
+                  <>
+                    <p className="muted">
+                      Source: Shekinah Sons Global YouTube channel catalog prepared for guided import.
+                    </p>
+                    <input
+                      className="search"
+                      value={wizardQuery}
+                      onChange={event => setWizardQuery(event.target.value)}
+                      placeholder="Search source videos..."
+                    />
+                    <div className="wizard-source-list">
+                      {filteredCatalog.map(item => {
+                        const selected = selectedVideoIds.includes(item.videoId);
+                        return (
+                          <label key={item.videoId} className={`wizard-source-card ${selected ? "selected" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleVideoSelection(item.videoId)}
+                            />
+                            <img src={item.thumbnailUrl} alt={item.title} />
+                            <div>
+                              <strong>{item.title}</strong>
+                              <p className="small-muted">{item.speaker}</p>
+                              <p className="small-muted">{item.duration} · {item.videoId}</p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="muted">
+                      Choose audio or video files from this machine or phone browser. They will be uploaded during preview.
+                    </p>
+                    <label>
+                      Select Media Files
+                      <input
+                        type="file"
+                        accept="video/mp4,video/webm,video/quicktime,audio/mpeg,audio/mp3,audio/mp4,audio/aac,audio/wav,audio/ogg"
+                        multiple
+                        onChange={async event => {
+                          await loadLocalSourceFiles(event.target.files);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    <div className="wizard-source-list">
+                      {selectedLocalFiles.length ? selectedLocalFiles.map(file => (
+                        <article key={`${file.name}-${file.size}-${file.lastModified}`} className="wizard-source-card selected">
+                          <div />
+                          <div className="wizard-local-icon">{file.type.startsWith("audio/") ? "AUDIO" : "VIDEO"}</div>
+                          <div>
+                            <strong>{file.name}</strong>
+                            <p className="small-muted">{Math.round(file.size / 1024 / 1024 * 10) / 10} MB</p>
+                            <p className="small-muted">{file.type || "Unknown file type"}</p>
+                          </div>
+                        </article>
+                      )) : (
+                        <p className="muted">No local files selected yet.</p>
+                      )}
+                    </div>
+                  </>
+                )}
                 <div className="confirm-actions">
                   <button type="button" className="secondary" onClick={resetWizard}>
                     Cancel
@@ -986,15 +1165,23 @@ export function SermonsPage() {
                 </div>
                 <div className="wizard-metadata-list">
                   {wizardRows.map((row, index) => (
-                    <article key={row.source.videoId} className="wizard-metadata-card">
+                    <article key={row.externalId} className="wizard-metadata-card">
                       <div className="section-title-row compact">
                         <div>
-                          <strong>{row.source.title}</strong>
-                          <p className="small-muted">{row.source.videoId} · {row.duration}</p>
+                          <strong>{row.sourceLabel}</strong>
+                          <p className="small-muted">
+                            {row.sourceKind === "youtube"
+                              ? `${row.source?.videoId || ""} · ${row.duration}`
+                              : `${row.type.toUpperCase()} · ${row.duration || "duration optional"}`}
+                          </p>
                         </div>
-                        <a href={row.mediaUrl} target="_blank" rel="noreferrer">
-                          Open video
-                        </a>
+                        {row.mediaUrl ? (
+                          <a href={row.mediaUrl} target="_blank" rel="noreferrer">
+                            Open source
+                          </a>
+                        ) : row.localFile ? (
+                          <span className="small-muted">Will upload on preview</span>
+                        ) : null}
                       </div>
                       <div className="three-col">
                         <label>
