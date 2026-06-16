@@ -19,6 +19,7 @@ import { PaginationBar } from "../components/PaginationBar";
 import { shekinahYoutubeCatalog, type ShekinahYoutubeCatalogItem } from "../data/shekinahYoutubeCatalog";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { usePaginatedItems } from "../hooks/usePaginatedItems";
+import { formatPublishAt, getPublishState, PUBLISH_TIME_ZONE, publishNowValue } from "../lib/publish";
 import { isValidAssetReference, isValidDateString, isValidDateTimeString } from "../lib/validation";
 
 const categories = [
@@ -42,6 +43,10 @@ const emptyForm: SermonPayload = {
   description: "",
   mediaUrl: ""
 };
+
+function publishTimeZoneLabel() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || PUBLISH_TIME_ZONE;
+}
 
 type WizardRow = {
   source: ShekinahYoutubeCatalogItem | null;
@@ -253,6 +258,10 @@ export function SermonsPage() {
       current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row))
     );
     setWizardPreview(null);
+  }
+
+  function publishWizardRowNow(index: number) {
+    updateWizardRow(index, { publishedAt: publishNowValue() });
   }
 
   async function loadLocalSourceFiles(fileList: FileList | null) {
@@ -733,12 +742,24 @@ export function SermonsPage() {
           </div>
 
           <label>
-            Publish At
+            <div className="section-title-row compact">
+              <span>Publish At (UTC)</span>
+              <button
+                type="button"
+                className="secondary compact"
+                onClick={() => updateField("publishedAt", publishNowValue())}
+              >
+                Publish now
+              </button>
+            </div>
             <input
               type="datetime-local"
               value={form.publishedAt}
               onChange={event => updateField("publishedAt", event.target.value)}
             />
+            <p className="small-muted">
+              Stored as UTC. Browser timezone: {publishTimeZoneLabel()}.
+            </p>
           </label>
 
           <label>
@@ -992,10 +1013,16 @@ export function SermonsPage() {
               {pagedItems.map(sermon => (
                 <article key={sermon.id} className="sermon-row">
                   <div>
-                    <h3>{sermon.title}</h3>
+                    <div className="section-title-row compact">
+                      <h3>{sermon.title}</h3>
+                      <span className={`status-chip ${getPublishState(sermon.publishedAt).tone}`}>
+                        {getPublishState(sermon.publishedAt).label}
+                      </span>
+                    </div>
                     <p>
                       {sermon.type} · {sermon.sermonDate} · {sermon.category || "No category"}
                     </p>
+                    <p className="small-muted">Publishes {formatPublishAt(sermon.publishedAt)}</p>
                     <p className="small-muted">{sermon.description}</p>
                   </div>
 
@@ -1177,13 +1204,21 @@ export function SermonsPage() {
                               : `${row.type.toUpperCase()} · ${row.duration || "duration optional"}`}
                           </p>
                         </div>
-                        {row.mediaUrl ? (
-                          <a href={row.mediaUrl} target="_blank" rel="noreferrer">
-                            Open source
-                          </a>
-                        ) : row.localFile ? (
-                          <span className="small-muted">Will upload on preview</span>
-                        ) : null}
+                        <div className="row-actions">
+                          <span className={`status-chip ${getPublishState(row.publishedAt).tone}`}>
+                            {getPublishState(row.publishedAt).label}
+                          </span>
+                          <button type="button" className="secondary compact" onClick={() => publishWizardRowNow(index)}>
+                            Publish now
+                          </button>
+                          {row.mediaUrl ? (
+                            <a href={row.mediaUrl} target="_blank" rel="noreferrer">
+                              Open source
+                            </a>
+                          ) : row.localFile ? (
+                            <span className="small-muted">Will upload on preview</span>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="three-col">
                         <label>
@@ -1242,12 +1277,15 @@ export function SermonsPage() {
                           />
                         </label>
                         <label>
-                          Publish At
+                          Publish At (UTC)
                           <input
                             type="datetime-local"
                             value={row.publishedAt}
                             onChange={event => updateWizardRow(index, { publishedAt: event.target.value })}
                           />
+                          <p className="small-muted">
+                            {formatPublishAt(row.publishedAt)} · UTC
+                          </p>
                         </label>
                       </div>
                       <label>
@@ -1300,9 +1338,12 @@ export function SermonsPage() {
                           <div>
                             <strong>{row.title}</strong>
                             <p className="small-muted">{row.externalId}</p>
-                            {row.publishedAt ? <p className="small-muted">Publishes {row.publishedAt}</p> : null}
+                            {row.publishedAt ? <p className="small-muted">Publishes {formatPublishAt(row.publishedAt)}</p> : null}
                           </div>
                           <div className="preview-row-meta">
+                            <span className={`status-chip ${getPublishState(row.publishedAt).tone}`}>
+                              {getPublishState(row.publishedAt).label}
+                            </span>
                             <span className={`status-chip ${row.action === "reject" ? "danger" : row.action === "update" ? "warning" : "success"}`}>
                               {row.action}
                             </span>

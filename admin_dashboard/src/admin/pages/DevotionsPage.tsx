@@ -18,6 +18,7 @@ import { InlineAlert } from "../components/InlineAlert";
 import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { usePaginatedItems } from "../hooks/usePaginatedItems";
+import { formatPublishAt, getPublishState, PUBLISH_TIME_ZONE, publishNowValue } from "../lib/publish";
 import { isValidAssetReference, isValidDateString, isValidDateTimeString, hasMinLength } from "../lib/validation";
 
 const emptyForm: DevotionPayload = {
@@ -29,6 +30,10 @@ const emptyForm: DevotionPayload = {
   imageUrl: "https://images.unsplash.com/photo-1504052434569-70ad5836ab65?q=80&w=600",
   body: ""
 };
+
+function publishTimeZoneLabel() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || PUBLISH_TIME_ZONE;
+}
 
 type WizardDevotionRow = {
   externalId: string;
@@ -169,6 +174,10 @@ export function DevotionsPage() {
       current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row))
     );
     setWizardPreview(null);
+  }
+
+  function publishWizardRowNow(index: number) {
+    updateWizardRow(index, { publishedAt: publishNowValue() });
   }
 
   async function uploadWizardImage(index: number, file: File | null) {
@@ -546,12 +555,24 @@ export function DevotionsPage() {
           </label>
 
           <label>
-            Publish At
+            <div className="section-title-row compact">
+              <span>Publish At (UTC)</span>
+              <button
+                type="button"
+                className="secondary compact"
+                onClick={() => updateField("publishedAt", publishNowValue())}
+              >
+                Publish now
+              </button>
+            </div>
             <input
               type="datetime-local"
               value={form.publishedAt}
               onChange={event => updateField("publishedAt", event.target.value)}
             />
+            <p className="small-muted">
+              Stored as UTC. Browser timezone: {publishTimeZoneLabel()}.
+            </p>
           </label>
 
           <label>
@@ -732,8 +753,14 @@ export function DevotionsPage() {
               {pagedItems.map(devotion => (
                 <article key={devotion.id} className="sermon-row">
                   <div>
-                    <h3>{devotion.title}</h3>
+                    <div className="section-title-row compact">
+                      <h3>{devotion.title}</h3>
+                      <span className={`status-chip ${getPublishState(devotion.publishedAt).tone}`}>
+                        {getPublishState(devotion.publishedAt).label}
+                      </span>
+                    </div>
                     <p>{devotion.devotionDate}</p>
+                    <p className="small-muted">Publishes {formatPublishAt(devotion.publishedAt)}</p>
                     <p className="small-muted">{devotion.excerpt}</p>
                   </div>
 
@@ -847,7 +874,14 @@ export function DevotionsPage() {
                           <strong>{row.devotionDate}</strong>
                           <p className="small-muted">{row.externalId}</p>
                         </div>
-                        <span className="small-muted">Publishes {row.publishedAt}</span>
+                        <div className="row-actions">
+                          <span className={`status-chip ${getPublishState(row.publishedAt).tone}`}>
+                            {getPublishState(row.publishedAt).label}
+                          </span>
+                          <button type="button" className="secondary compact" onClick={() => publishWizardRowNow(index)}>
+                            Publish now
+                          </button>
+                        </div>
                       </div>
 
                       <div className="two-col">
@@ -859,12 +893,15 @@ export function DevotionsPage() {
                           />
                         </label>
                         <label>
-                          Publish At
+                          Publish At (UTC)
                           <input
                             type="datetime-local"
                             value={row.publishedAt}
                             onChange={event => updateWizardRow(index, { publishedAt: event.target.value })}
                           />
+                          <p className="small-muted">
+                            {formatPublishAt(row.publishedAt)} · UTC
+                          </p>
                         </label>
                       </div>
 
@@ -960,9 +997,12 @@ export function DevotionsPage() {
                           <div>
                             <strong>{row.title || "Untitled devotion"}</strong>
                             <p className="small-muted">{row.externalId}</p>
-                            {row.publishedAt ? <p className="small-muted">Publishes {row.publishedAt}</p> : null}
+                            {row.publishedAt ? <p className="small-muted">Publishes {formatPublishAt(row.publishedAt)}</p> : null}
                           </div>
                           <div className="preview-row-meta">
+                            <span className={`status-chip ${getPublishState(row.publishedAt).tone}`}>
+                              {getPublishState(row.publishedAt).label}
+                            </span>
                             <span className={`status-chip ${row.action === "reject" ? "danger" : row.action === "update" ? "warning" : "success"}`}>
                               {row.action}
                             </span>
