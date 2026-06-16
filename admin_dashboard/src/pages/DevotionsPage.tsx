@@ -29,6 +29,17 @@ const emptyForm: DevotionPayload = {
   body: ""
 };
 
+type WizardDevotionRow = {
+  externalId: string;
+  title: string;
+  excerpt: string;
+  devotionDate: string;
+  publishedAt: string;
+  imageUrl: string;
+  body: string;
+  localImageFile?: File | null;
+};
+
 export function DevotionsPage() {
   const { confirm, showToast } = useAdminFeedback();
   const [devotions, setDevotions] = useState<Devotion[]>([]);
@@ -41,6 +52,13 @@ export function DevotionsPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [csvImport, setCsvImport] = useState("");
   const [importPreview, setImportPreview] = useState<DevotionImportPreview | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [wizardStartDate, setWizardStartDate] = useState("2026-06-16");
+  const [wizardDays, setWizardDays] = useState("7");
+  const [wizardPublishTime, setWizardPublishTime] = useState("05:00");
+  const [wizardRows, setWizardRows] = useState<WizardDevotionRow[]>([]);
+  const [wizardPreview, setWizardPreview] = useState<DevotionImportPreview | null>(null);
   const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
@@ -83,6 +101,177 @@ export function DevotionsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  function resetWizard() {
+    setWizardOpen(false);
+    setWizardStep(1);
+    setWizardStartDate("2026-06-16");
+    setWizardDays("7");
+    setWizardPublishTime("05:00");
+    setWizardRows([]);
+    setWizardPreview(null);
+  }
+
+  function openWizard() {
+    setError("");
+    setWizardOpen(true);
+    setWizardStep(1);
+    setWizardRows([]);
+    setWizardPreview(null);
+  }
+
+  function addDays(dateString: string, offset: number) {
+    const date = new Date(`${dateString}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + offset);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function defaultWizardRow(dateString: string): WizardDevotionRow {
+    return {
+      externalId: `shekinah-dev-${dateString}`,
+      title: "",
+      excerpt: "",
+      devotionDate: dateString,
+      publishedAt: `${dateString}T${wizardPublishTime}`,
+      imageUrl: "https://images.unsplash.com/photo-1504052434569-70ad5836ab65?q=80&w=600",
+      body: "",
+      localImageFile: null
+    };
+  }
+
+  function startWizardMetadataStep() {
+    const count = Number.parseInt(wizardDays, 10);
+    if (!isValidDateString(wizardStartDate)) {
+      setError("Choose a valid wizard start date.");
+      return;
+    }
+    if (!count || count < 1 || count > 31) {
+      setError("Choose between 1 and 31 devotion days.");
+      return;
+    }
+    if (!/^\d{2}:\d{2}$/.test(wizardPublishTime)) {
+      setError("Choose a valid publish time.");
+      return;
+    }
+
+    const rows = Array.from({ length: count }, (_, index) =>
+      defaultWizardRow(addDays(wizardStartDate, index))
+    );
+    setWizardRows(rows);
+    setWizardPreview(null);
+    setWizardStep(2);
+  }
+
+  function updateWizardRow(index: number, patch: Partial<WizardDevotionRow>) {
+    setWizardRows(current =>
+      current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row))
+    );
+    setWizardPreview(null);
+  }
+
+  async function uploadWizardImage(index: number, file: File | null) {
+    if (!file) return;
+    setUploadingImage(true);
+    setError("");
+    try {
+      updateWizardRow(index, {
+        localImageFile: file,
+        imageUrl: ""
+      });
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  async function ensureWizardImagesUploaded() {
+    const nextRows = [...wizardRows];
+
+    for (let index = 0; index < nextRows.length; index += 1) {
+      const row = nextRows[index];
+      if (!row.localImageFile || row.imageUrl.trim()) continue;
+      const response = await uploadMedia("image", row.localImageFile);
+      nextRows[index] = {
+        ...row,
+        imageUrl: response.media.path || response.media.url
+      };
+    }
+
+    setWizardRows(nextRows);
+    return nextRows;
+  }
+
+  function buildWizardCsv(rows: WizardDevotionRow[]) {
+    const escapeCsv = (value: string) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+    const header = ["externalId", "title", "excerpt", "devotionDate", "publishedAt", "imageUrl", "body"];
+    const bodyRows = rows.map(row =>
+      [
+        row.externalId,
+        row.title,
+        row.excerpt,
+        row.devotionDate,
+        row.publishedAt,
+        row.imageUrl,
+        row.body
+      ]
+        .map(escapeCsv)
+        .join(",")
+    );
+    return [header.join(","), ...bodyRows].join("\n");
+  }
+
+  async function previewWizardImport() {
+    if (!wizardRows.length) {
+      setError("Generate at least one devotion row before previewing.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const uploadedRows = await ensureWizardImagesUploaded();
+      const response = await previewDevotionImport(buildWizardCsv(uploadedRows));
+      setWizardPreview(response.preview);
+      setWizardStep(3);
+      if (response.preview.rejected > 0) {
+        const rejected = response.preview.rows
+          .filter(item => item.action === "reject")
+          .slice(0, 8)
+          .map(item => `Row ${item.rowNumber}: ${(item.errors || []).join(", ")}`)
+          .join(" | ");
+        setError(rejected);
+      }
+    } catch (err) {
+      setWizardPreview(null);
+      setError(err instanceof Error ? err.message : "Failed to preview devotion wizard import");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function applyWizardImport() {
+    if (!wizardPreview) {
+      setError("Preview the devotion batch before applying it.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const uploadedRows = await ensureWizardImagesUploaded();
+      const response = await importDevotions(buildWizardCsv(uploadedRows));
+      await load();
+      showToast({
+        title: "Wizard import applied",
+        message: `${response.result.created.length} created, ${response.result.updated.length} updated, ${response.result.rejected.length} rejected.`,
+        tone: response.result.rejected.length ? "info" : "success"
+      });
+      resetWizard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to apply devotion wizard import");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function updateField<K extends keyof DevotionPayload>(
     key: K,
@@ -303,9 +492,14 @@ export function DevotionsPage() {
           </p>
         </div>
 
-        <button className="secondary" onClick={load}>
-          Refresh
-        </button>
+        <div className="row-actions">
+          <button type="button" className="secondary" onClick={openWizard}>
+            Batch Import Wizard
+          </button>
+          <button className="secondary" onClick={load}>
+            Refresh
+          </button>
+        </div>
       </header>
 
       {error ? <InlineAlert title="Devotions could not be updated" message={error} /> : null}
@@ -422,7 +616,7 @@ export function DevotionsPage() {
 
           <div className="subeditor-card">
             <div className="section-title-row compact">
-              <h3>Batch Import</h3>
+              <h3>Advanced CSV Import</h3>
               <div className="row-actions">
                 <button type="button" className="secondary compact" onClick={previewImport} disabled={saving}>
                   Preview CSV
@@ -565,6 +759,233 @@ export function DevotionsPage() {
           />
         </section>
       </section>
+
+      {wizardOpen ? (
+        <div className="modal-backdrop" role="presentation" onClick={resetWizard}>
+          <section
+            className="wizard-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="devotion-import-wizard-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="section-title-row">
+              <div>
+                <p className="eyebrow">Batch Import Wizard</p>
+                <h2 id="devotion-import-wizard-title">Devotion Schedule Builder</h2>
+                <p className="muted">
+                  Generate a month or week schedule, fill the content row by row, then preview and apply.
+                </p>
+              </div>
+              <button type="button" className="secondary compact" onClick={resetWizard}>
+                Close
+              </button>
+            </div>
+
+            <div className="wizard-steps">
+              <span className={`status-chip ${wizardStep === 1 ? "warning" : "neutral"}`}>1. Schedule</span>
+              <span className={`status-chip ${wizardStep === 2 ? "warning" : wizardStep > 2 ? "success" : "neutral"}`}>2. Content</span>
+              <span className={`status-chip ${wizardStep === 3 ? "warning" : "neutral"}`}>3. Preview</span>
+            </div>
+
+            {wizardStep === 1 ? (
+              <div className="wizard-pane">
+                <div className="three-col">
+                  <label>
+                    Start Date
+                    <input
+                      value={wizardStartDate}
+                      onChange={event => setWizardStartDate(event.target.value)}
+                      placeholder="YYYY-MM-DD"
+                    />
+                  </label>
+                  <label>
+                    Number of Days
+                    <input
+                      value={wizardDays}
+                      onChange={event => setWizardDays(event.target.value)}
+                      placeholder="7"
+                    />
+                  </label>
+                  <label>
+                    Publish Time
+                    <input
+                      type="time"
+                      value={wizardPublishTime}
+                      onChange={event => setWizardPublishTime(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <p className="muted">
+                  This generates a scheduled devotion batch with stable external IDs such as
+                  `shekinah-dev-2026-06-16`.
+                </p>
+                <div className="confirm-actions">
+                  <button type="button" className="secondary" onClick={resetWizard}>
+                    Cancel
+                  </button>
+                  <button type="button" onClick={startWizardMetadataStep}>
+                    Continue
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {wizardStep === 2 ? (
+              <div className="wizard-pane">
+                <div className="section-title-row compact">
+                  <h3>Content Builder</h3>
+                  <span className="count-pill">{wizardRows.length} rows</span>
+                </div>
+                <div className="wizard-metadata-list">
+                  {wizardRows.map((row, index) => (
+                    <article key={row.externalId} className="wizard-metadata-card">
+                      <div className="section-title-row compact">
+                        <div>
+                          <strong>{row.devotionDate}</strong>
+                          <p className="small-muted">{row.externalId}</p>
+                        </div>
+                        <span className="small-muted">Publishes {row.publishedAt}</span>
+                      </div>
+
+                      <div className="two-col">
+                        <label>
+                          External ID
+                          <input
+                            value={row.externalId}
+                            onChange={event => updateWizardRow(index, { externalId: event.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Publish At
+                          <input
+                            type="datetime-local"
+                            value={row.publishedAt}
+                            onChange={event => updateWizardRow(index, { publishedAt: event.target.value })}
+                          />
+                        </label>
+                      </div>
+
+                      <label>
+                        Title
+                        <input
+                          value={row.title}
+                          onChange={event => updateWizardRow(index, { title: event.target.value })}
+                          placeholder="Walking In Obedience"
+                        />
+                      </label>
+
+                      <label>
+                        Excerpt
+                        <textarea
+                          rows={2}
+                          value={row.excerpt}
+                          onChange={event => updateWizardRow(index, { excerpt: event.target.value })}
+                          placeholder="Short summary shown in the app cards"
+                        />
+                      </label>
+
+                      <div className="two-col">
+                        <label>
+                          Cover Image URL
+                          <input
+                            value={row.imageUrl}
+                            onChange={event => updateWizardRow(index, { imageUrl: event.target.value, localImageFile: null })}
+                            placeholder="/uploads/media/image.png or https://..."
+                          />
+                        </label>
+                        <label>
+                          Upload Cover Image
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            onChange={async event => {
+                              await uploadWizardImage(index, event.target.files?.[0] || null);
+                              event.target.value = "";
+                            }}
+                          />
+                        </label>
+                      </div>
+
+                      <label>
+                        Body
+                        <textarea
+                          rows={6}
+                          value={row.body}
+                          onChange={event => updateWizardRow(index, { body: event.target.value })}
+                          placeholder="Full devotion content"
+                        />
+                      </label>
+                    </article>
+                  ))}
+                </div>
+                <div className="confirm-actions">
+                  <button type="button" className="secondary" onClick={() => setWizardStep(1)}>
+                    Back
+                  </button>
+                  <button type="button" onClick={previewWizardImport} disabled={saving}>
+                    Preview Batch
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {wizardStep === 3 ? (
+              <div className="wizard-pane">
+                <div className="section-title-row compact">
+                  <h3>Import Preview</h3>
+                  <span className="count-pill">{wizardRows.length} rows</span>
+                </div>
+                {wizardPreview ? (
+                  <div className="import-preview-card">
+                    <div className="stats-grid compact">
+                      <article className="stat-card">
+                        <span>Create</span>
+                        <strong>{wizardPreview.creates}</strong>
+                      </article>
+                      <article className="stat-card">
+                        <span>Update</span>
+                        <strong>{wizardPreview.updates}</strong>
+                      </article>
+                      <article className="stat-card">
+                        <span>Reject</span>
+                        <strong>{wizardPreview.rejected}</strong>
+                      </article>
+                    </div>
+                    <div className="preview-list">
+                      {wizardPreview.rows.map(row => (
+                        <article key={`${row.rowNumber}-${row.externalId}`} className="preview-row">
+                          <div>
+                            <strong>{row.title || "Untitled devotion"}</strong>
+                            <p className="small-muted">{row.externalId}</p>
+                            {row.publishedAt ? <p className="small-muted">Publishes {row.publishedAt}</p> : null}
+                          </div>
+                          <div className="preview-row-meta">
+                            <span className={`status-chip ${row.action === "reject" ? "danger" : row.action === "update" ? "warning" : "success"}`}>
+                              {row.action}
+                            </span>
+                            {row.errors?.length ? <p className="small-muted">{row.errors.join(", ")}</p> : null}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted">Preview not ready yet.</p>
+                )}
+                <div className="confirm-actions">
+                  <button type="button" className="secondary" onClick={() => setWizardStep(2)}>
+                    Back
+                  </button>
+                  <button type="button" onClick={applyWizardImport} disabled={saving || !wizardPreview}>
+                    Apply Import
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
