@@ -35,6 +35,20 @@ function publishTimeZoneLabel() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || PUBLISH_TIME_ZONE;
 }
 
+function slugifyExternalId(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 70) || "untitled";
+}
+
+function batchDevotionExternalId(values: Record<string, string>, publishAt: string) {
+  const date = publishAt.slice(0, 10);
+  return `batch-devotion-${slugifyExternalId(values.title)}-${date}`;
+}
+
 type WizardDevotionRow = {
   externalId: string;
   title: string;
@@ -1050,7 +1064,7 @@ export function DevotionsPage() {
         submitOne={async ctx => {
           const v = ctx.values;
           await createDevotion({
-            externalId: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            externalId: batchDevotionExternalId(v, ctx.publishAt),
             title: v.title.trim(),
             excerpt: v.excerpt.trim(),
             devotionDate: ctx.publishAt.slice(0, 10),

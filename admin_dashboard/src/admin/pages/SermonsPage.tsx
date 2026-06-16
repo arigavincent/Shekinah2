@@ -48,6 +48,21 @@ function publishTimeZoneLabel() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || PUBLISH_TIME_ZONE;
 }
 
+function slugifyExternalId(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 70) || "untitled";
+}
+
+function batchSermonExternalId(values: Record<string, string>, publishAt: string) {
+  const type = values.type === "audio" ? "audio" : "video";
+  const date = (values.sermonDate || publishAt).slice(0, 10);
+  return `batch-sermon-${type}-${slugifyExternalId(values.title)}-${date}`;
+}
+
 type WizardRow = {
   source: ShekinahYoutubeCatalogItem | null;
   sourceLabel: string;
@@ -1419,13 +1434,14 @@ export function SermonsPage() {
             label: "Description",
             type: "textarea",
             rows: 3,
-            fullWidth: true
+            fullWidth: true,
+            required: true
           }
         ]}
         submitOne={async ctx => {
           const v = ctx.values;
           await createSermon({
-            externalId: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            externalId: batchSermonExternalId(v, ctx.publishAt),
             type: (v.type as "video" | "audio") || "video",
             title: v.title.trim(),
             speaker: v.speaker.trim() || "Shekinah Sons Global",

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
+import {
+  getPublishVisibility,
+  nextSundayMorningValue,
+  publishNowValue,
+  tomorrowMorningValue
+} from "../lib/publish";
 
 export type BatchFieldType = "text" | "textarea" | "select" | "datetime";
 
@@ -45,8 +51,8 @@ export type BatchUploadDialogProps = {
   fields: BatchField[];
   /** Submit a single item using existing per-section endpoints. */
   submitOne: (ctx: BatchSubmitContext) => Promise<void>;
-  /** Called after the modal closes when at least one item succeeded. */
-  onCompleted: () => void;
+  /** Called after at least one item succeeds so the parent list can refresh. */
+  onCompleted: () => void | Promise<void>;
 };
 
 type QueueItem = {
@@ -64,10 +70,7 @@ type Mode = "queue" | "wizard";
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 function defaultPublishAt() {
-  const d = new Date();
-  d.setMinutes(0, 0, 0);
-  d.setHours(d.getHours() + 1);
-  return d.toISOString().slice(0, 16);
+  return publishNowValue();
 }
 
 function buildDefaults(fields: BatchField[]) {
@@ -127,7 +130,7 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
       setSavedCount(0);
       if (completedRef.current) {
         completedRef.current = false;
-        onCompleted();
+        void Promise.resolve(onCompleted());
       }
     }
   }, [open, fields, onCompleted]);
@@ -240,6 +243,10 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
       }
     } finally {
       setRunning(false);
+      if (completedRef.current) {
+        completedRef.current = false;
+        await onCompleted();
+      }
     }
   }
 
@@ -290,6 +297,8 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
       setSavedCount(c => c + 1);
       resetDraft();
       setWizardProgress(0);
+      completedRef.current = false;
+      await onCompleted();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -301,6 +310,7 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
 
   const pendingCount = items.filter(i => i.status !== "done").length;
   const doneCount = items.filter(i => i.status === "done").length;
+  const publishVisibility = getPublishVisibility(draftPublishAt);
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -420,8 +430,37 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
                   value={draftPublishAt}
                   onChange={e => setDraftPublishAt(e.target.value)}
                 />
+                <div className="confirm-actions">
+                  <button
+                    type="button"
+                    className="secondary compact"
+                    onClick={() => setDraftPublishAt(publishNowValue())}
+                    disabled={running}
+                  >
+                    Publish now
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary compact"
+                    onClick={() => setDraftPublishAt(tomorrowMorningValue())}
+                    disabled={running}
+                  >
+                    Tomorrow 5 AM UTC
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary compact"
+                    onClick={() => setDraftPublishAt(nextSundayMorningValue())}
+                    disabled={running}
+                  >
+                    Next Sunday 8 AM UTC
+                  </button>
+                </div>
+                <span className={`status-chip ${publishVisibility.tone}`}>
+                  {publishVisibility.label}
+                </span>
                 <span className="batch-file-meta">
-                  Content stays hidden in the apps until this date/time.
+                  Content appears in the mobile app only when this UTC time is reached.
                 </span>
               </label>
             </div>

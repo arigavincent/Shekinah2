@@ -366,6 +366,10 @@ func validateCommand(command Command) error {
 		return ErrInvalidInput
 	}
 
+	if len([]rune(strings.TrimSpace(command.Body))) < 40 {
+		return ErrInvalidInput
+	}
+
 	return nil
 }
 

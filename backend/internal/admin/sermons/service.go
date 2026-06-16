@@ -408,6 +408,14 @@ func validateCommand(command Command) error {
 		return ErrInvalidInput
 	}
 
+	mediaURL := strings.ToLower(strings.TrimSpace(command.MediaURL))
+	if mediaURL == "" ||
+		mediaURL == "none" ||
+		mediaURL == "null" ||
+		mediaURL == "undefined" {
+		return ErrInvalidInput
+	}
+
 	if command.PublishedAt.IsZero() {
 		return ErrInvalidInput
 	}

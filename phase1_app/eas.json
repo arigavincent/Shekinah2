@@ -20,7 +20,8 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_ENV": "staging"
+        "APP_ENV": "staging",
+        "EXPO_PUBLIC_API_BASE_URL": "https://shekinah-sons-backend.onrender.com"
       }
     },
     "production": {
@@ -29,7 +30,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_API_BASE_URL": "https://shekinah-sons-backend.onrender.com"
       }
     }
   },
