@@ -10,7 +10,7 @@ import {
   type ReadingPlanPayload,
   updateAdminReadingPlan
 } from "../api/adminReadingPlansApi";
-import { uploadMedia } from "../api/adminMediaApi";
+import { uploadMedia, type UploadedMedia } from "../api/adminMediaApi";
 import { InlineAlert } from "../components/InlineAlert";
 import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
@@ -29,10 +29,37 @@ const emptyForm: ReadingPlanPayload = {
   title: "",
   description: "",
   imageUrl: "",
-  durationDays: 7,
+  durationDays: 1,
   isActive: true,
   days: [emptyDay()]
 };
+
+function mediaProviderLabel(media: UploadedMedia) {
+  switch ((media.provider || "").toLowerCase()) {
+    case "r2":
+      return "Cloudflare R2";
+    case "cloudinary":
+      return "Cloudinary";
+    case "local":
+      return "Local storage";
+    default:
+      return "Cloud storage";
+  }
+}
+
+function mediaSafetyLabel(media: UploadedMedia) {
+  const ref = media.url || media.path || "";
+  if (media.provider === "r2" || ref.includes(".r2.dev") || ref.includes(".r2.cloudflarestorage.com")) {
+    return "Safe for APK";
+  }
+  if (media.provider === "cloudinary" || ref.includes("res.cloudinary.com")) {
+    return "Safe for APK";
+  }
+  if (media.provider === "local" || ref.includes("/uploads/media/")) {
+    return "Development storage";
+  }
+  return "Saved media URL";
+}
 
 export function ReadingPlansPage() {
   const { confirm, showToast } = useAdminFeedback();
@@ -44,6 +71,7 @@ export function ReadingPlansPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadedCover, setUploadedCover] = useState<UploadedMedia | null>(null);
   const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
@@ -95,6 +123,7 @@ export function ReadingPlansPage() {
   function addDay() {
     setForm(current => ({
       ...current,
+      durationDays: current.days.length + 1,
       days: [...current.days, { ...emptyDay(), dayNumber: current.days.length + 1 }]
     }));
   }
@@ -104,22 +133,25 @@ export function ReadingPlansPage() {
       ...current,
       days: current.days
         .filter((_, dayIndex) => dayIndex !== index)
-        .map((day, dayIndex) => ({ ...day, dayNumber: dayIndex + 1 }))
+        .map((day, dayIndex) => ({ ...day, dayNumber: dayIndex + 1 })),
+      durationDays: Math.max(1, current.days.length - 1)
     }));
   }
 
   function resetForm() {
     setEditingId(null);
+    setUploadedCover(null);
     setForm({ ...emptyForm, days: [emptyDay()] });
   }
 
   function startEdit(plan: ReadingPlan) {
     setEditingId(plan.id);
+    setUploadedCover(null);
     setForm({
       title: plan.title,
       description: plan.description,
       imageUrl: plan.imageUrl,
-      durationDays: plan.durationDays,
+      durationDays: plan.days.length || plan.durationDays,
       isActive: plan.isActive,
       days: plan.days.length
         ? plan.days.map(day => ({
@@ -139,7 +171,8 @@ export function ReadingPlansPage() {
     setError("");
     try {
       const response = await uploadMedia("image", file);
-      updateField("imageUrl", response.media.path || response.media.url);
+      setUploadedCover(response.media);
+      updateField("imageUrl", response.media.url || response.media.path);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload reading plan cover");
     } finally {
@@ -151,7 +184,7 @@ export function ReadingPlansPage() {
     if (!form.title.trim()) return "Title is required.";
     if (!hasMinLength(form.description, 20)) return "Description should be at least 20 characters.";
     if (form.imageUrl.trim() && !isValidAssetReference(form.imageUrl)) {
-      return "Image must be an uploaded file path or a valid http(s) URL.";
+      return "Cover image must be an uploaded cloud URL or a valid http(s) URL.";
     }
     if (form.durationDays <= 0) return "Duration must be greater than zero.";
     if (form.days.length === 0) return "Add at least one day.";
@@ -174,10 +207,16 @@ export function ReadingPlansPage() {
     setSaving(true);
     setError("");
     try {
+      const payload = {
+        ...form,
+        durationDays: form.days.length,
+        days: form.days.map((day, index) => ({ ...day, dayNumber: index + 1 }))
+      };
+
       if (editingId) {
-        await updateAdminReadingPlan(editingId, form);
+        await updateAdminReadingPlan(editingId, payload);
       } else {
-        await createAdminReadingPlan(form);
+        await createAdminReadingPlan(payload);
       }
       await load();
       resetForm();
@@ -261,7 +300,7 @@ export function ReadingPlansPage() {
 
           <div className="two-col">
             <label>
-              Duration (days)
+              Duration (days, auto-synced)
               <input
                 type="number"
                 min={1}
@@ -285,7 +324,7 @@ export function ReadingPlansPage() {
             <input
               value={form.imageUrl}
               onChange={event => updateField("imageUrl", event.target.value)}
-              placeholder="/uploads/media/image.png or https://..."
+              placeholder="Upload a cover image or paste a valid https:// image URL"
             />
           </label>
 
@@ -301,6 +340,16 @@ export function ReadingPlansPage() {
               }}
             />
           </label>
+
+          {uploadedCover ? (
+            <div className="batch-media-result session-result">
+              <span className="status-chip success">{mediaProviderLabel(uploadedCover)}</span>
+              <span>{mediaSafetyLabel(uploadedCover)}</span>
+              <a href={uploadedCover.url || uploadedCover.path} target="_blank" rel="noreferrer">
+                Open uploaded cover
+              </a>
+            </div>
+          ) : null}
 
           {form.imageUrl ? (
             <div className="media-preview-card">

@@ -155,6 +155,7 @@ func (h Handler) Detail(c *gin.Context) {
 			  ON r.plan_id = p.id
 			 AND ($2 <> '' AND r.user_id = $2)
 			WHERE p.id = $1
+			  AND p.is_active = TRUE
 			GROUP BY p.id
 			LIMIT 1
 		`,
@@ -277,7 +278,7 @@ func (h Handler) CompleteDay(c *gin.Context) {
 		return
 	}
 
-	_, err = h.db.Exec(
+	result, err := h.db.Exec(
 		c.Request.Context(),
 		`
 			INSERT INTO reading_plan_progress (
@@ -288,7 +289,12 @@ func (h Handler) CompleteDay(c *gin.Context) {
 			)
 			SELECT $1, $2, $3, $4
 			WHERE EXISTS (
-				SELECT 1 FROM reading_plan_days WHERE plan_id = $2 AND day_number = $4
+				SELECT 1
+				FROM reading_plan_days d
+				JOIN reading_plans p ON p.id = d.plan_id
+				WHERE d.plan_id = $2
+				  AND d.day_number = $4
+				  AND p.is_active = TRUE
 			)
 			ON CONFLICT (plan_id, user_id, day_number)
 			DO UPDATE SET updated_at = NOW(), completed_at = NOW()
@@ -300,6 +306,10 @@ func (h Handler) CompleteDay(c *gin.Context) {
 	)
 	if err != nil {
 		httpx.Error(c, http.StatusInternalServerError, "reading_progress_failed", "failed to save reading progress")
+		return
+	}
+	if result.RowsAffected() == 0 {
+		httpx.Error(c, http.StatusNotFound, "reading_plan_day_not_found", "active reading plan day not found")
 		return
 	}
 
@@ -333,11 +343,19 @@ func (h Handler) SaveNote(c *gin.Context) {
 		return
 	}
 
-	_, err = h.db.Exec(
+	result, err := h.db.Exec(
 		c.Request.Context(),
 		`
 			INSERT INTO reading_plan_notes (id, plan_id, user_id, day_number, note)
-			VALUES ($1, $2, $3, $4, $5)
+			SELECT $1, $2, $3, $4, $5
+			WHERE EXISTS (
+				SELECT 1
+				FROM reading_plan_days d
+				JOIN reading_plans p ON p.id = d.plan_id
+				WHERE d.plan_id = $2
+				  AND d.day_number = $4
+				  AND p.is_active = TRUE
+			)
 			ON CONFLICT (plan_id, user_id, day_number)
 			DO UPDATE SET note = EXCLUDED.note, updated_at = NOW()
 		`,
@@ -349,6 +367,10 @@ func (h Handler) SaveNote(c *gin.Context) {
 	)
 	if err != nil {
 		httpx.Error(c, http.StatusInternalServerError, "reading_note_failed", "failed to save reading note")
+		return
+	}
+	if result.RowsAffected() == 0 {
+		httpx.Error(c, http.StatusNotFound, "reading_plan_day_not_found", "active reading plan day not found")
 		return
 	}
 
@@ -383,11 +405,14 @@ func (h Handler) UpdateReminder(c *gin.Context) {
 		return
 	}
 
-	_, err := h.db.Exec(
+	result, err := h.db.Exec(
 		c.Request.Context(),
 		`
 			INSERT INTO reading_plan_reminders (id, plan_id, user_id, enabled, reminder_time)
-			VALUES ($1, $2, $3, $4, $5)
+			SELECT $1, $2, $3, $4, $5
+			WHERE EXISTS (
+				SELECT 1 FROM reading_plans WHERE id = $2 AND is_active = TRUE
+			)
 			ON CONFLICT (plan_id, user_id)
 			DO UPDATE SET enabled = EXCLUDED.enabled, reminder_time = EXCLUDED.reminder_time, updated_at = NOW()
 		`,
@@ -399,6 +424,10 @@ func (h Handler) UpdateReminder(c *gin.Context) {
 	)
 	if err != nil {
 		httpx.Error(c, http.StatusInternalServerError, "reading_reminder_failed", "failed to save reading reminder")
+		return
+	}
+	if result.RowsAffected() == 0 {
+		httpx.Error(c, http.StatusNotFound, "reading_plan_not_found", "active reading plan not found")
 		return
 	}
 

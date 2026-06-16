@@ -31,6 +31,7 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
   const [refreshing, setRefreshing] = useState(false);
   const [savingNoteFor, setSavingNoteFor] = useState(0);
   const [savingReminder, setSavingReminder] = useState(false);
+  const [canTrackProgress, setCanTrackProgress] = useState(false);
 
   async function loadPlans(showRefresh = false) {
     if (showRefresh) setRefreshing(true);
@@ -40,8 +41,10 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
       let response;
       try {
         response = await listReadingPlans({ mine: true });
+        setCanTrackProgress(true);
       } catch {
         response = await listReadingPlans();
+        setCanTrackProgress(false);
       }
 
       setPlans(Array.isArray(response?.plans) ? response.plans : []);
@@ -58,8 +61,10 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
       let response;
       try {
         response = await getReadingPlan(id, { mine: true });
+        setCanTrackProgress(true);
       } catch {
         response = await getReadingPlan(id);
+        setCanTrackProgress(false);
       }
       setSelectedPlan(response?.plan || null);
     } catch (error) {
@@ -77,13 +82,14 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
     try {
       await completeReadingPlanDay(selectedPlan.id, dayNumber);
       const response = await getReadingPlan(selectedPlan.id, { mine: true });
-      setSelectedPlan(response?.plan || null);
+      const refreshedPlan = response?.plan || null;
+      setSelectedPlan(refreshedPlan);
       setPlans(current =>
         current.map(item =>
           item.id === selectedPlan.id
             ? {
                 ...item,
-                completedDays: Math.max(item.completedDays || 0, dayNumber)
+                completedDays: refreshedPlan?.completedDays ?? item.completedDays ?? 0
               }
             : item
         )
@@ -184,6 +190,7 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
               <Text style={[s.mutedText, { color: C.muted, marginTop: 6 }]}>
                 Current streak: {selectedPlan.streakDays || 0} day(s)
               </Text>
+              {canTrackProgress ? (
               <View style={[s.plainCard, { marginTop: 16, backgroundColor: C.surface2 }]}>
                 <View style={[s.rowTight, { justifyContent: "space-between" }]}>
                   <Text style={[s.rowTitle, { color: C.white }]}>Reminder</Text>
@@ -237,6 +244,17 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
                   }}
                 />
               </View>
+              ) : (
+                <View style={[s.plainCard, { marginTop: 16, backgroundColor: C.surface2 }]}>
+                  <Text style={[s.rowTitle, { color: C.white }]}>Track your progress</Text>
+                  <Text style={[s.mutedText, { color: C.muted }]}>
+                    Sign in to mark days complete, save notes, and set reading reminders.
+                  </Text>
+                  <Pressable style={s.primaryBtn} onPress={() => go("Profile")}>
+                    <Text style={s.primaryText}>Sign In</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
 
             {selectedPlan.days?.map(day => (
@@ -256,6 +274,8 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
                   </Text>
                 ) : null}
 
+                {canTrackProgress ? (
+                <>
                 <Text style={s.inputLabel}>My Note</Text>
                 <TextInput
                   style={[
@@ -310,6 +330,8 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
                   <Pressable style={s.primaryBtn} onPress={() => completeDay(day.dayNumber)}>
                     <Text style={s.primaryText}>Mark Complete</Text>
                   </Pressable>
+                ) : null}
+                </>
                 ) : null}
               </View>
             ))}

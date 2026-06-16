@@ -169,13 +169,21 @@ func (h Handler) save(ctx context.Context, id string, req UpsertRequest) (Plan, 
 	req.Title = strings.TrimSpace(req.Title)
 	req.Description = strings.TrimSpace(req.Description)
 	req.ImageURL = strings.TrimSpace(req.ImageURL)
-	if req.Title == "" || req.Description == "" || req.DurationDays <= 0 || len(req.Days) == 0 {
-		return Plan{}, errors.New("title, description, duration, and days are required")
+	if req.Title == "" || req.Description == "" || len(req.Days) == 0 {
+		return Plan{}, errors.New("title, description, and at least one plan day are required")
 	}
 
-	for _, day := range req.Days {
-		if day.DayNumber <= 0 || strings.TrimSpace(day.Title) == "" || strings.TrimSpace(day.Reference) == "" {
-			return Plan{}, errors.New("each reading plan day needs a day number, title, and scripture reference")
+	req.DurationDays = len(req.Days)
+
+	for idx := range req.Days {
+		req.Days[idx].DayNumber = idx + 1
+		req.Days[idx].Title = strings.TrimSpace(req.Days[idx].Title)
+		req.Days[idx].Reference = strings.TrimSpace(req.Days[idx].Reference)
+		req.Days[idx].Description = strings.TrimSpace(req.Days[idx].Description)
+		req.Days[idx].PrayerPrompt = strings.TrimSpace(req.Days[idx].PrayerPrompt)
+
+		if req.Days[idx].Title == "" || req.Days[idx].Reference == "" {
+			return Plan{}, errors.New("each reading plan day needs a title and scripture reference")
 		}
 	}
 
@@ -252,10 +260,10 @@ func (h Handler) save(ctx context.Context, id string, req UpsertRequest) (Plan, 
 			planDayID(id, day.DayNumber),
 			id,
 			day.DayNumber,
-			strings.TrimSpace(day.Title),
-			strings.TrimSpace(day.Reference),
-			strings.TrimSpace(day.Description),
-			strings.TrimSpace(day.PrayerPrompt),
+			day.Title,
+			day.Reference,
+			day.Description,
+			day.PrayerPrompt,
 		); err != nil {
 			return Plan{}, err
 		}
