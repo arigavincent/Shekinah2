@@ -82,6 +82,34 @@ function findDeepMediaCandidate(value: unknown, seen = new Set<unknown>()): AnyR
   return null;
 }
 
+function findMediaLikeString(value: unknown, seen = new Set<unknown>()): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^https?:\/\/\S+$/i.test(trimmed) || /^\/uploads\/\S+$/i.test(trimmed)) {
+      return trimmed;
+    }
+    return "";
+  }
+
+  if (!value || typeof value !== "object" || seen.has(value)) return "";
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findMediaLikeString(item, seen);
+      if (found) return found;
+    }
+    return "";
+  }
+
+  const record = value as AnyRecord;
+  for (const nested of Object.values(record)) {
+    const found = findMediaLikeString(nested, seen);
+    if (found) return found;
+  }
+  return "";
+}
+
 /**
  * Normalize a media upload response. Supports several shapes our backend
  * (and Cloudinary, directly or wrapped) might return:
@@ -94,6 +122,19 @@ function normalizeMediaResponse(
   kind: MediaKind,
   file: File
 ): UploadedMedia | null {
+  if (typeof payload === "string") {
+    const extracted = findMediaLikeString(payload);
+    if (extracted) {
+      return {
+        kind,
+        path: extracted,
+        url: extracted,
+        name: file.name,
+        size: file.size || 0
+      };
+    }
+  }
+
   if (!payload || typeof payload !== "object") return null;
   const root = payload as AnyRecord;
 
@@ -119,6 +160,18 @@ function normalizeMediaResponse(
       size: pickNumber(c, "size", "bytes", "length") || file.size || 0
     };
   }
+
+  const extracted = findMediaLikeString(root);
+  if (extracted) {
+    return {
+      kind,
+      path: extracted,
+      url: extracted,
+      name: file.name,
+      size: file.size || 0
+    };
+  }
+
   return null;
 }
 
