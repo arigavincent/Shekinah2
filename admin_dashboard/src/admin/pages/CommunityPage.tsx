@@ -11,6 +11,14 @@ import { PaginationBar } from "../components/PaginationBar";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { usePaginatedItems } from "../hooks/usePaginatedItems";
 
+
+function statusTone(status: string): "success" | "danger" | "warning" | "neutral" {
+  if (status === "approved") return "success";
+  if (status === "hidden") return "danger";
+  if (status === "pending") return "warning";
+  return "neutral";
+}
+
 function formatDate(value?: string) {
   if (!value) return "-";
   const date = new Date(value);
@@ -117,7 +125,7 @@ export function CommunityPage() {
         <div>
           <p className="eyebrow">Community</p>
           <h1>Chat Moderation</h1>
-          <p className="muted">Review global and live chat messages, hide abuse, and keep the feed clean.</p>
+          <p className="muted">Review global community messages before they appear, moderate live chat, hide abuse, and keep the feed clean.</p>
         </div>
 
         <button className="secondary" onClick={load}>
@@ -197,11 +205,12 @@ export function CommunityPage() {
                 </div>
 
                 <div style={{ display: "grid", gap: 8, minWidth: 140 }}>
-                  <span className="status-pill">{item.status}</span>
+                  <span className={`status-pill ${statusTone(item.status)}`}>{item.status}</span>
+                  {item.hiddenReason ? <p className="small-muted">Hidden reason: {item.hiddenReason}</p> : null}
                   <button type="button" className="secondary" onClick={() => update(item, "approved")}>
                     Approve
                   </button>
-                  <button type="button" className="secondary" onClick={() => update(item, "hidden")}>
+                  <button type="button" className="danger" onClick={() => update(item, "hidden")}>
                     Hide
                   </button>
                   <button type="button" className="secondary danger" onClick={() => remove(item)}>

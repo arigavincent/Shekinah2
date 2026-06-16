@@ -230,7 +230,14 @@ export function ChatScreen({ go, openDrawer, tab, setTab, detail, appLanguage = 
         message
       });
 
-      setMessages(current => [response.message, ...current].slice(0, 120));
+      if (response?.message?.status === "approved") {
+        setMessages(current => [response.message, ...current].slice(0, 120));
+      } else {
+        Alert.alert(
+          tr(appLanguage, "Message Submitted"),
+          tr(appLanguage, "Your message has been sent for review before it appears in the community chat.")
+        );
+      }
       setText("");
     } catch (error) {
       const messageText =
@@ -298,7 +305,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, detail, appLanguage = 
         <View style={s.plainCard}>
           <Text style={[s.rowTitle, { color: C.white }]}>{tr(appLanguage, "Community Chat")}</Text>
           <Text style={[s.mutedText, { color: C.muted }]}>
-            {tr(appLanguage, "General church conversation, encouragement, and prayer points outside the active livestream.")}
+            {tr(appLanguage, "General church conversation, encouragement, and prayer points outside the active livestream. Messages appear after review.")}
           </Text>
         </View>
 
@@ -313,7 +320,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, detail, appLanguage = 
                 color: C.white
               }
             ]}
-            placeholder={tr(appLanguage, "Write a short message...")}
+            placeholder={tr(appLanguage, "Write a respectful short message...")}
             placeholderTextColor={C.muted}
             multiline
             selectionColor={C.gold}
@@ -322,7 +329,7 @@ export function ChatScreen({ go, openDrawer, tab, setTab, detail, appLanguage = 
           />
 
           <Pressable style={[s.primaryBtn, sending && { opacity: 0.65 }]} onPress={submitCommunity} disabled={sending}>
-            <Text style={s.primaryText}>{sending ? tr(appLanguage, "Sending...") : tr(appLanguage, "Send Message")}</Text>
+            <Text style={s.primaryText}>{sending ? tr(appLanguage, "Sending...") : tr(appLanguage, "Submit Message")}</Text>
           </Pressable>
         </View>
 

@@ -354,6 +354,11 @@ func (h Handler) Create(c *gin.Context) {
 		return
 	}
 
+	status := "pending"
+	if channel == "live" {
+		status = "approved"
+	}
+
 	item, err := scanMessage(
 		h.db.QueryRow(
 			c.Request.Context(),
@@ -364,9 +369,13 @@ func (h Handler) Create(c *gin.Context) {
 					channel,
 					display_name,
 					message,
+					user_id,
+					channel,
+					display_name,
+					message,
 					status
 				)
-				VALUES ($1, $2, $3, $4, $5, 'approved')
+				VALUES ($1, $2, $3, $4, $5, $6)
 				RETURNING
 					id,
 					channel,
@@ -383,6 +392,7 @@ func (h Handler) Create(c *gin.Context) {
 			channel,
 			displayName,
 			message,
+			status,
 		),
 	)
 	if err != nil {
@@ -393,7 +403,7 @@ func (h Handler) Create(c *gin.Context) {
 	item.UserEmail = ""
 	item.HiddenReason = ""
 
-	if channel == "live" && h.liveHub != nil {
+	if channel == "live" && item.Status == "approved" && h.liveHub != nil {
 		broadcastItem := item
 		h.liveHub.broadcast(liveEvent{
 			Type:    "message",
@@ -531,6 +541,15 @@ func (h Handler) AdminUpdate(c *gin.Context) {
 		return
 	}
 
+	hiddenReason := strings.TrimSpace(req.HiddenReason)
+	if status != "hidden" {
+		hiddenReason = ""
+	}
+	if len(hiddenReason) > 500 {
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", "hidden reason must be 500 characters or fewer")
+		return
+	}
+
 	item, err := scanMessage(
 		h.db.QueryRow(
 			c.Request.Context(),
@@ -555,7 +574,7 @@ func (h Handler) AdminUpdate(c *gin.Context) {
 			`,
 			id,
 			status,
-			strings.TrimSpace(req.HiddenReason),
+			hiddenReason,
 		),
 	)
 	if err != nil {

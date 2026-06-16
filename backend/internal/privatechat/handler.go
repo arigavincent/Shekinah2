@@ -65,6 +65,10 @@ func fingerprintForKey(value string) string {
 	return strings.ToUpper(hex.EncodeToString(hash[:8]))
 }
 
+func tooLong(value string, max int) bool {
+	return len(strings.TrimSpace(value)) > max
+}
+
 func cleanProtocolVersion(value string) string {
 	if strings.TrimSpace(value) == "" {
 		return "e2ee-v1"
@@ -1121,6 +1125,17 @@ func (h Handler) SendMessage(c *gin.Context) {
 
 	if strings.TrimSpace(req.Ciphertext) == "" || strings.TrimSpace(req.Nonce) == "" || strings.TrimSpace(req.SenderEphemeralPublicKey) == "" || strings.TrimSpace(req.SenderCopyCiphertext) == "" || strings.TrimSpace(req.SenderCopyNonce) == "" || strings.TrimSpace(req.Signature) == "" {
 		httpx.Error(c, http.StatusBadRequest, "invalid_input", "ciphertext, nonces, sender copy, ephemeral public key, and signature are required")
+		return
+	}
+
+	if tooLong(req.Ciphertext, 12000) ||
+		tooLong(req.SenderCopyCiphertext, 12000) ||
+		tooLong(req.Nonce, 256) ||
+		tooLong(req.SenderCopyNonce, 256) ||
+		tooLong(req.SenderEphemeralPublicKey, 2048) ||
+		tooLong(req.Signature, 2048) ||
+		tooLong(req.ProtocolVersion, 64) {
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", "encrypted message payload is too large")
 		return
 	}
 
