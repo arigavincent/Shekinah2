@@ -23,7 +23,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: ALLOWED_ORIGINS
-        value: https://shekinah-sons-admin.onrender.com
+        value: https://shekinah2.onrender.com,https://shekinah-sons-admin.onrender.com
 
       - key: CLOUDINARY_CLOUD_NAME
         sync: false

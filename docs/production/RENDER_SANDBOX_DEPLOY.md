@@ -10,7 +10,7 @@ Render blueprint from [`render.yaml`](../../render.yaml) creates:
 
 - PostgreSQL database: `shekinah-sons-db`
 - Backend web service: `shekinah-sons-backend`
-- Admin static site: `shekinah-sons-admin`
+- Admin web service: `shekinah2`
 
 ## 2. Deploy From Render
 
@@ -30,7 +30,7 @@ Required application variables:
 
 ```text
 APP_ENV=production
-ALLOWED_ORIGINS=https://shekinah-sons-admin.onrender.com
+ALLOWED_ORIGINS=https://shekinah2.onrender.com,https://shekinah-sons-admin.onrender.com
 MPESA_ENV=sandbox
 MPESA_SHORTCODE=174379
 MPESA_TRANSACTION_TYPE=CustomerPayBillOnline
@@ -86,7 +86,7 @@ https://shekinah-sons-backend.onrender.com/healthz
 2. Open admin:
 
 ```text
-https://shekinah-sons-admin.onrender.com
+https://shekinah2.onrender.com
 ```
 
 3. Log in with the seeded admin if it still exists:
