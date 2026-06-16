@@ -66,3 +66,11 @@ export function createCloudflareLiveInput() {
     token: adminToken()
   });
 }
+
+
+export function resetCloudflareLiveInput() {
+  return apiRequest<{ liveConfig: LiveConfig }>("/api/v1/admin/live-config/cloudflare/live-input", {
+    method: "DELETE",
+    token: adminToken()
+  });
+}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   createCloudflareLiveInput,
   getLiveConfig,
+  resetCloudflareLiveInput,
   type LiveConfig,
   type LiveConfigPayload,
   updateLiveConfig
@@ -68,6 +69,7 @@ export function LiveConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [creatingInput, setCreatingInput] = useState(false);
+  const [resettingInput, setResettingInput] = useState(false);
   const [error, setError] = useState("");
 
   async function load() {
@@ -190,6 +192,72 @@ export function LiveConfigPage() {
     }
   }
 
+  async function markOfflineNow() {
+    const nextForm = {
+      ...form,
+      isLive: false
+    };
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const response = await updateLiveConfig({
+        isLive: false,
+        title: nextForm.title.trim(),
+        viewers: nextForm.viewers.trim(),
+        nextService: nextForm.nextService.trim(),
+        youtubeId: nextForm.youtubeId.trim(),
+        provider: nextForm.provider,
+        replayUrl: nextForm.replayUrl?.trim() || ""
+      });
+
+      setLiveConfig(response.liveConfig);
+      setForm(nextForm);
+      showToast({
+        title: "Live stream marked offline",
+        message: "Members will now see the offline live-service state.",
+        tone: "success"
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to mark live stream offline");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetInput() {
+    const confirmation = window.prompt(
+      "This will delete the current Cloudflare live input and clear RTMPS/SRT credentials. Type RESET to continue."
+    );
+
+    if (confirmation !== "RESET") {
+      return;
+    }
+
+    setResettingInput(true);
+    setError("");
+
+    try {
+      const response = await resetCloudflareLiveInput();
+      setLiveConfig(response.liveConfig);
+      setForm(current => ({
+        ...current,
+        isLive: false,
+        provider: "cloudflare_stream"
+      }));
+      showToast({
+        title: "Cloudflare live input reset",
+        message: "The stream credentials were cleared. Create a new input when you are ready.",
+        tone: "success"
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reset Cloudflare live input");
+    } finally {
+      setResettingInput(false);
+    }
+  }
+
   const isCloudflare = form.provider === "cloudflare_stream";
 
   return (
@@ -305,9 +373,10 @@ export function LiveConfigPage() {
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => updateField("isLive", false)}
+                  onClick={markOfflineNow}
+                  disabled={saving || !form.isLive}
                 >
-                  Mark Offline
+                  Mark Offline Now
                 </button>
               </div>
             </>
@@ -388,6 +457,24 @@ export function LiveConfigPage() {
               </article>
             </div>
           ) : null}
+
+          <div className="danger-zone">
+            <div>
+              <strong>Danger Zone</strong>
+              <p>
+                Reset only if stream credentials were exposed, compromised, or you need a fresh Cloudflare input.
+                This deletes the current Cloudflare live input and clears the saved RTMPS/SRT credentials.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="danger"
+              onClick={resetInput}
+              disabled={resettingInput || !liveConfig?.cloudflareLiveInputId}
+            >
+              {resettingInput ? "Resetting..." : "Reset Cloudflare Live Input"}
+            </button>
+          </div>
 
           {liveConfig ? (
             <p className="small-muted">

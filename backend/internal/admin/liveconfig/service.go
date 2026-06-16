@@ -120,6 +120,39 @@ func (s Service) CreateCloudflareLiveInput(ctx context.Context) (LiveConfig, err
 	return s.repository.Upsert(ctx, command)
 }
 
+func (s Service) ResetCloudflareLiveInput(ctx context.Context) (LiveConfig, error) {
+	current, err := s.Get(ctx)
+	if err != nil {
+		return LiveConfig{}, err
+	}
+
+	if current.CloudflareLiveInputID != "" {
+		if err := s.cloudflare.DeleteLiveInput(ctx, current.CloudflareLiveInputID); err != nil {
+			return LiveConfig{}, err
+		}
+	}
+
+	command := commandFromConfig(current)
+	command.IsLive = false
+	command.Provider = "cloudflare_stream"
+	command.CloudflareLiveInputID = ""
+	command.CloudflarePlaybackUID = ""
+	command.PlaybackHLSURL = ""
+	command.PlaybackDASHURL = ""
+	command.EmbedURL = ""
+	command.RTMPSURL = ""
+	command.SRTURL = ""
+	command.SRTStreamID = ""
+	command.StreamKey = ""
+	command.SRTPassphrase = ""
+
+	if err := validateCommand(command); err != nil {
+		return LiveConfig{}, err
+	}
+
+	return s.repository.Upsert(ctx, command)
+}
+
 func commandFromConfig(current LiveConfig) Command {
 	return Command{
 		ID:                    current.ID,

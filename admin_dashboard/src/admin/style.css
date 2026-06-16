@@ -2550,3 +2550,23 @@ header.page-header button svg { margin-right: 0.35rem; vertical-align: -2px; }
   display: grid;
   gap: 0.55rem;
 }
+
+.danger-zone {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+  border: 1px solid var(--danger-border);
+  border-radius: 18px;
+  background: var(--danger-wash);
+  padding: 1rem;
+}
+
+.danger-zone strong {
+  color: var(--danger);
+}
+
+.danger-zone p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}

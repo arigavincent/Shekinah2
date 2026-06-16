@@ -50,19 +50,20 @@ func (c CloudflareStreamClient) configured() bool {
 
 type cloudflareCreateLiveInputRequest struct {
 	Meta                     map[string]string `json:"meta"`
-	Recording                ginH              `json:"recording"`
+	Recording                map[string]any    `json:"recording"`
 	DeleteRecordingAfterDays int               `json:"deleteRecordingAfterDays"`
 	Enabled                  bool              `json:"enabled"`
 }
 
-type ginH map[string]any
+type cloudflareAPIError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
 
 type cloudflareCreateLiveInputResponse struct {
-	Success bool `json:"success"`
-	Errors  []struct {
-		Message string `json:"message"`
-	} `json:"errors"`
-	Result struct {
+	Success bool                 `json:"success"`
+	Errors  []cloudflareAPIError `json:"errors"`
+	Result  struct {
 		UID   string `json:"uid"`
 		RTMPS struct {
 			URL       string `json:"url"`
@@ -74,6 +75,11 @@ type cloudflareCreateLiveInputResponse struct {
 			Passphrase string `json:"passphrase"`
 		} `json:"srt"`
 	} `json:"result"`
+}
+
+type cloudflareDeleteLiveInputResponse struct {
+	Success bool                 `json:"success"`
+	Errors  []cloudflareAPIError `json:"errors"`
 }
 
 func (c CloudflareStreamClient) CreateLiveInput(ctx context.Context, name string) (CloudflareLiveInput, error) {
@@ -90,7 +96,7 @@ func (c CloudflareStreamClient) CreateLiveInput(ctx context.Context, name string
 		Meta: map[string]string{
 			"name": cleanName,
 		},
-		Recording: ginH{
+		Recording: map[string]any{
 			"mode":                c.recordingMode,
 			"requireSignedURLs":   false,
 			"hideLiveViewerCount": false,
@@ -131,11 +137,7 @@ func (c CloudflareStreamClient) CreateLiveInput(ctx context.Context, name string
 	}
 
 	if res.StatusCode < 200 || res.StatusCode > 299 || !decoded.Success {
-		message := "Cloudflare Stream could not create a live input"
-		if len(decoded.Errors) > 0 && strings.TrimSpace(decoded.Errors[0].Message) != "" {
-			message = decoded.Errors[0].Message
-		}
-		return CloudflareLiveInput{}, fmt.Errorf("%s", message)
+		return CloudflareLiveInput{}, fmt.Errorf("%s", cloudflareErrorMessage(decoded.Errors, "Cloudflare Stream could not create a live input"))
 	}
 
 	if strings.TrimSpace(decoded.Result.UID) == "" {
@@ -150,4 +152,65 @@ func (c CloudflareStreamClient) CreateLiveInput(ctx context.Context, name string
 		SRTStreamID:   strings.TrimSpace(decoded.Result.SRT.StreamID),
 		SRTPassphrase: strings.TrimSpace(decoded.Result.SRT.Passphrase),
 	}, nil
+}
+
+func (c CloudflareStreamClient) DeleteLiveInput(ctx context.Context, liveInputID string) error {
+	cleanID := strings.TrimSpace(liveInputID)
+	if cleanID == "" {
+		return nil
+	}
+
+	if !c.configured() {
+		return ErrCloudflareNotConfigured
+	}
+
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/stream/live_inputs/%s", c.accountID, cleanID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("prepare cloudflare delete request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiToken)
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete cloudflare live input: %w", err)
+	}
+	defer res.Body.Close()
+
+	responseBody, err := io.ReadAll(io.LimitReader(res.Body, 1_000_000))
+	if err != nil {
+		return fmt.Errorf("read cloudflare delete response: %w", err)
+	}
+
+	if res.StatusCode == http.StatusNotFound {
+		return nil
+	}
+
+	if len(responseBody) == 0 && res.StatusCode >= 200 && res.StatusCode <= 299 {
+		return nil
+	}
+
+	var decoded cloudflareDeleteLiveInputResponse
+	if err := json.Unmarshal(responseBody, &decoded); err != nil {
+		return fmt.Errorf("decode cloudflare delete response: %w", err)
+	}
+
+	if res.StatusCode < 200 || res.StatusCode > 299 || !decoded.Success {
+		return fmt.Errorf("%s", cloudflareErrorMessage(decoded.Errors, "Cloudflare Stream could not delete the live input"))
+	}
+
+	return nil
+}
+
+func cloudflareErrorMessage(errors []cloudflareAPIError, fallback string) string {
+	if len(errors) == 0 || strings.TrimSpace(errors[0].Message) == "" {
+		return fallback
+	}
+
+	if errors[0].Code > 0 {
+		return fmt.Sprintf("Cloudflare error %d: %s", errors[0].Code, errors[0].Message)
+	}
+
+	return errors[0].Message
 }

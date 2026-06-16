@@ -201,6 +201,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 
 			adminGroup.GET("/live-config", adminLiveConfigHandler.Get)
 			adminGroup.POST("/live-config/cloudflare/live-input", adminLiveConfigHandler.CreateCloudflareLiveInput)
+			adminGroup.DELETE("/live-config/cloudflare/live-input", adminLiveConfigHandler.ResetCloudflareLiveInput)
 			adminGroup.PATCH("/live-config", adminLiveConfigHandler.Update)
 			adminGroup.GET("/prayers", adminPrayerHandler.List)
 			adminGroup.PATCH("/prayers/:id", adminPrayerHandler.Update)

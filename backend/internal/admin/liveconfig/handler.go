@@ -49,6 +49,24 @@ func (h Handler) CreateCloudflareLiveInput(c *gin.Context) {
 	})
 }
 
+func (h Handler) ResetCloudflareLiveInput(c *gin.Context) {
+	item, err := h.service.ResetCloudflareLiveInput(c.Request.Context())
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrCloudflareNotConfigured):
+			httpx.Error(c, http.StatusConflict, "cloudflare_not_configured", "Cloudflare Stream is not configured on the backend")
+		default:
+			log.Printf("cloudflare live input reset failed: %v", err)
+			httpx.Error(c, http.StatusBadGateway, "cloudflare_live_input_reset_failed", err.Error())
+		}
+		return
+	}
+
+	httpx.OK(c, gin.H{
+		"liveConfig": item,
+	})
+}
+
 func (h Handler) Update(c *gin.Context) {
 	var req UpdateRequest
 
