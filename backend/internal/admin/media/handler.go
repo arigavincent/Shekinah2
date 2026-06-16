@@ -78,6 +78,16 @@ func (h Handler) Upload(c *gin.Context) {
 		return
 	}
 
+	if productionMediaRequiresCloudinary() {
+		httpx.Error(
+			c,
+			http.StatusServiceUnavailable,
+			"cloudinary_required",
+			"media uploads require Cloudinary in production",
+		)
+		return
+	}
+
 	h.uploadLocal(c, kind, file, ext)
 }
 
@@ -237,6 +247,17 @@ func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.Fi
 }
 
 func (h Handler) fallbackToLocal(c *gin.Context, kind string, file multipart.File, ext string, reason error) {
+	if productionMediaRequiresCloudinary() {
+		log.Printf("cloudinary upload failed in production: %v", reason)
+		httpx.Error(
+			c,
+			http.StatusBadGateway,
+			"cloudinary_upload_failed",
+			"Cloudinary upload failed; media was not saved locally in production",
+		)
+		return
+	}
+
 	log.Printf("cloudinary fallback to local upload: %v", reason)
 	if seeker, ok := file.(io.Seeker); ok {
 		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
@@ -327,6 +348,14 @@ func cloudinaryConfigured() bool {
 	return env("CLOUDINARY_CLOUD_NAME") != "" &&
 		env("CLOUDINARY_API_KEY") != "" &&
 		env("CLOUDINARY_API_SECRET") != ""
+}
+
+func productionMediaRequiresCloudinary() bool {
+	if strings.EqualFold(env("MEDIA_REQUIRE_CLOUDINARY"), "true") {
+		return true
+	}
+
+	return strings.EqualFold(env("APP_ENV"), "production")
 }
 
 func signCloudinaryParams(params map[string]string, secret string) string {
