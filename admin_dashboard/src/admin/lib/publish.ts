@@ -10,9 +10,7 @@ export function formatPublishAt(value: string) {
 
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: PUBLISH_TIME_ZONE,
-    timeZoneName: "short"
+    timeStyle: "short"
   }).format(date);
 }
 
@@ -28,4 +26,3 @@ export function getPublishState(value: string) {
 
   return { label: "Scheduled", tone: "warning" as const, isPublished: false };
 }
-
