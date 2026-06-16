@@ -13,7 +13,7 @@ const proxyInputSchema = z.object({
 });
 
 export const proxyAdminApiRequest = createServerFn({ method: "POST" })
-  .validator(proxyInputSchema)
+  .inputValidator(proxyInputSchema)
   .handler(async ({ data }) => {
     const method = data.method || "GET";
     const response = await fetch(`${BACKEND_BASE_URL}${data.path}`, {
