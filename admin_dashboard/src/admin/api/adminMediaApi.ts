@@ -44,6 +44,44 @@ function pickNumber(obj: AnyRecord | undefined | null, ...keys: string[]): numbe
   return 0;
 }
 
+function isMediaCandidate(value: unknown): value is AnyRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as AnyRecord;
+  return [
+    "secure_url",
+    "url",
+    "path",
+    "public_id",
+    "provider",
+    "resource_type",
+    "resourceType",
+    "bytes",
+    "size"
+  ].some(key => typeof record[key] !== "undefined");
+}
+
+function findDeepMediaCandidate(value: unknown, seen = new Set<unknown>()): AnyRecord | null {
+  if (!value || typeof value !== "object" || seen.has(value)) return null;
+  seen.add(value);
+
+  if (isMediaCandidate(value)) return value as AnyRecord;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findDeepMediaCandidate(item, seen);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  for (const nested of Object.values(value as AnyRecord)) {
+    const found = findDeepMediaCandidate(nested, seen);
+    if (found) return found;
+  }
+
+  return null;
+}
+
 /**
  * Normalize a media upload response. Supports several shapes our backend
  * (and Cloudinary, directly or wrapped) might return:
@@ -65,6 +103,9 @@ function normalizeMediaResponse(
   if (root.result && typeof root.result === "object") candidates.push(root.result as AnyRecord);
   if (root.asset && typeof root.asset === "object") candidates.push(root.asset as AnyRecord);
   candidates.push(root);
+
+  const deepCandidate = findDeepMediaCandidate(root);
+  if (deepCandidate) candidates.unshift(deepCandidate);
 
   for (const c of candidates) {
     const url = pickString(c, "secure_url", "url", "Location", "location", "src");
@@ -125,7 +166,15 @@ export function uploadMedia(
       }
       const media = normalizeMediaResponse(payload, kind, file);
       if (!media) {
-        reject(new Error("Media upload returned no media reference"));
+        const raw = typeof xhr.responseText === "string" ? xhr.responseText.trim() : "";
+        const preview = raw ? raw.slice(0, 240) : "";
+        reject(
+          new Error(
+            preview
+              ? `Media upload returned unsupported response: ${preview}`
+              : "Media upload returned no media reference"
+          )
+        );
         return;
       }
       resolve({ media });
