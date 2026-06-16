@@ -2375,3 +2375,135 @@ header.page-header button svg { margin-right: 0.35rem; vertical-align: -2px; }
   border-radius: 14px;
   background: var(--success-wash);
 }
+
+/* Polished reusable CSV import module */
+.csv-import-panel {
+  margin-top: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in oklab, var(--surface) 86%, var(--surface-2));
+  overflow: hidden;
+}
+
+.csv-import-panel summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  cursor: pointer;
+}
+
+.csv-import-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.csv-import-panel summary strong {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.csv-import-panel summary p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 0.9rem;
+}
+
+.csv-import-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  background: var(--accent-wash);
+  color: var(--gold);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.csv-import-toggle {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 0.45rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.csv-import-panel[open] .csv-import-toggle {
+  color: var(--gold);
+  background: var(--accent-wash);
+}
+
+.csv-import-panel[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.csv-import-body {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem 1.1rem 1.1rem;
+}
+
+.csv-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.csv-file-button {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.csv-file-button:hover {
+  border-color: var(--line-strong);
+}
+
+.csv-file-button input {
+  display: none;
+}
+
+.csv-import-textarea {
+  min-height: 150px;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+@media (max-width: 760px) {
+  .csv-import-panel summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .csv-import-actions > * {
+    width: 100%;
+  }
+
+  .csv-file-button {
+    width: 100%;
+  }
+}

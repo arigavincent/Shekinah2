@@ -15,6 +15,7 @@ import {
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
 import { BatchUploadDialog, type BatchField } from "../components/BatchUploadDialog";
 import { InlineAlert } from "../components/InlineAlert";
+import { BulkCsvImportCard } from "../components/BulkCsvImportCard";
 import { PaginationBar } from "../components/PaginationBar";
 import { shekinahYoutubeCatalog, type ShekinahYoutubeCatalogItem } from "../data/shekinahYoutubeCatalog";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
@@ -904,41 +905,36 @@ export function SermonsPage() {
             {saving ? "Saving..." : editingId ? "Update Sermon" : "Create Sermon"}
           </button>
 
-          <div className="subeditor-card">
-            <div className="section-title-row compact">
-              <h3>Advanced CSV Import</h3>
-              <div className="row-actions">
-                <button type="button" className="secondary compact" onClick={previewImport} disabled={saving}>
-                  Preview CSV
-                </button>
-                <button type="button" className="secondary compact" onClick={submitImport} disabled={saving || !importPreview}>
-                  Apply Import
-                </button>
-              </div>
-            </div>
-            <p className="muted">
-              Columns: externalId,type,title,speaker,sermonDate,publishedAt,categoryId,isLive,thumbnailUrl,duration,description,mediaUrl
-            </p>
-            <label>
-              Load CSV File
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={async event => {
-                  await loadCsvFile(event.target.files?.[0] || null);
-                  event.target.value = "";
-                }}
-              />
-            </label>
-            <textarea
-              value={csvImport}
-              onChange={event => {
-                setCsvImport(event.target.value);
-                setImportPreview(null);
-              }}
-              rows={8}
-              placeholder="Paste sermon CSV here"
-            />
+          <BulkCsvImportCard
+            title="Sermon CSV Import"
+            description="Import many sermons at once using a clean CSV template. Preview first, then import only valid rows."
+            templateFilename="sermons-template.csv"
+            templateHeaders={[
+              "externalId",
+              "type",
+              "title",
+              "speaker",
+              "sermonDate",
+              "publishedAt",
+              "categoryId",
+              "isLive",
+              "thumbnailUrl",
+              "duration",
+              "description",
+              "mediaUrl"
+            ]}
+            csvValue={csvImport}
+            pastePlaceholder="Paste sermon CSV here, or choose a CSV file above."
+            disabled={saving}
+            canImport={Boolean(importPreview)}
+            onPreview={previewImport}
+            onImport={submitImport}
+            onLoadFile={loadCsvFile}
+            onCsvChange={value => {
+              setCsvImport(value);
+              setImportPreview(null);
+            }}
+          >
             {importPreview ? (
               <div className="import-preview-card">
                 <div className="stats-grid compact">
@@ -974,7 +970,7 @@ export function SermonsPage() {
                 </div>
               </div>
             ) : null}
-          </div>
+          </BulkCsvImportCard>
         </form>
 
         <section className="list-card">
