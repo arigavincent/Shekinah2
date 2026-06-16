@@ -19,7 +19,7 @@ function formatDate(value?: string) {
 
 function testimonyTone(status: string): "success" | "danger" | "warning" | "neutral" {
   if (status === "approved") return "success";
-  if (status === "rejected") return "danger";
+  if (status === "rejected" || status === "hidden") return "danger";
   if (status === "pending") return "warning";
   return "neutral";
 }
@@ -94,7 +94,7 @@ export function TestimoniesPage() {
         <div>
           <p className="eyebrow">Stories</p>
           <h1>Testimonies</h1>
-          <p className="muted">Approve, reject, and feature member testimonies before they appear in the app.</p>
+          <p className="muted">Review member testimonies, approve safe stories for the app, hide unsafe submissions, and feature selected testimonies.</p>
         </div>
 
         <button className="secondary" onClick={load}>
@@ -119,6 +119,7 @@ export function TestimoniesPage() {
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
+              <option value="hidden">Hidden</option>
             </select>
 
             <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "member")}>
@@ -174,7 +175,15 @@ export function TestimoniesPage() {
                   <button type="button" className="secondary" onClick={() => update(item, "rejected", false)}>
                     Reject
                   </button>
-                  <button type="button" className="secondary" onClick={() => update(item, item.status, !item.featured)}>
+                  <button type="button" className="danger" onClick={() => update(item, "hidden", false)}>
+                    Hide
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={item.status !== "approved"}
+                    onClick={() => update(item, "approved", !item.featured)}
+                  >
                     {item.featured ? "Unfeature" : "Feature"}
                   </button>
                 </div>

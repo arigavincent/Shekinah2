@@ -51,7 +51,7 @@ func testimonyID() string {
 
 func cleanStatus(value string) string {
 	switch strings.TrimSpace(strings.ToLower(value)) {
-	case "pending", "approved", "rejected":
+	case "pending", "approved", "rejected", "hidden":
 		return strings.TrimSpace(strings.ToLower(value))
 	default:
 		return ""
@@ -387,7 +387,7 @@ func (h Handler) AdminUpdate(c *gin.Context) {
 	}
 
 	featured := false
-	if req.Featured != nil {
+	if req.Featured != nil && status == "approved" {
 		featured = *req.Featured
 	}
 

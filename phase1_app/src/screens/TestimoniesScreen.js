@@ -28,7 +28,7 @@ function formatDate(value) {
 
 function statusStyle(status) {
   if (status === "approved") return { color: "#4ade80" };
-  if (status === "rejected") return { color: C.red };
+  if (status === "rejected" || status === "hidden") return { color: C.red };
   return { color: C.gold };
 }
 
@@ -244,7 +244,9 @@ export function TestimoniesScreen({ go, openDrawer, appLanguage = "en" }) {
                 <View key={item.id} style={s.plainCard}>
                   <View style={[s.rowTight, { justifyContent: "space-between" }]}>
                     <Text style={[s.rowTitle, { color: C.white, flex: 1 }]}>{item.title}</Text>
-                    <Text style={[s.goldSmall, statusStyle(item.status)]}>{item.status}</Text>
+                    <Text style={[s.goldSmall, statusStyle(item.status)]}>
+                      {item.status === "hidden" ? "hidden" : item.status}
+                    </Text>
                   </View>
                   <Text style={[s.mutedText, { color: C.muted }]}>{formatDate(item.createdAt)}</Text>
                   <Text style={s.detailBody}>{item.body}</Text>
