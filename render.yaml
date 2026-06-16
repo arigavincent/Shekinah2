@@ -51,10 +51,14 @@ services:
 
   - type: web
     name: shekinah-sons-admin
-    runtime: static
+    env: node
     rootDir: admin_dashboard
-    buildCommand: bun install --frozen-lockfile && bun run build
-    staticPublishPath: dist/client
+    buildCommand: npx nypm install && npm run build
+    startCommand: node .output/server/index.mjs
     envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NITRO_PRESET
+        value: render_com
       - key: VITE_API_BASE_URL
         value: https://shekinah-sons-backend.onrender.com
