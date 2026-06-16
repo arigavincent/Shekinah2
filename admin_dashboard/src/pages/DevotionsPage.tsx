@@ -30,6 +30,7 @@ const emptyForm: DevotionPayload = {
 };
 
 type WizardDevotionRow = {
+  sourceKind: "schedule" | "local";
   externalId: string;
   title: string;
   excerpt: string;
@@ -54,9 +55,11 @@ export function DevotionsPage() {
   const [importPreview, setImportPreview] = useState<DevotionImportPreview | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [wizardSourceMode, setWizardSourceMode] = useState<"schedule" | "local">("schedule");
   const [wizardStartDate, setWizardStartDate] = useState("2026-06-16");
   const [wizardDays, setWizardDays] = useState("7");
   const [wizardPublishTime, setWizardPublishTime] = useState("05:00");
+  const [wizardLocalFiles, setWizardLocalFiles] = useState<File[]>([]);
   const [wizardRows, setWizardRows] = useState<WizardDevotionRow[]>([]);
   const [wizardPreview, setWizardPreview] = useState<DevotionImportPreview | null>(null);
   const [error, setError] = useState("");
@@ -105,9 +108,11 @@ export function DevotionsPage() {
   function resetWizard() {
     setWizardOpen(false);
     setWizardStep(1);
+    setWizardSourceMode("schedule");
     setWizardStartDate("2026-06-16");
     setWizardDays("7");
     setWizardPublishTime("05:00");
+    setWizardLocalFiles([]);
     setWizardRows([]);
     setWizardPreview(null);
   }
@@ -116,6 +121,8 @@ export function DevotionsPage() {
     setError("");
     setWizardOpen(true);
     setWizardStep(1);
+    setWizardSourceMode("schedule");
+    setWizardLocalFiles([]);
     setWizardRows([]);
     setWizardPreview(null);
   }
@@ -128,6 +135,7 @@ export function DevotionsPage() {
 
   function defaultWizardRow(dateString: string): WizardDevotionRow {
     return {
+      sourceKind: "schedule",
       externalId: `shekinah-dev-${dateString}`,
       title: "",
       excerpt: "",
@@ -139,14 +147,26 @@ export function DevotionsPage() {
     };
   }
 
+  function defaultLocalWizardRow(file: File, index: number): WizardDevotionRow {
+    const base = file.name.replace(/\.[^.]+$/, "").trim() || `local-devotion-${index + 1}`;
+    const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const dateString = addDays(wizardStartDate, index);
+    return {
+      sourceKind: "local",
+      externalId: `shekinah-dev-local-${slug || index + 1}`,
+      title: base,
+      excerpt: "",
+      devotionDate: dateString,
+      publishedAt: `${dateString}T${wizardPublishTime}`,
+      imageUrl: "",
+      body: "",
+      localImageFile: file
+    };
+  }
+
   function startWizardMetadataStep() {
-    const count = Number.parseInt(wizardDays, 10);
     if (!isValidDateString(wizardStartDate)) {
       setError("Choose a valid wizard start date.");
-      return;
-    }
-    if (!count || count < 1 || count > 31) {
-      setError("Choose between 1 and 31 devotion days.");
       return;
     }
     if (!/^\d{2}:\d{2}$/.test(wizardPublishTime)) {
@@ -154,9 +174,26 @@ export function DevotionsPage() {
       return;
     }
 
-    const rows = Array.from({ length: count }, (_, index) =>
-      defaultWizardRow(addDays(wizardStartDate, index))
-    );
+    let rows: WizardDevotionRow[] = [];
+    if (wizardSourceMode === "schedule") {
+      const count = Number.parseInt(wizardDays, 10);
+      if (!count || count < 1 || count > 31) {
+        setError("Choose between 1 and 31 devotion days.");
+        return;
+      }
+
+      rows = Array.from({ length: count }, (_, index) =>
+        defaultWizardRow(addDays(wizardStartDate, index))
+      );
+    } else {
+      if (!wizardLocalFiles.length) {
+        setError("Select at least one local image before continuing.");
+        return;
+      }
+
+      rows = wizardLocalFiles.map(defaultLocalWizardRow);
+    }
+
     setWizardRows(rows);
     setWizardPreview(null);
     setWizardStep(2);
@@ -181,6 +218,13 @@ export function DevotionsPage() {
     } finally {
       setUploadingImage(false);
     }
+  }
+
+  async function loadWizardLocalFiles(fileList: FileList | null) {
+    if (!fileList) return;
+    setWizardLocalFiles(Array.from(fileList));
+    setWizardRows([]);
+    setWizardPreview(null);
   }
 
   async function ensureWizardImagesUploaded() {
@@ -790,36 +834,96 @@ export function DevotionsPage() {
 
             {wizardStep === 1 ? (
               <div className="wizard-pane">
-                <div className="three-col">
-                  <label>
-                    Start Date
-                    <input
-                      value={wizardStartDate}
-                      onChange={event => setWizardStartDate(event.target.value)}
-                      placeholder="YYYY-MM-DD"
-                    />
-                  </label>
-                  <label>
-                    Number of Days
-                    <input
-                      value={wizardDays}
-                      onChange={event => setWizardDays(event.target.value)}
-                      placeholder="7"
-                    />
-                  </label>
-                  <label>
-                    Publish Time
-                    <input
-                      type="time"
-                      value={wizardPublishTime}
-                      onChange={event => setWizardPublishTime(event.target.value)}
-                    />
-                  </label>
+                <div className="filters-row">
+                  <button
+                    type="button"
+                    className={wizardSourceMode === "schedule" ? "" : "secondary"}
+                    onClick={() => {
+                      setWizardSourceMode("schedule");
+                      setWizardLocalFiles([]);
+                    }}
+                  >
+                    Schedule Builder
+                  </button>
+                  <button
+                    type="button"
+                    className={wizardSourceMode === "local" ? "" : "secondary"}
+                    onClick={() => {
+                      setWizardSourceMode("local");
+                      setWizardRows([]);
+                    }}
+                  >
+                    Local Files
+                  </button>
                 </div>
-                <p className="muted">
-                  This generates a scheduled devotion batch with stable external IDs such as
-                  `shekinah-dev-2026-06-16`.
-                </p>
+
+                {wizardSourceMode === "schedule" ? (
+                  <>
+                    <div className="three-col">
+                      <label>
+                        Start Date
+                        <input
+                          value={wizardStartDate}
+                          onChange={event => setWizardStartDate(event.target.value)}
+                          placeholder="YYYY-MM-DD"
+                        />
+                      </label>
+                      <label>
+                        Number of Days
+                        <input
+                          value={wizardDays}
+                          onChange={event => setWizardDays(event.target.value)}
+                          placeholder="7"
+                        />
+                      </label>
+                      <label>
+                        Publish Time
+                        <input
+                          type="time"
+                          value={wizardPublishTime}
+                          onChange={event => setWizardPublishTime(event.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <p className="muted">
+                      This generates a scheduled devotion batch with stable external IDs such as
+                      `shekinah-dev-2026-06-16`.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      Select Local Image Files
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        multiple
+                        onChange={async event => {
+                          await loadWizardLocalFiles(event.target.files);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    <p className="muted">
+                      Choose one cover image per devotion. The wizard will upload them during preview.
+                    </p>
+                    <div className="wizard-source-list">
+                      {wizardLocalFiles.length ? wizardLocalFiles.map((file, index) => (
+                        <article key={`${file.name}-${file.size}-${file.lastModified}`} className="wizard-source-card selected">
+                          <div />
+                          <div className="wizard-local-icon">IMAGE</div>
+                          <div>
+                            <strong>{file.name}</strong>
+                            <p className="small-muted">{Math.round(file.size / 1024 / 1024 * 10) / 10} MB</p>
+                            <p className="small-muted">{addDays(wizardStartDate, index)} · {wizardPublishTime}</p>
+                          </div>
+                        </article>
+                      )) : (
+                        <p className="muted">No local files selected yet.</p>
+                      )}
+                    </div>
+                  </>
+                )}
                 <div className="confirm-actions">
                   <button type="button" className="secondary" onClick={resetWizard}>
                     Cancel
@@ -844,6 +948,7 @@ export function DevotionsPage() {
                         <div>
                           <strong>{row.devotionDate}</strong>
                           <p className="small-muted">{row.externalId}</p>
+                          <p className="small-muted">{row.sourceKind === "local" ? "Local file source" : "Scheduled row"}</p>
                         </div>
                         <span className="small-muted">Publishes {row.publishedAt}</span>
                       </div>
