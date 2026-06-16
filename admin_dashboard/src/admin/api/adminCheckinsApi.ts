@@ -9,6 +9,7 @@ export type AdminCheckin = {
   source: string;
   notes: string;
   createdAt: string;
+  updatedAt?: string;
 };
 
 export function listRecentCheckins() {
@@ -25,6 +26,7 @@ export function verifyCheckin(payload: { code: string; eventId: string; notes?: 
     name: string;
     email: string;
     checkedIn: boolean;
+    alreadyCheckedIn: boolean;
   }>("/api/v1/admin/checkins/verify", {
     method: "POST",
     token: getToken(),

@@ -64,9 +64,11 @@ export function CheckInPage() {
       });
 
       showToast({
-        title: "Member checked in",
-        message: `${response.name} checked in for ${response.eventTitle}.`,
-        tone: "success"
+        title: response.alreadyCheckedIn ? "Member already checked in" : "Member checked in",
+        message: response.alreadyCheckedIn
+          ? `${response.name} was already checked in for ${response.eventTitle}. The record was refreshed.`
+          : `${response.name} checked in for ${response.eventTitle}.`,
+        tone: response.alreadyCheckedIn ? "info" : "success"
       });
       setCode("");
       setNotes("");
@@ -84,7 +86,7 @@ export function CheckInPage() {
         <div>
           <p className="eyebrow">Attendance</p>
           <h1>QR Check-In</h1>
-          <p className="muted">Verify member codes for live events and review the latest attendance records.</p>
+          <p className="muted">Verify member codes for church events, prevent duplicate attendance records, and review recent check-ins.</p>
         </div>
 
         <button className="secondary" onClick={load}>
@@ -102,6 +104,7 @@ export function CheckInPage() {
 
           <div style={{ display: "grid", gap: 12 }}>
             <select value={eventId} onChange={event => setEventId(event.target.value)}>
+              {events.length === 0 ? <option value="">No events available</option> : null}
               {events.map(item => (
                 <option key={item.id} value={item.id}>
                   {item.title}
@@ -124,7 +127,7 @@ export function CheckInPage() {
               rows={4}
             />
 
-            <button className="primary" onClick={submit} disabled={saving}>
+            <button className="primary" onClick={submit} disabled={saving || !eventId}>
               {saving ? "Checking In..." : "Verify Check-In"}
             </button>
           </div>
@@ -150,7 +153,9 @@ export function CheckInPage() {
                       {item.email} · {item.eventTitle}
                     </p>
                     <p className="muted" style={{ marginBottom: 0 }}>
-                      {formatDate(item.createdAt)}{item.notes ? ` · ${item.notes}` : ""}
+                      First scan: {formatDate(item.createdAt)}
+                      {item.updatedAt && item.updatedAt !== item.createdAt ? ` · Last verified: ${formatDate(item.updatedAt)}` : ""}
+                      {item.notes ? ` · ${item.notes}` : ""}
                     </p>
                   </div>
                 </div>

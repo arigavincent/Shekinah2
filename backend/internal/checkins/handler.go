@@ -1,8 +1,9 @@
 package checkins
 
 import (
+	"crypto/rand"
 	"errors"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +20,8 @@ type Handler struct {
 	db *pgxpool.Pool
 }
 
+const checkinCodeTTL = 30 * time.Minute
+
 type VerifyRequest struct {
 	Code    string `json:"code"`
 	EventID string `json:"eventId"`
@@ -29,14 +32,26 @@ func NewHandler(db *pgxpool.Pool) Handler {
 	return Handler{db: db}
 }
 
-func codeValue() string {
+func codeValue() (string, error) {
 	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	var builder strings.Builder
+
 	for builder.Len() < 10 {
-		builder.WriteByte(alphabet[rng.Intn(len(alphabet))])
+		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
+		if err != nil {
+			return "", err
+		}
+		builder.WriteByte(alphabet[index.Int64()])
 	}
-	return builder.String()
+
+	return builder.String(), nil
+}
+
+func cleanCode(value string) string {
+	code := strings.ToUpper(strings.TrimSpace(value))
+	code = strings.ReplaceAll(code, " ", "")
+	code = strings.ReplaceAll(code, "-", "")
+	return code
 }
 
 func checkinID() string {
@@ -50,8 +65,14 @@ func (h Handler) MemberCode(c *gin.Context) {
 		return
 	}
 
-	code := codeValue()
-	_, err := h.db.Exec(
+	code, err := codeValue()
+	if err != nil {
+		httpx.Error(c, http.StatusInternalServerError, "checkin_code_failed", "failed to prepare check-in code")
+		return
+	}
+
+	now := time.Now().UTC()
+	_, err = h.db.Exec(
 		c.Request.Context(),
 		`
 			INSERT INTO member_checkin_codes (user_id, code)
@@ -81,7 +102,8 @@ func (h Handler) MemberCode(c *gin.Context) {
 	httpx.OK(c, gin.H{
 		"code":        code,
 		"displayName": displayName,
-		"generatedAt": time.Now().UTC().Format(time.RFC3339),
+		"generatedAt": now.Format(time.RFC3339),
+		"expiresAt":   now.Add(checkinCodeTTL).Format(time.RFC3339),
 	})
 }
 
@@ -98,10 +120,20 @@ func (h Handler) Verify(c *gin.Context) {
 		return
 	}
 
-	code := strings.ToUpper(strings.TrimSpace(req.Code))
+	code := cleanCode(req.Code)
 	eventID := strings.TrimSpace(req.EventID)
+	notes := strings.TrimSpace(req.Notes)
+
 	if code == "" || eventID == "" {
 		httpx.Error(c, http.StatusBadRequest, "invalid_input", "code and event are required")
+		return
+	}
+	if len(code) != 10 {
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", "enter a valid 10-character member code")
+		return
+	}
+	if len(notes) > 500 {
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", "attendance note must be 500 characters or fewer")
 		return
 	}
 
@@ -115,13 +147,15 @@ func (h Handler) Verify(c *gin.Context) {
 			FROM member_checkin_codes c
 			JOIN users u ON u.id = c.user_id
 			WHERE c.code = $1
+			  AND c.updated_at >= NOW() - INTERVAL '30 minutes'
+			  AND u.is_active = TRUE
 			LIMIT 1
 		`,
 		code,
 	).Scan(&checkedInUserID, &memberName, &memberEmail)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			httpx.Error(c, http.StatusNotFound, "checkin_code_not_found", "check-in code not found")
+			httpx.Error(c, http.StatusNotFound, "checkin_code_not_found", "check-in code not found or expired")
 			return
 		}
 
@@ -141,6 +175,17 @@ func (h Handler) Verify(c *gin.Context) {
 			return
 		}
 
+		httpx.Error(c, http.StatusInternalServerError, "checkin_verify_failed", "failed to verify check-in code")
+		return
+	}
+
+	var alreadyCheckedIn bool
+	if err := h.db.QueryRow(
+		c.Request.Context(),
+		`SELECT EXISTS(SELECT 1 FROM event_checkins WHERE event_id = $1 AND user_id = $2)`,
+		eventID,
+		checkedInUserID,
+	).Scan(&alreadyCheckedIn); err != nil {
 		httpx.Error(c, http.StatusInternalServerError, "checkin_verify_failed", "failed to verify check-in code")
 		return
 	}
@@ -166,7 +211,7 @@ func (h Handler) Verify(c *gin.Context) {
 		eventID,
 		checkedInUserID,
 		adminUserID,
-		strings.TrimSpace(req.Notes),
+		notes,
 	)
 	if err != nil {
 		httpx.Error(c, http.StatusInternalServerError, "checkin_verify_failed", "failed to verify check-in code")
@@ -174,12 +219,13 @@ func (h Handler) Verify(c *gin.Context) {
 	}
 
 	httpx.OK(c, gin.H{
-		"eventId":    eventID,
-		"eventTitle": eventTitle,
-		"userId":     checkedInUserID,
-		"name":       memberName,
-		"email":      memberEmail,
-		"checkedIn":  true,
+		"eventId":          eventID,
+		"eventTitle":       eventTitle,
+		"userId":           checkedInUserID,
+		"name":             memberName,
+		"email":            memberEmail,
+		"checkedIn":        true,
+		"alreadyCheckedIn": alreadyCheckedIn,
 	})
 }
 
@@ -194,7 +240,8 @@ func (h Handler) Recent(c *gin.Context) {
 				u.email,
 				ch.source,
 				ch.notes,
-				ch.created_at
+				ch.created_at,
+				ch.updated_at
 			FROM event_checkins ch
 			JOIN events e ON e.id = ch.event_id
 			JOIN users u ON u.id = ch.user_id
@@ -212,7 +259,8 @@ func (h Handler) Recent(c *gin.Context) {
 	for rows.Next() {
 		var id, eventTitle, name, email, source, notes string
 		var createdAt time.Time
-		if err := rows.Scan(&id, &eventTitle, &name, &email, &source, &notes, &createdAt); err != nil {
+		var updatedAt time.Time
+		if err := rows.Scan(&id, &eventTitle, &name, &email, &source, &notes, &createdAt, &updatedAt); err != nil {
 			httpx.Error(c, http.StatusInternalServerError, "checkins_failed", "failed to load event check-ins")
 			return
 		}
@@ -225,6 +273,7 @@ func (h Handler) Recent(c *gin.Context) {
 			"source":     source,
 			"notes":      notes,
 			"createdAt":  createdAt.UTC().Format(time.RFC3339),
+			"updatedAt":  updatedAt.UTC().Format(time.RFC3339),
 		})
 	}
 

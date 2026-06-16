@@ -16,6 +16,13 @@ import { C } from "../constants/theme";
 import { getMyCheckInCode, listMyCheckInHistory } from "../api/checkinApi";
 import { s } from "../styles/appStyles";
 
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString();
+}
+
 export function CheckInScreen({ go, openDrawer, appLanguage = "en" }) {
   const [payload, setPayload] = useState(null);
   const [history, setHistory] = useState([]);
@@ -82,7 +89,7 @@ export function CheckInScreen({ go, openDrawer, appLanguage = "en" }) {
         <View style={s.plainCard}>
           <Text style={[s.rowTitle, { color: C.white }]}>Member Event Check-In</Text>
           <Text style={[s.mutedText, { color: C.muted }]}>
-            Present this QR code at church events so the welcome team can check you in.
+            Present this QR code at church events so the welcome team can check you in. Refresh this screen if the code expires.
           </Text>
         </View>
 
@@ -94,6 +101,11 @@ export function CheckInScreen({ go, openDrawer, appLanguage = "en" }) {
           <View style={[s.plainCard, { alignItems: "center" }]}>
             <Text style={[s.rowTitle, { color: C.white }]}>{payload.displayName || "Member"}</Text>
             <Text style={[s.goldSmall, { marginTop: 8, letterSpacing: 2 }]}>{payload.code}</Text>
+            {payload.expiresAt ? (
+              <Text style={[s.mutedText, { color: C.muted, marginTop: 8 }]}>
+                Code expires: {formatDateTime(payload.expiresAt)}
+              </Text>
+            ) : null}
 
             {qrUrl ? (
               <Image
@@ -131,7 +143,7 @@ export function CheckInScreen({ go, openDrawer, appLanguage = "en" }) {
               <Text style={[s.rowTitle, { color: C.white }]}>{item.eventTitle}</Text>
               <Text style={[s.goldSmall, { marginTop: 6 }]}>{item.eventDate}</Text>
               <Text style={[s.mutedText, { color: C.muted, marginTop: 6 }]}>
-                Checked in {new Date(item.createdAt).toLocaleString()}
+                Checked in {formatDateTime(item.createdAt)}
               </Text>
               {item.notes ? <Text style={s.detailBody}>{item.notes}</Text> : null}
             </View>
