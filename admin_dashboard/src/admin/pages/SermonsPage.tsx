@@ -90,10 +90,11 @@ export function SermonsPage() {
   const [wizardPreview, setWizardPreview] = useState<SermonImportPreview | null>(null);
   const [error, setError] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
+  const sermonItems = Array.isArray(sermons) ? sermons : [];
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const next = sermons.filter(sermon => {
+    const next = sermonItems.filter(sermon => {
       const matchesQuery =
         !q ||
         [sermon.title, sermon.speaker, sermon.category, sermon.type]
@@ -109,12 +110,12 @@ export function SermonsPage() {
       if (sortBy === "oldest") return a.sermonDate.localeCompare(b.sermonDate);
       return b.sermonDate.localeCompare(a.sermonDate);
     });
-  }, [query, sermons, sortBy, typeFilter]);
+  }, [query, sermonItems, sortBy, typeFilter]);
 
   const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
     filtered,
     6,
-    [query, sortBy, typeFilter, sermons.length]
+    [query, sortBy, typeFilter, sermonItems.length]
   );
 
   const filteredCatalog = useMemo(() => {
@@ -134,7 +135,7 @@ export function SermonsPage() {
 
     try {
       const response = await listSermons();
-      setSermons(response.sermons || []);
+      setSermons(Array.isArray(response.sermons) ? response.sermons : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load sermons");
     } finally {

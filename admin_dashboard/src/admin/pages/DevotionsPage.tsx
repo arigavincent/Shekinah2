@@ -67,10 +67,11 @@ export function DevotionsPage() {
   const [wizardPreview, setWizardPreview] = useState<DevotionImportPreview | null>(null);
   const [error, setError] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
+  const devotionItems = Array.isArray(devotions) ? devotions : [];
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const next = devotions.filter(devotion =>
+    const next = devotionItems.filter(devotion =>
       !q ||
       [devotion.title, devotion.excerpt, devotion.body]
         .join(" ")
@@ -83,12 +84,12 @@ export function DevotionsPage() {
       if (sortBy === "oldest") return a.devotionDate.localeCompare(b.devotionDate);
       return b.devotionDate.localeCompare(a.devotionDate);
     });
-  }, [devotions, query, sortBy]);
+  }, [devotionItems, query, sortBy]);
 
   const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
     filtered,
     6,
-    [query, sortBy, devotions.length]
+    [query, sortBy, devotionItems.length]
   );
 
   async function load() {
@@ -97,7 +98,7 @@ export function DevotionsPage() {
 
     try {
       const response = await listDevotions();
-      setDevotions(response.devotions || []);
+      setDevotions(Array.isArray(response.devotions) ? response.devotions : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load devotions");
     } finally {
