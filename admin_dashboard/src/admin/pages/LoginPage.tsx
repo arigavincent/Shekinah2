@@ -1,6 +1,5 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import { login } from "../api/authApi";
 import { saveSession } from "../auth/session";
@@ -8,7 +7,6 @@ import { InlineAlert } from "../components/InlineAlert";
 import { useAdminTheme } from "../theme";
 
 export function LoginPage() {
-  const navigate = useNavigate();
   const { mode, toggleTheme } = useAdminTheme();
 
   const [email, setEmail] = useState("");
@@ -25,7 +23,7 @@ export function LoginPage() {
     try {
       const { token, user } = await login(email.trim(), password);
       saveSession(token, user);
-      navigate("/");
+      window.location.assign(user.passwordResetRequired ? "/reset-password" : "/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to sign in";
       setError(message);

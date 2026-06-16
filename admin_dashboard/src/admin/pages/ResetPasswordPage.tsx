@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 
 import { changePassword } from "../api/authApi";
 import { getToken, getUser, saveSession } from "../auth/session";
@@ -8,7 +8,6 @@ import { InlineAlert } from "../components/InlineAlert";
 import { useAdminTheme } from "../theme";
 
 export function ResetPasswordPage() {
-  const navigate = useNavigate();
   const { mode, toggleTheme } = useAdminTheme();
   const token = getToken();
   const user = getUser();
@@ -44,7 +43,7 @@ export function ResetPasswordPage() {
     try {
       const response = await changePassword(authToken, currentPassword, newPassword);
       saveSession(response.token, response.user);
-      navigate("/");
+      window.location.assign("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to change password");
     } finally {
