@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -17,6 +18,11 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/gin-gonic/gin"
 
@@ -73,22 +79,69 @@ func (h Handler) Upload(c *gin.Context) {
 		return
 	}
 
-	if cloudinaryConfigured() {
-		h.uploadCloudinary(c, kind, file, header, ext)
-		return
-	}
+	provider := strings.ToLower(strings.TrimSpace(env("MEDIA_PROVIDER")))
 
-	if productionMediaRequiresCloudinary() {
+	switch provider {
+	case "r2":
+		if !r2Configured() {
+			httpx.Error(
+				c,
+				http.StatusServiceUnavailable,
+				"r2_required",
+				"media uploads require Cloudflare R2 configuration",
+			)
+			return
+		}
+		h.uploadR2(c, kind, file, header, ext)
+		return
+
+	case "cloudinary", "":
+		if cloudinaryConfigured() {
+			h.uploadCloudinary(c, kind, file, header, ext)
+			return
+		}
+
+		if r2Configured() {
+			h.uploadR2(c, kind, file, header, ext)
+			return
+		}
+
+		if productionMediaRequiresRemoteStorage() {
+			httpx.Error(
+				c,
+				http.StatusServiceUnavailable,
+				"remote_storage_required",
+				"media uploads require remote storage in production",
+			)
+			return
+		}
+
+		h.uploadLocal(c, kind, file, ext)
+		return
+
+	case "local":
+		if productionMediaRequiresRemoteStorage() {
+			httpx.Error(
+				c,
+				http.StatusServiceUnavailable,
+				"remote_storage_required",
+				"local media uploads are disabled in production",
+			)
+			return
+		}
+
+		h.uploadLocal(c, kind, file, ext)
+		return
+
+	default:
 		httpx.Error(
 			c,
-			http.StatusServiceUnavailable,
-			"cloudinary_required",
-			"media uploads require Cloudinary in production",
+			http.StatusBadRequest,
+			"unsupported_media_provider",
+			"MEDIA_PROVIDER must be r2, cloudinary, or local",
 		)
 		return
 	}
-
-	h.uploadLocal(c, kind, file, ext)
 }
 
 func (h Handler) uploadLocal(c *gin.Context, kind string, file multipart.File, ext string) {
@@ -133,6 +186,88 @@ func (h Handler) uploadLocal(c *gin.Context, kind string, file multipart.File, e
 			"url":      absoluteURL(c, publicPath),
 			"name":     name,
 			"size":     written,
+		},
+	})
+}
+
+func (h Handler) uploadR2(c *gin.Context, kind string, file multipart.File, header *multipart.FileHeader, ext string) {
+	name, err := randomFileName(ext)
+	if err != nil {
+		log.Printf("r2 filename failed: %v", err)
+		httpx.Error(c, http.StatusInternalServerError, "upload_name_failed", "failed to create upload filename")
+		return
+	}
+
+	objectKey := strings.Trim(kind, "/") + "/" + time.Now().UTC().Format("2006/01/02") + "/" + name
+	contentType := mime.TypeByExtension(ext)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	endpoint := r2Endpoint()
+	bucket := env("R2_BUCKET")
+	publicBaseURL := strings.TrimRight(env("R2_PUBLIC_BASE_URL"), "/")
+
+	cfg, err := config.LoadDefaultConfig(
+		c.Request.Context(),
+		config.WithRegion("auto"),
+		config.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(
+				env("R2_ACCESS_KEY_ID"),
+				env("R2_SECRET_ACCESS_KEY"),
+				"",
+			),
+		),
+	)
+	if err != nil {
+		log.Printf("r2 config failed: %v", err)
+		httpx.Error(c, http.StatusInternalServerError, "r2_config_failed", "failed to configure R2 upload")
+		return
+	}
+
+	client := s3.NewFromConfig(cfg, func(options *s3.Options) {
+		options.BaseEndpoint = aws.String(endpoint)
+		options.UsePathStyle = true
+	})
+
+	_, err = client.PutObject(c.Request.Context(), &s3.PutObjectInput{
+		Bucket:        aws.String(bucket),
+		Key:           aws.String(objectKey),
+		Body:          file,
+		ContentLength: aws.Int64(header.Size),
+		ContentType:   aws.String(contentType),
+	})
+	if err != nil {
+		log.Printf("r2 upload failed: %v", err)
+
+		if cloudinaryConfigured() {
+			if seeker, ok := file.(io.Seeker); ok {
+				_, seekErr := seeker.Seek(0, io.SeekStart)
+				if seekErr == nil {
+					log.Printf("r2 upload failed; trying cloudinary fallback")
+					h.uploadCloudinary(c, kind, file, header, ext)
+					return
+				}
+				log.Printf("rewind upload file after r2 failure failed: %v", seekErr)
+			}
+		}
+
+		httpx.Error(c, http.StatusBadGateway, "r2_upload_failed", "R2 upload failed; media was not saved")
+		return
+	}
+
+	publicURL := publicBaseURL + "/" + strings.TrimLeft(objectKey, "/")
+
+	httpx.OK(c, gin.H{
+		"media": gin.H{
+			"provider":     "r2",
+			"kind":         kind,
+			"path":         publicURL,
+			"url":          publicURL,
+			"name":         objectKey,
+			"size":         header.Size,
+			"resourceType": kind,
+			"format":       strings.TrimPrefix(ext, "."),
 		},
 	})
 }
@@ -247,7 +382,7 @@ func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.Fi
 }
 
 func (h Handler) fallbackToLocal(c *gin.Context, kind string, file multipart.File, ext string, reason error) {
-	if productionMediaRequiresCloudinary() {
+	if productionMediaRequiresRemoteStorage() {
 		log.Printf("cloudinary upload failed in production: %v", reason)
 		httpx.Error(
 			c,
@@ -350,7 +485,32 @@ func cloudinaryConfigured() bool {
 		env("CLOUDINARY_API_SECRET") != ""
 }
 
-func productionMediaRequiresCloudinary() bool {
+func r2Configured() bool {
+	return r2Endpoint() != "" &&
+		env("R2_BUCKET") != "" &&
+		env("R2_PUBLIC_BASE_URL") != "" &&
+		env("R2_ACCESS_KEY_ID") != "" &&
+		env("R2_SECRET_ACCESS_KEY") != ""
+}
+
+func r2Endpoint() string {
+	if endpoint := strings.TrimRight(env("R2_ENDPOINT"), "/"); endpoint != "" {
+		return endpoint
+	}
+
+	accountID := env("R2_ACCOUNT_ID")
+	if accountID == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID)
+}
+
+func productionMediaRequiresRemoteStorage() bool {
+	if strings.EqualFold(env("MEDIA_REQUIRE_REMOTE_STORAGE"), "true") {
+		return true
+	}
+
 	if strings.EqualFold(env("MEDIA_REQUIRE_CLOUDINARY"), "true") {
 		return true
 	}

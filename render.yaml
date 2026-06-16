@@ -31,8 +31,22 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: MEDIA_REQUIRE_CLOUDINARY
+      - key: MEDIA_PROVIDER
+        value: r2
+      - key: MEDIA_REQUIRE_REMOTE_STORAGE
         value: "true"
+      - key: R2_ACCOUNT_ID
+        value: 23bae8008ee66b558e187831094e5c95
+      - key: R2_ENDPOINT
+        value: https://23bae8008ee66b558e187831094e5c95.r2.cloudflarestorage.com
+      - key: R2_BUCKET
+        value: shekinah-media
+      - key: R2_PUBLIC_BASE_URL
+        value: https://pub-83f19d3b42f142f29254974dbc99b77b.r2.dev
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
 
       - key: MPESA_ENV
         value: sandbox
