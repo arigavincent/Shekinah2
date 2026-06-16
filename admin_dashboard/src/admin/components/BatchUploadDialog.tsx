@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
+import { uploadMedia, type MediaKind, type UploadedMedia } from "../api/adminMediaApi";
 import {
   getPublishVisibility,
   nextSundayMorningValue,
@@ -63,6 +63,7 @@ type QueueItem = {
   status: "pending" | "uploading" | "done" | "error";
   progress: number; // 0-100, -1 unknown
   error?: string;
+  media?: UploadedMedia | null;
 };
 
 type Mode = "queue" | "wizard";
@@ -71,6 +72,40 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 
 function defaultPublishAt() {
   return publishNowValue();
+}
+
+function formatBytes(size: number) {
+  if (!Number.isFinite(size) || size <= 0) return "";
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(2)} MB`;
+  if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${size} B`;
+}
+
+function mediaProviderLabel(media: UploadedMedia) {
+  switch ((media.provider || "").toLowerCase()) {
+    case "r2":
+      return "Cloudflare R2";
+    case "cloudinary":
+      return "Cloudinary";
+    case "local":
+      return "Local storage";
+    default:
+      return "Remote storage";
+  }
+}
+
+function mediaSafetyLabel(media: UploadedMedia) {
+  const ref = media.url || media.path || "";
+  if (media.provider === "r2" || ref.includes(".r2.dev") || ref.includes(".r2.cloudflarestorage.com")) {
+    return "Safe for APK";
+  }
+  if (media.provider === "cloudinary" || ref.includes("res.cloudinary.com")) {
+    return "Safe for APK";
+  }
+  if (media.provider === "local" || ref.includes("/uploads/media/")) {
+    return "Development/local storage";
+  }
+  return "Saved media URL";
 }
 
 function buildDefaults(fields: BatchField[]) {
@@ -112,6 +147,7 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
   const [error, setError] = useState("");
   const [running, setRunning] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
+  const [lastSavedMedia, setLastSavedMedia] = useState<UploadedMedia | null>(null);
   const completedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -128,6 +164,7 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
       setDraftPublishAt(defaultPublishAt());
       setError("");
       setSavedCount(0);
+      setLastSavedMedia(null);
       if (completedRef.current) {
         completedRef.current = false;
         void Promise.resolve(onCompleted());
@@ -173,7 +210,8 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
         values: { ...draftValues },
         publishAt: draftPublishAt,
         status: "pending",
-        progress: 0
+        progress: 0,
+        media: null
       }
     ]);
     resetDraft();
@@ -186,6 +224,7 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
   async function uploadOne(item: QueueItem, onProgress?: (percent: number) => void) {
     let mediaUrl = "";
     let mediaSizeBytes = 0;
+    let uploadedMedia: UploadedMedia | null = null;
 
     if (item.file) {
       const kind: MediaKind =
@@ -195,6 +234,7 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
       const response = await uploadMedia(kind, item.file, p => {
         if (onProgress) onProgress(p.percent);
       });
+      uploadedMedia = response.media;
       mediaUrl = response.media.path || response.media.url;
       mediaSizeBytes = response.media.size || item.file.size || 0;
     } else if (onProgress) {
@@ -208,6 +248,8 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
       mediaUrl,
       mediaSizeBytes
     });
+
+    return uploadedMedia;
   }
 
   function setItemProgress(id: string, percent: number) {
@@ -228,9 +270,11 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
           current.map(i => (i.id === item.id ? { ...i, status: "uploading", progress: 0, error: undefined } : i))
         );
         try {
-          await uploadOne(item, p => setItemProgress(item.id, p));
+          const media = await uploadOne(item, p => setItemProgress(item.id, p));
           completedRef.current = true;
-          setItems(current => current.map(i => (i.id === item.id ? { ...i, status: "done", progress: 100 } : i)));
+          setItems(current =>
+            current.map(i => (i.id === item.id ? { ...i, status: "done", progress: 100, media } : i))
+          );
         } catch (err) {
           setItems(current =>
             current.map(i =>
@@ -257,9 +301,9 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
       current.map(i => (i.id === id ? { ...i, status: "uploading", progress: 0, error: undefined } : i))
     );
     try {
-      await uploadOne(item, p => setItemProgress(id, p));
+      const media = await uploadOne(item, p => setItemProgress(id, p));
       completedRef.current = true;
-      setItems(current => current.map(i => (i.id === id ? { ...i, status: "done", progress: 100 } : i)));
+      setItems(current => current.map(i => (i.id === id ? { ...i, status: "done", progress: 100, media } : i)));
     } catch (err) {
       setItems(current =>
         current.map(i =>
@@ -282,17 +326,19 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
     setRunning(true);
     setWizardProgress(0);
     try {
-      await uploadOne(
+      const media = await uploadOne(
         {
           id: uid(),
           file: draftFile,
           values: { ...draftValues },
           publishAt: draftPublishAt,
           status: "pending",
-          progress: 0
+          progress: 0,
+        media: null
         },
         p => setWizardProgress(p < 0 ? 0 : p)
       );
+      setLastSavedMedia(media);
       completedRef.current = true;
       setSavedCount(c => c + 1);
       resetDraft();
@@ -523,6 +569,18 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
                               </span>
                             </div>
                           ) : null}
+                          {it.media ? (
+                            <div className="batch-media-result">
+                              <span className="status-chip success">{mediaProviderLabel(it.media)}</span>
+                              <span>{mediaSafetyLabel(it.media)}</span>
+                              {formatBytes(it.media.size) ? <span>{formatBytes(it.media.size)}</span> : null}
+                              {(it.media.url || it.media.path) ? (
+                                <a href={it.media.url || it.media.path} target="_blank" rel="noreferrer">
+                                  Open media
+                                </a>
+                              ) : null}
+                            </div>
+                          ) : null}
                           {it.error ? <span className="batch-error inline">{it.error}</span> : null}
                         </div>
                         <div className="batch-queue-actions">
@@ -590,6 +648,18 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
                   <span className="batch-progress-label">
                     Uploading… {Math.round(wizardProgress)}%
                   </span>
+                </div>
+              ) : null}
+              {lastSavedMedia ? (
+                <div className="batch-media-result session-result">
+                  <span className="status-chip success">{mediaProviderLabel(lastSavedMedia)}</span>
+                  <span>{mediaSafetyLabel(lastSavedMedia)}</span>
+                  {formatBytes(lastSavedMedia.size) ? <span>{formatBytes(lastSavedMedia.size)}</span> : null}
+                  {(lastSavedMedia.url || lastSavedMedia.path) ? (
+                    <a href={lastSavedMedia.url || lastSavedMedia.path} target="_blank" rel="noreferrer">
+                      Open last upload
+                    </a>
+                  ) : null}
                 </div>
               ) : null}
               {savedCount > 0 ? (

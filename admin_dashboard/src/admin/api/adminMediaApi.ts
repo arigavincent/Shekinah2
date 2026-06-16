@@ -9,6 +9,9 @@ export type UploadedMedia = {
   url: string;
   name: string;
   size: number;
+  provider?: string;
+  resourceType?: string;
+  format?: string;
 };
 
 function adminToken() {
@@ -42,6 +45,28 @@ function pickNumber(obj: AnyRecord | undefined | null, ...keys: string[]): numbe
     if (typeof v === "number" && Number.isFinite(v)) return v;
   }
   return 0;
+}
+
+function inferProviderFromUrl(value: string): string {
+  const lower = value.toLowerCase();
+
+  if (lower.includes(".r2.dev") || lower.includes(".r2.cloudflarestorage.com")) {
+    return "r2";
+  }
+
+  if (lower.includes("res.cloudinary.com")) {
+    return "cloudinary";
+  }
+
+  if (lower.includes("/uploads/media/")) {
+    return "local";
+  }
+
+  return "";
+}
+
+function mediaProvider(obj: AnyRecord | undefined | null, url: string, path: string): string {
+  return pickString(obj, "provider") || inferProviderFromUrl(url || path);
 }
 
 function isMediaCandidate(value: unknown): value is AnyRecord {
@@ -130,7 +155,9 @@ function normalizeMediaResponse(
         path: extracted,
         url: extracted,
         name: file.name,
-        size: file.size || 0
+        size: file.size || 0,
+      provider: inferProviderFromUrl(extracted),
+        provider: inferProviderFromUrl(extracted)
       };
     }
   }
@@ -157,7 +184,10 @@ function normalizeMediaResponse(
       path: path || url,
       url: url || path,
       name: pickString(c, "name", "original_filename", "filename") || file.name,
-      size: pickNumber(c, "size", "bytes", "length") || file.size || 0
+      size: pickNumber(c, "size", "bytes", "length") || file.size || 0,
+      provider: mediaProvider(c, url, path),
+      resourceType: pickString(c, "resourceType", "resource_type"),
+      format: pickString(c, "format")
     };
   }
 

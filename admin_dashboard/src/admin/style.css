@@ -2347,3 +2347,31 @@ header.page-header button svg { margin-right: 0.35rem; vertical-align: -2px; }
   color: var(--text);
   letter-spacing: 0.02em;
 }
+
+.batch-media-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.batch-media-result a {
+  color: var(--gold);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.batch-media-result a:hover {
+  text-decoration: underline;
+}
+
+.batch-media-result.session-result {
+  padding: 0.8rem;
+  border: 1px solid var(--success-border);
+  border-radius: 14px;
+  background: var(--success-wash);
+}
