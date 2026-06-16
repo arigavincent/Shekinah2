@@ -74,7 +74,7 @@ func (h Handler) Upload(c *gin.Context) {
 	}
 
 	if cloudinaryConfigured() {
-		h.uploadCloudinary(c, kind, file, header)
+		h.uploadCloudinary(c, kind, file, header, ext)
 		return
 	}
 
@@ -127,7 +127,7 @@ func (h Handler) uploadLocal(c *gin.Context, kind string, file multipart.File, e
 	})
 }
 
-func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.File, header *multipart.FileHeader) {
+func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.File, header *multipart.FileHeader, ext string) {
 	cloudName := env("CLOUDINARY_CLOUD_NAME")
 	apiKey := env("CLOUDINARY_API_KEY")
 	apiSecret := env("CLOUDINARY_API_SECRET")
@@ -155,24 +155,24 @@ func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.Fi
 
 	for key, value := range fields {
 		if err := writer.WriteField(key, value); err != nil {
-			httpx.Error(c, http.StatusInternalServerError, "cloudinary_payload_failed", "failed to prepare upload")
+			h.fallbackToLocal(c, kind, file, ext, fmt.Errorf("cloudinary payload failed: %w", err))
 			return
 		}
 	}
 
 	part, err := writer.CreateFormFile("file", header.Filename)
 	if err != nil {
-		httpx.Error(c, http.StatusInternalServerError, "cloudinary_file_failed", "failed to prepare upload file")
+		h.fallbackToLocal(c, kind, file, ext, fmt.Errorf("cloudinary file failed: %w", err))
 		return
 	}
 
 	if _, err := io.Copy(part, file); err != nil {
-		httpx.Error(c, http.StatusInternalServerError, "cloudinary_copy_failed", "failed to read upload file")
+		h.fallbackToLocal(c, kind, file, ext, fmt.Errorf("cloudinary copy failed: %w", err))
 		return
 	}
 
 	if err := writer.Close(); err != nil {
-		httpx.Error(c, http.StatusInternalServerError, "cloudinary_close_failed", "failed to finalize upload")
+		h.fallbackToLocal(c, kind, file, ext, fmt.Errorf("cloudinary close failed: %w", err))
 		return
 	}
 
@@ -183,7 +183,7 @@ func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.Fi
 
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, endpoint, &body)
 	if err != nil {
-		httpx.Error(c, http.StatusInternalServerError, "cloudinary_request_failed", "failed to create Cloudinary request")
+		h.fallbackToLocal(c, kind, file, ext, fmt.Errorf("cloudinary request failed: %w", err))
 		return
 	}
 
@@ -192,7 +192,7 @@ func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.Fi
 	resp, err := h.client.Do(req)
 	if err != nil {
 		log.Printf("cloudinary upload failed: %v", err)
-		httpx.Error(c, http.StatusBadGateway, "cloudinary_upload_failed", "failed to upload media")
+		h.fallbackToLocal(c, kind, file, ext, fmt.Errorf("cloudinary upload failed: %w", err))
 		return
 	}
 	defer resp.Body.Close()
@@ -202,13 +202,13 @@ func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.Fi
 
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		log.Printf("cloudinary invalid response: %s", string(raw))
-		httpx.Error(c, http.StatusBadGateway, "cloudinary_response_invalid", "invalid media upload response")
+		h.fallbackToLocal(c, kind, file, ext, fmt.Errorf("cloudinary response invalid: %s", string(raw)))
 		return
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		log.Printf("cloudinary rejected upload: %s", string(raw))
-		httpx.Error(c, http.StatusBadGateway, "cloudinary_upload_rejected", "media upload was rejected")
+		h.fallbackToLocal(c, kind, file, ext, fmt.Errorf("cloudinary rejected upload: %s", string(raw)))
 		return
 	}
 
@@ -218,7 +218,7 @@ func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.Fi
 	}
 
 	if url == "" {
-		httpx.Error(c, http.StatusBadGateway, "cloudinary_url_missing", "media upload did not return a URL")
+		h.fallbackToLocal(c, kind, file, ext, errors.New("cloudinary upload did not return a URL"))
 		return
 	}
 
@@ -234,6 +234,16 @@ func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.Fi
 			"format":       payload.Format,
 		},
 	})
+}
+
+func (h Handler) fallbackToLocal(c *gin.Context, kind string, file multipart.File, ext string, reason error) {
+	log.Printf("cloudinary fallback to local upload: %v", reason)
+	if seeker, ok := file.(io.Seeker); ok {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			log.Printf("rewind upload file failed: %v", err)
+		}
+	}
+	h.uploadLocal(c, kind, file, ext)
 }
 
 func validateUpload(kind string, ext string) error {
