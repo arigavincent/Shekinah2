@@ -474,6 +474,7 @@ func (r Repository) Prayers(ctx context.Context) ([]Prayer, error) {
 			is_public
 		FROM prayers
 		WHERE is_public = TRUE
+		  AND status IN ('reviewed', 'prayed_for', 'contacted')
 		ORDER BY created_at DESC
 	`
 

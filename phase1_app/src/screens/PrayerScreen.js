@@ -47,8 +47,10 @@ function prayerStatusLabel(prayer) {
       return "Prayed For";
     case "contacted":
       return "Contacted";
+    case "hidden":
+      return "Hidden";
     default:
-      return "New";
+      return "Under Review";
   }
 }
 
@@ -296,7 +298,7 @@ export function PrayerScreen({ go, tab, setTab, appLanguage = "en" }) {
       Alert.alert(
         tr(appLanguage, "Prayer Request Submitted"),
         form.isPublic
-          ? tr(appLanguage, "Your prayer request is now visible on the Prayer Wall.")
+          ? tr(appLanguage, "Your public prayer request has been sent for review. It will appear on the Prayer Wall after approval.")
           : tr(appLanguage, "Your private prayer request has been saved to My Requests and is available to the church team in admin review.")
       );
     } catch (error) {
@@ -359,7 +361,7 @@ export function PrayerScreen({ go, tab, setTab, appLanguage = "en" }) {
               <View style={s.formSection}>
                 <Text style={s.formSectionTitle}>{tr(appLanguage, "Submit A Prayer Request")}</Text>
                 <Text style={s.formHelp}>
-                  {tr(appLanguage, "Public requests appear on the wall for everyone. Private requests stay off the wall and can be reviewed by the church team in admin.")}
+                  {tr(appLanguage, "Public requests appear on the wall after church team review. Private requests stay off the wall and can be reviewed by the church team in admin.")}
                 </Text>
 
                 <Text style={s.inputLabel}>{tr(appLanguage, "Category")}</Text>

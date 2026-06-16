@@ -119,6 +119,7 @@ func (h Handler) ListPublic(c *gin.Context) {
 			SELECT id, name, text, created_at, count, category, is_public, status
 			FROM prayers
 			WHERE is_public = TRUE
+			  AND status IN ('reviewed', 'prayed_for', 'contacted')
 			ORDER BY created_at DESC
 			LIMIT 100
 		`,
@@ -332,6 +333,7 @@ func (h Handler) Pray(c *gin.Context) {
 			FROM prayers p
 			WHERE p.id = $1
 			  AND p.is_public = TRUE
+			  AND p.status IN ('reviewed', 'prayed_for', 'contacted')
 			ON CONFLICT DO NOTHING
 		`,
 		prayerID,
@@ -366,6 +368,7 @@ func (h Handler) Pray(c *gin.Context) {
 			FROM prayers
 			WHERE id = $1
 			  AND is_public = TRUE
+			  AND status IN ('reviewed', 'prayed_for', 'contacted')
 		`,
 		prayerID,
 	))

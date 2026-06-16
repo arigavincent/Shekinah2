@@ -14,7 +14,8 @@ const STATUS_OPTIONS = [
   { value: "new", label: "New" },
   { value: "reviewed", label: "Reviewed" },
   { value: "prayed_for", label: "Prayed For" },
-  { value: "contacted", label: "Contacted" }
+  { value: "contacted", label: "Contacted" },
+  { value: "hidden", label: "Hidden" }
 ];
 
 function formatDate(value?: string | null) {
@@ -30,7 +31,8 @@ function statusLabel(status: string) {
   return STATUS_OPTIONS.find(option => option.value === status)?.label || status;
 }
 
-function statusTone(status: string): "success" | "warning" | "neutral" {
+function statusTone(status: string): "success" | "warning" | "neutral" | "danger" {
+  if (status === "hidden") return "danger";
   if (status === "prayed_for" || status === "contacted") return "success";
   if (status === "reviewed") return "warning";
   return "neutral";
@@ -51,7 +53,7 @@ export function PrayersPage() {
   const [prayers, setPrayers] = useState<AdminPrayer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [scope, setScope] = useState("private");
+  const [scope, setScope] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "status">("newest");
   const [loading, setLoading] = useState(true);
@@ -175,7 +177,7 @@ export function PrayersPage() {
           <p className="eyebrow">Care</p>
           <h1>Prayer Requests</h1>
           <p className="muted">
-            Review public and private requests, track follow-up status, and leave internal notes for the prayer team.
+            Review public and private requests, approve safe public requests for the Prayer Wall, and leave internal notes for the prayer team.
           </p>
         </div>
 
@@ -223,13 +225,13 @@ export function PrayersPage() {
                 <option value="status">Status A-Z</option>
               </select>
 
-              {(query || scope !== "private" || statusFilter !== "all" || sortBy !== "newest") ? (
+              {(query || scope !== "all" || statusFilter !== "all" || sortBy !== "newest") ? (
                 <button
                   type="button"
                   className="secondary compact"
                   onClick={() => {
                     setQuery("");
-                    setScope("private");
+                    setScope("all");
                     setStatusFilter("all");
                     setSortBy("newest");
                   }}
@@ -386,6 +388,9 @@ export function PrayersPage() {
                     </option>
                   ))}
                 </select>
+                <p className="small-muted">
+                  Public requests appear in the app only after they are reviewed, prayed for, or contacted. Use Hidden for unsafe or inappropriate requests.
+                </p>
               </label>
 
               <label>

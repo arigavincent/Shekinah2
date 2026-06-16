@@ -14,6 +14,7 @@ var allowedStatuses = map[string]bool{
 	"reviewed":   true,
 	"prayed_for": true,
 	"contacted":  true,
+	"hidden":     true,
 }
 
 type Service struct {
