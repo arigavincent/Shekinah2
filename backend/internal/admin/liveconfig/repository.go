@@ -28,9 +28,21 @@ func (r Repository) Get(ctx context.Context) (LiveConfig, error) {
 			viewers,
 			next_service,
 			youtube_id,
+			COALESCE(provider, 'youtube'),
+			COALESCE(cloudflare_live_input_id, ''),
+			COALESCE(cloudflare_playback_uid, ''),
+			COALESCE(playback_hls_url, ''),
+			COALESCE(playback_dash_url, ''),
+			COALESCE(embed_url, ''),
+			COALESCE(rtmps_url, ''),
+			COALESCE(srt_url, ''),
+			COALESCE(srt_stream_id, ''),
+			COALESCE(stream_key, ''),
+			COALESCE(srt_passphrase, ''),
+			COALESCE(replay_url, ''),
 			updated_at
 		FROM live_stream_config
-		ORDER BY updated_at DESC
+		WHERE id = 'main'
 		LIMIT 1
 	`
 
@@ -55,9 +67,21 @@ func (r Repository) Upsert(ctx context.Context, command Command) (LiveConfig, er
 			viewers,
 			next_service,
 			youtube_id,
+			provider,
+			cloudflare_live_input_id,
+			cloudflare_playback_uid,
+			playback_hls_url,
+			playback_dash_url,
+			embed_url,
+			rtmps_url,
+			srt_url,
+			srt_stream_id,
+			stream_key,
+			srt_passphrase,
+			replay_url,
 			updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, now())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, now())
 		ON CONFLICT (id)
 		DO UPDATE SET
 			is_live = EXCLUDED.is_live,
@@ -65,6 +89,18 @@ func (r Repository) Upsert(ctx context.Context, command Command) (LiveConfig, er
 			viewers = EXCLUDED.viewers,
 			next_service = EXCLUDED.next_service,
 			youtube_id = EXCLUDED.youtube_id,
+			provider = EXCLUDED.provider,
+			cloudflare_live_input_id = EXCLUDED.cloudflare_live_input_id,
+			cloudflare_playback_uid = EXCLUDED.cloudflare_playback_uid,
+			playback_hls_url = EXCLUDED.playback_hls_url,
+			playback_dash_url = EXCLUDED.playback_dash_url,
+			embed_url = EXCLUDED.embed_url,
+			rtmps_url = EXCLUDED.rtmps_url,
+			srt_url = EXCLUDED.srt_url,
+			srt_stream_id = EXCLUDED.srt_stream_id,
+			stream_key = EXCLUDED.stream_key,
+			srt_passphrase = EXCLUDED.srt_passphrase,
+			replay_url = EXCLUDED.replay_url,
 			updated_at = now()
 		RETURNING
 			id,
@@ -73,6 +109,18 @@ func (r Repository) Upsert(ctx context.Context, command Command) (LiveConfig, er
 			viewers,
 			next_service,
 			youtube_id,
+			COALESCE(provider, 'youtube'),
+			COALESCE(cloudflare_live_input_id, ''),
+			COALESCE(cloudflare_playback_uid, ''),
+			COALESCE(playback_hls_url, ''),
+			COALESCE(playback_dash_url, ''),
+			COALESCE(embed_url, ''),
+			COALESCE(rtmps_url, ''),
+			COALESCE(srt_url, ''),
+			COALESCE(srt_stream_id, ''),
+			COALESCE(stream_key, ''),
+			COALESCE(srt_passphrase, ''),
+			COALESCE(replay_url, ''),
 			updated_at
 	`
 
@@ -86,6 +134,18 @@ func (r Repository) Upsert(ctx context.Context, command Command) (LiveConfig, er
 			command.Viewers,
 			command.NextService,
 			command.YoutubeID,
+			command.Provider,
+			command.CloudflareLiveInputID,
+			command.CloudflarePlaybackUID,
+			command.PlaybackHLSURL,
+			command.PlaybackDASHURL,
+			command.EmbedURL,
+			command.RTMPSURL,
+			command.SRTURL,
+			command.SRTStreamID,
+			command.StreamKey,
+			command.SRTPassphrase,
+			command.ReplayURL,
 		),
 	)
 	if err != nil {
@@ -109,10 +169,23 @@ func scanLiveConfig(row liveConfigScanner) (LiveConfig, error) {
 		&item.Viewers,
 		&item.NextService,
 		&item.YoutubeID,
+		&item.Provider,
+		&item.CloudflareLiveInputID,
+		&item.CloudflarePlaybackUID,
+		&item.PlaybackHLSURL,
+		&item.PlaybackDASHURL,
+		&item.EmbedURL,
+		&item.RTMPSURL,
+		&item.SRTURL,
+		&item.SRTStreamID,
+		&item.StreamKey,
+		&item.SRTPassphrase,
+		&item.ReplayURL,
 		&item.UpdatedAt,
 	); err != nil {
 		return LiveConfig{}, err
 	}
 
+	item.HasCloudflareLiveInput = item.CloudflareLiveInputID != ""
 	return item, nil
 }

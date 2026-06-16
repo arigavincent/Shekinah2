@@ -73,7 +73,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	adminBranchHandler := adminbranches.NewHandler(adminBranchService)
 
 	adminLiveConfigRepository := adminliveconfig.NewRepository(db)
-	adminLiveConfigService := adminliveconfig.NewService(adminLiveConfigRepository)
+	adminLiveConfigService := adminliveconfig.NewService(adminLiveConfigRepository, cfg)
 	adminLiveConfigHandler := adminliveconfig.NewHandler(adminLiveConfigService)
 	adminPrayerRepository := adminprayers.NewRepository(db)
 	adminPrayerService := adminprayers.NewService(adminPrayerRepository)
@@ -200,6 +200,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.DELETE("/branches/:id", adminBranchHandler.Delete)
 
 			adminGroup.GET("/live-config", adminLiveConfigHandler.Get)
+			adminGroup.POST("/live-config/cloudflare/live-input", adminLiveConfigHandler.CreateCloudflareLiveInput)
 			adminGroup.PATCH("/live-config", adminLiveConfigHandler.Update)
 			adminGroup.GET("/prayers", adminPrayerHandler.List)
 			adminGroup.PATCH("/prayers/:id", adminPrayerHandler.Update)

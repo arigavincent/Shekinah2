@@ -31,6 +31,24 @@ func (h Handler) Get(c *gin.Context) {
 	})
 }
 
+func (h Handler) CreateCloudflareLiveInput(c *gin.Context) {
+	item, err := h.service.CreateCloudflareLiveInput(c.Request.Context())
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrCloudflareNotConfigured):
+			httpx.Error(c, http.StatusConflict, "cloudflare_not_configured", "Cloudflare Stream is not configured on the backend")
+		default:
+			log.Printf("cloudflare live input create failed: %v", err)
+			httpx.Error(c, http.StatusBadGateway, "cloudflare_live_input_failed", "failed to create Cloudflare live input")
+		}
+		return
+	}
+
+	httpx.Created(c, gin.H{
+		"liveConfig": item,
+	})
+}
+
 func (h Handler) Update(c *gin.Context) {
 	var req UpdateRequest
 
@@ -43,7 +61,7 @@ func (h Handler) Update(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidInput):
-			httpx.Error(c, http.StatusBadRequest, "invalid_input", "valid title, nextService, and youtubeId are required")
+			httpx.Error(c, http.StatusBadRequest, "invalid_input", "valid title, nextService, provider, and playback settings are required")
 		default:
 			log.Printf("live config update failed: %v", err)
 			httpx.Error(c, http.StatusInternalServerError, "live_config_update_failed", "failed to update live config")

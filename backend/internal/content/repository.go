@@ -39,7 +39,17 @@ func (r Repository) LatestScripture(ctx context.Context) (Scripture, error) {
 
 func (r Repository) LiveStream(ctx context.Context) (LiveStream, error) {
 	const query = `
-		SELECT is_live, title, viewers, next_service, youtube_id
+		SELECT
+			is_live,
+			title,
+			viewers,
+			next_service,
+			youtube_id,
+			COALESCE(provider, 'youtube'),
+			COALESCE(playback_hls_url, ''),
+			COALESCE(playback_dash_url, ''),
+			COALESCE(embed_url, ''),
+			COALESCE(replay_url, '')
 		FROM live_stream_config
 		WHERE id = 'main'
 	`
@@ -52,6 +62,11 @@ func (r Repository) LiveStream(ctx context.Context) (LiveStream, error) {
 		&item.Viewers,
 		&item.NextService,
 		&item.YoutubeID,
+		&item.Provider,
+		&item.PlaybackHLSURL,
+		&item.PlaybackDASHURL,
+		&item.EmbedURL,
+		&item.ReplayURL,
 	)
 	if err != nil {
 		return LiveStream{}, fmt.Errorf("query live stream config: %w", err)

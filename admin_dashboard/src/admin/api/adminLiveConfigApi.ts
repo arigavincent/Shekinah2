@@ -1,6 +1,8 @@
 import { apiRequest } from "./client";
 import { getToken } from "../auth/session";
 
+export type LiveProvider = "youtube" | "facebook" | "external_hls" | "cloudflare_stream";
+
 export type LiveConfig = {
   id: string;
   isLive: boolean;
@@ -8,6 +10,19 @@ export type LiveConfig = {
   viewers: string;
   nextService: string;
   youtubeId: string;
+  provider: LiveProvider;
+  cloudflareLiveInputId?: string;
+  cloudflarePlaybackUid?: string;
+  playbackHlsUrl?: string;
+  playbackDashUrl?: string;
+  embedUrl?: string;
+  rtmpsUrl?: string;
+  srtUrl?: string;
+  srtStreamId?: string;
+  streamKey?: string;
+  srtPassphrase?: string;
+  replayUrl?: string;
+  hasCloudflareLiveInput?: boolean;
   updatedAt: string;
 };
 
@@ -17,6 +32,8 @@ export type LiveConfigPayload = {
   viewers: string;
   nextService: string;
   youtubeId: string;
+  provider: LiveProvider;
+  replayUrl?: string;
 };
 
 function adminToken() {
@@ -40,5 +57,12 @@ export function updateLiveConfig(payload: Partial<LiveConfigPayload>) {
     method: "PATCH",
     token: adminToken(),
     body: payload
+  });
+}
+
+export function createCloudflareLiveInput() {
+  return apiRequest<{ liveConfig: LiveConfig }>("/api/v1/admin/live-config/cloudflare/live-input", {
+    method: "POST",
+    token: adminToken()
   });
 }

@@ -23,11 +23,16 @@ type Scripture struct {
 }
 
 type LiveStream struct {
-	IsLive      bool   `json:"isLive"`
-	Title       string `json:"title"`
-	Viewers     string `json:"viewers"`
-	NextService string `json:"nextService"`
-	YoutubeID   string `json:"youtubeId"`
+	IsLive          bool   `json:"isLive"`
+	Title           string `json:"title"`
+	Viewers         string `json:"viewers"`
+	NextService     string `json:"nextService"`
+	YoutubeID       string `json:"youtubeId"`
+	Provider        string `json:"provider"`
+	PlaybackHLSURL  string `json:"playbackHlsUrl,omitempty"`
+	PlaybackDASHURL string `json:"playbackDashUrl,omitempty"`
+	EmbedURL        string `json:"embedUrl,omitempty"`
+	ReplayURL       string `json:"replayUrl,omitempty"`
 }
 
 type Devotion struct {

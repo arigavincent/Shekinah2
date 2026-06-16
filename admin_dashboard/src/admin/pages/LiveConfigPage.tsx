@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
 import {
+  createCloudflareLiveInput,
   getLiveConfig,
   type LiveConfig,
   type LiveConfigPayload,
@@ -16,7 +17,9 @@ const emptyForm: LiveConfigPayload = {
   title: "Live Stream",
   viewers: "0",
   nextService: "",
-  youtubeId: ""
+  youtubeId: "",
+  provider: "youtube",
+  replayUrl: ""
 };
 
 function normalizeYouTubeInput(value: string) {
@@ -32,12 +35,39 @@ function normalizeYouTubeInput(value: string) {
   return match?.[1] || raw;
 }
 
+function copyValue(value: string | undefined, label: string, showToast: ReturnType<typeof useAdminFeedback>["showToast"]) {
+  const clean = (value || "").trim();
+  if (!clean) return;
+
+  navigator.clipboard.writeText(clean);
+  showToast({
+    title: `${label} copied`,
+    message: "Paste it into OBS or your encoder.",
+    tone: "success"
+  });
+}
+
+function SecretValue({ value }: { value?: string }) {
+  const [revealed, setRevealed] = useState(false);
+  if (!value) return <span className="small-muted">Not generated</span>;
+
+  return (
+    <span className="secret-value">
+      <code>{revealed ? value : "••••••••••••••••••••••••"}</code>
+      <button type="button" className="secondary compact" onClick={() => setRevealed(current => !current)}>
+        {revealed ? "Hide" : "Reveal"}
+      </button>
+    </span>
+  );
+}
+
 export function LiveConfigPage() {
   const { showToast } = useAdminFeedback();
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null);
   const [form, setForm] = useState<LiveConfigPayload>({ ...emptyForm });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [creatingInput, setCreatingInput] = useState(false);
   const [error, setError] = useState("");
 
   async function load() {
@@ -54,7 +84,9 @@ export function LiveConfigPage() {
         title: config.title || emptyForm.title,
         viewers: config.viewers || "0",
         nextService: config.nextService || emptyForm.nextService,
-        youtubeId: config.youtubeId || emptyForm.youtubeId
+        youtubeId: config.youtubeId || emptyForm.youtubeId,
+        provider: config.provider || "youtube",
+        replayUrl: config.replayUrl || ""
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load live config");
@@ -79,12 +111,19 @@ export function LiveConfigPage() {
 
   function validate() {
     if (!form.nextService.trim()) return "Next service is required.";
-    if (form.isLive) {
-      if (!form.title.trim()) return "Live title is required.";
+    if (!form.title.trim()) return "Live title is required.";
+
+    if (form.provider === "youtube" && form.isLive) {
       if (!form.youtubeId.trim()) return "YouTube video/live ID is required.";
       if (!isValidYouTubeId(form.youtubeId)) return "YouTube video/live ID is invalid.";
-    } else if (form.youtubeId.trim() && !isValidYouTubeId(form.youtubeId)) {
+    }
+
+    if (form.youtubeId.trim() && !isValidYouTubeId(form.youtubeId)) {
       return "YouTube video/live ID is invalid.";
+    }
+
+    if (form.provider === "cloudflare_stream" && form.isLive && !liveConfig?.playbackHlsUrl) {
+      return "Create a Cloudflare live input before going live with Shekinah Live.";
     }
 
     return "";
@@ -108,7 +147,9 @@ export function LiveConfigPage() {
         title: form.title.trim(),
         viewers: form.viewers.trim(),
         nextService: form.nextService.trim(),
-        youtubeId: form.youtubeId.trim()
+        youtubeId: form.youtubeId.trim(),
+        provider: form.provider,
+        replayUrl: form.replayUrl?.trim() || ""
       });
 
       setLiveConfig(response.liveConfig);
@@ -126,6 +167,31 @@ export function LiveConfigPage() {
     }
   }
 
+  async function createInput() {
+    setCreatingInput(true);
+    setError("");
+
+    try {
+      const response = await createCloudflareLiveInput();
+      setLiveConfig(response.liveConfig);
+      setForm(current => ({
+        ...current,
+        provider: "cloudflare_stream"
+      }));
+      showToast({
+        title: "Cloudflare live input created",
+        message: "Copy the RTMPS URL and stream key into OBS or your encoder.",
+        tone: "success"
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create Cloudflare live input");
+    } finally {
+      setCreatingInput(false);
+    }
+  }
+
+  const isCloudflare = form.provider === "cloudflare_stream";
+
   return (
     <main>
       <header className="page-header">
@@ -133,7 +199,7 @@ export function LiveConfigPage() {
           <p className="eyebrow">Broadcast</p>
           <h1>Live Config</h1>
           <p className="muted">
-            Control the live service status and YouTube stream used by the mobile app.
+            Create a Shekinah-owned Cloudflare live input, manage OBS credentials, and control what the mobile app shows.
           </p>
         </div>
 
@@ -158,6 +224,16 @@ export function LiveConfigPage() {
             <p className="muted">Loading live config...</p>
           ) : (
             <>
+              <label>
+                Live Provider
+                <select value={form.provider} onChange={event => updateField("provider", event.target.value as LiveConfigPayload["provider"])}>
+                  <option value="cloudflare_stream">Shekinah Live / Cloudflare Stream</option>
+                  <option value="youtube">YouTube fallback</option>
+                  <option value="facebook">Facebook fallback</option>
+                  <option value="external_hls">External HLS</option>
+                </select>
+              </label>
+
               <label className="checkbox-label normal-offset">
                 <input
                   type="checkbox"
@@ -172,7 +248,7 @@ export function LiveConfigPage() {
                 <input
                   value={form.title}
                   onChange={event => updateField("title", event.target.value)}
-                  placeholder="Live Stream"
+                  placeholder="Sunday Service Live"
                 />
               </label>
 
@@ -197,18 +273,22 @@ export function LiveConfigPage() {
               </div>
 
               <label>
-                YouTube ID
+                Fallback YouTube ID
                 <input
                   value={form.youtubeId}
                   onChange={event => updateField("youtubeId", normalizeYouTubeInput(event.target.value))}
-                  placeholder="Optional until service is live"
+                  placeholder="Optional fallback video/live ID"
                 />
               </label>
 
-              <p className="small-muted">
-                Use only the YouTube video/live ID, not the full URL. Example:
-                <code> jfKfPfyJRdk</code>
-              </p>
+              <label>
+                Replay URL
+                <input
+                  value={form.replayUrl || ""}
+                  onChange={event => updateField("replayUrl", event.target.value)}
+                  placeholder="Optional replay URL after the service"
+                />
+              </label>
 
               <button disabled={saving}>
                 {saving ? "Saving..." : "Save Live Config"}
@@ -236,17 +316,78 @@ export function LiveConfigPage() {
 
         <section className="list-card">
           <div className="section-title-row">
-            <h2>Mobile Preview Data</h2>
+            <h2>Shekinah Live Input</h2>
           </div>
 
           <div className="preview-card">
             <span className={form.isLive ? "live-dot on" : "live-dot"} />
-            <p className="eyebrow">{form.isLive ? "Live Now" : "Not Live"}</p>
-            <h3>{form.title}</h3>
-            <p className="muted">Viewers: {form.viewers || "0"}</p>
-            <p className="muted">Next service: {form.nextService}</p>
-            <p className="small-muted">YouTube ID: {form.youtubeId}</p>
+            <p className="eyebrow">{isCloudflare ? "Cloudflare Stream" : "Fallback Provider"}</p>
+            <h3>{liveConfig?.cloudflareLiveInputId ? "Live input ready" : "No Cloudflare input yet"}</h3>
+            <p className="muted">
+              Create one live input, copy the broadcast settings into OBS, then reuse it for services.
+            </p>
+
+            <button
+              type="button"
+              className="secondary"
+              onClick={createInput}
+              disabled={creatingInput}
+            >
+              {creatingInput ? "Creating..." : liveConfig?.cloudflareLiveInputId ? "Create New Cloudflare Live Input" : "Create Cloudflare Live Input"}
+            </button>
           </div>
+
+          {liveConfig?.cloudflareLiveInputId ? (
+            <div className="credential-grid">
+              <article>
+                <span>Playback HLS</span>
+                <code>{liveConfig.playbackHlsUrl || "Not generated"}</code>
+                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.playbackHlsUrl, "Playback HLS URL", showToast)}>
+                  Copy
+                </button>
+              </article>
+
+              <article>
+                <span>RTMPS URL</span>
+                <code>{liveConfig.rtmpsUrl || "Not generated"}</code>
+                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.rtmpsUrl, "RTMPS URL", showToast)}>
+                  Copy
+                </button>
+              </article>
+
+              <article>
+                <span>Stream Key</span>
+                <SecretValue value={liveConfig.streamKey} />
+                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.streamKey, "Stream key", showToast)}>
+                  Copy
+                </button>
+              </article>
+
+              <article>
+                <span>SRT URL</span>
+                <code>{liveConfig.srtUrl || "Not generated"}</code>
+                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.srtUrl, "SRT URL", showToast)}>
+                  Copy
+                </button>
+              </article>
+
+              <article>
+                <span>SRT Stream ID</span>
+                <code>{liveConfig.srtStreamId || "Not generated"}</code>
+                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.srtStreamId, "SRT stream ID", showToast)}>
+                  Copy
+                </button>
+              </article>
+
+              <article>
+                <span>SRT Passphrase</span>
+                <SecretValue value={liveConfig.srtPassphrase} />
+                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.srtPassphrase, "SRT passphrase", showToast)}>
+                  Copy
+                </button>
+              </article>
+            </div>
+          ) : null}
 
           {liveConfig ? (
             <p className="small-muted">
