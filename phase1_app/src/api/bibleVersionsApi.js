@@ -1,6 +1,14 @@
 import { API_CONFIG } from "../config/apiConfig";
 import { request, requestWithAuth } from "./client";
 
+function resolveBibleUrl(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${API_CONFIG.baseUrl}${raw}`;
+  return `${API_CONFIG.baseUrl}/${raw}`;
+}
+
 export function listBibleVersions(query = "") {
   const suffix = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
   return request(`/api/v1/bible/versions${suffix}`);
@@ -9,24 +17,14 @@ export function listBibleVersions(query = "") {
 export function getBibleVersionDownloadUrl(version) {
   if (!version) return "";
 
-  const primary = typeof version.downloadUrl === "string" ? version.downloadUrl.trim() : "";
+  const primary = resolveBibleUrl(version.downloadUrl);
   if (primary) return primary;
 
-  const fallback = typeof version.fallbackDownloadUrl === "string" ? version.fallbackDownloadUrl.trim() : "";
-  if (!fallback) return "";
-
-  if (/^https?:\/\//i.test(fallback)) {
-    return fallback;
-  }
-
-  return `${API_CONFIG.baseUrl}${fallback}`;
+  return resolveBibleUrl(version.fallbackDownloadUrl);
 }
 
 export function getBibleVersionFallbackUrl(version) {
-  const fallback = typeof version?.fallbackDownloadUrl === "string" ? version.fallbackDownloadUrl.trim() : "";
-  if (!fallback) return "";
-  if (/^https?:\/\//i.test(fallback)) return fallback;
-  return `${API_CONFIG.baseUrl}${fallback}`;
+  return resolveBibleUrl(version?.fallbackDownloadUrl);
 }
 
 export function listInstalledBibleVersionsRemote() {

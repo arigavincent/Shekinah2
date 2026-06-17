@@ -73,7 +73,7 @@ function BibleVersionCard({ go, appLanguage }) {
             width: 42,
             height: 42,
             borderRadius: 21,
-            backgroundColor: "rgba(212, 175, 55, 0.14)",
+            backgroundColor: C.goldSoft,
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 1,

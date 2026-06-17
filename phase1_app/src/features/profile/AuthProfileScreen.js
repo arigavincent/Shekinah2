@@ -21,18 +21,35 @@ import {
 } from "../auth/authSession";
 import { API_CONFIG } from "../../config/apiConfig";
 import { APP_LANGUAGES, tr } from "../../i18n/labels";
-import { C, makeThemedStyles, THEME_OPTIONS, useAppTheme } from "../../constants/theme";
+import { C, makeThemedStyles, THEME_OPTIONS, THEME_PALETTE_OPTIONS, useAppTheme } from "../../constants/theme";
 
-export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage, appTheme, setAppTheme }) {
+export function AuthProfileScreen({
+  go,
+  appLanguage = "en",
+  setAppLanguage,
+  appTheme,
+  setAppTheme,
+  appThemePalette,
+  setAppThemePalette,
+  initialSession,
+  onSessionChange
+}) {
   const [mode, setMode] = useState("Login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [session, setSession] = useState({ token: null, user: null });
+  const [session, setSession] = useState(initialSession || { token: null, user: null });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const signedIn = Boolean(session.user && session.token);
+
+  function applySession(nextSession) {
+    setSession(nextSession);
+    if (typeof onSessionChange === "function") {
+      onSessionChange(nextSession);
+    }
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -43,11 +60,11 @@ export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage, appT
 
         if (!mounted) return;
 
-        setSession(saved);
+        applySession(saved);
       } catch {
         if (!mounted) return;
 
-        setSession({ token: null, user: null });
+        applySession({ token: null, user: null });
       } finally {
         if (mounted) {
           setLoading(false);
@@ -89,7 +106,7 @@ export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage, appT
           ? await registerAndSaveSession({ name: cleanName, email: cleanEmail, password })
           : await loginAndSaveSession({ email: cleanEmail, password });
 
-      setSession(result);
+      applySession(result);
     } catch (error) {
       Alert.alert(tr(appLanguage, "Auth Failed"), error?.message || tr(appLanguage, "Unable to authenticate."));
     } finally {
@@ -102,7 +119,7 @@ export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage, appT
 
     try {
       await logoutSession();
-      setSession({ token: null, user: null });
+      applySession({ token: null, user: null });
     } catch (error) {
       Alert.alert(tr(appLanguage, "Logout Failed"), error?.message || tr(appLanguage, "Unable to logout."));
     } finally {
@@ -148,6 +165,9 @@ export function AuthProfileScreen({ go, appLanguage = "en", setAppLanguage, appT
           appLanguage={appLanguage}
           appTheme={appTheme}
           setAppTheme={setAppTheme}
+          appThemePalette={appThemePalette}
+          setAppThemePalette={setAppThemePalette}
+          signedIn={signedIn}
         />
 
         {signedIn ? (
@@ -222,13 +242,32 @@ function LanguageCard({ appLanguage, setAppLanguage }) {
   );
 }
 
-function ThemeCard({ appLanguage, appTheme, setAppTheme }) {
+function ThemeCard({
+  appLanguage,
+  appTheme,
+  setAppTheme,
+  signedIn
+}) {
+  if (!signedIn) {
+    return (
+      <View style={s.card}>
+        <Text style={s.sectionTitle}>{tr(appLanguage, "Appearance")}</Text>
+        <Text style={s.noteText}>
+          {tr(appLanguage, "Sign in to save your preferred appearance.")}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={s.card}>
-      <Text style={s.sectionTitle}>{tr(appLanguage, "App Theme")}</Text>
-      <Text style={s.noteText}>{tr(appLanguage, "Switch the app palette for every screen.")}</Text>
+      <Text style={s.sectionTitle}>{tr(appLanguage, "Appearance")}</Text>
+      <Text style={s.noteText}>
+        {tr(appLanguage, "Memorial Gold theme with warm light mode and royal dark mode.")}
+      </Text>
 
-      <View style={[s.modeRow, { marginTop: 14, marginBottom: 0 }]}>
+      <Text style={[s.inputLabel, { marginTop: 16 }]}>{tr(appLanguage, "Mode")}</Text>
+      <View style={[s.modeRow, { marginTop: 8, marginBottom: 0 }]}>
         {THEME_OPTIONS.map(item => (
           <Pressable
             key={item.key}
@@ -448,12 +487,12 @@ const s = makeThemedStyles(C => ({
     flex: 1,
     alignItems: "center"
   },
-  title: {
+  title: { fontFamily: C.fontDisplay,
     color: C.white,
     fontSize: 18,
     fontWeight: "900"
   },
-  subtitle: {
+  subtitle: { fontFamily: C.fontBody, fontFamily: C.fontDisplay,
     color: C.muted,
     fontSize: 12,
     marginTop: 4
@@ -476,7 +515,7 @@ const s = makeThemedStyles(C => ({
     borderWidth: 1,
     borderColor: C.line
   },
-  apiLabel: {
+  apiLabel: { fontFamily: C.fontBold,
     color: C.gold,
     fontSize: 11,
     fontWeight: "900",
@@ -502,12 +541,12 @@ const s = makeThemedStyles(C => ({
     justifyContent: "center",
     marginBottom: 12
   },
-  heroTitle: {
+  heroTitle: { fontFamily: C.fontDisplay,
     color: C.textOnBrand,
     fontSize: 24,
     fontWeight: "900"
   },
-  heroText: {
+  heroText: { fontFamily: C.fontBody,
     color: "rgba(255,255,255,0.82)",
     textAlign: "center",
     lineHeight: 20,
@@ -531,12 +570,12 @@ const s = makeThemedStyles(C => ({
     backgroundColor: C.gold,
     borderColor: C.gold
   },
-  modeText: {
+  modeText: { fontFamily: C.fontBold,
     color: C.white,
     fontWeight: "900"
   },
   modeTextActive: {
-    color: C.black
+    color: C.textOnAccent
   },
   card: {
     backgroundColor: C.surface,
@@ -546,7 +585,7 @@ const s = makeThemedStyles(C => ({
     borderColor: C.line,
     marginBottom: 14
   },
-  sectionTitle: {
+  sectionTitle: { fontFamily: C.fontDisplay,
     color: C.white,
     fontSize: 18,
     fontWeight: "900",
@@ -576,8 +615,8 @@ const s = makeThemedStyles(C => ({
     alignItems: "center",
     marginTop: 4
   },
-  primaryText: {
-    color: C.black,
+  primaryText: { fontFamily: C.fontBold,
+    color: C.textOnAccent,
     fontSize: 14,
     fontWeight: "900"
   },
@@ -586,7 +625,7 @@ const s = makeThemedStyles(C => ({
     borderRadius: 12,
     padding: 14
   },
-  noteText: {
+  noteText: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 13,
     lineHeight: 19
@@ -614,12 +653,12 @@ const s = makeThemedStyles(C => ({
     fontSize: 36,
     fontWeight: "900"
   },
-  profileName: {
+  profileName: { fontFamily: C.fontDisplay,
     color: C.white,
     fontSize: 24,
     fontWeight: "900"
   },
-  profileEmail: {
+  profileEmail: { fontFamily: C.fontBody,
     color: C.muted,
     marginTop: 5
   },
@@ -630,8 +669,8 @@ const s = makeThemedStyles(C => ({
     paddingVertical: 7,
     marginTop: 14
   },
-  roleText: {
-    color: C.black,
+  roleText: { fontFamily: C.fontBold,
+    color: C.textOnAccent,
     fontWeight: "900",
     textTransform: "uppercase",
     fontSize: 12
@@ -650,12 +689,12 @@ const s = makeThemedStyles(C => ({
     borderWidth: 1,
     borderColor: C.line
   },
-  statValue: {
+  statValue: { fontFamily: C.fontDisplay,
     color: C.white,
     fontSize: 18,
     fontWeight: "900"
   },
-  muted: {
+  muted: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 13,
     lineHeight: 19
@@ -668,11 +707,11 @@ const s = makeThemedStyles(C => ({
     borderBottomWidth: 1,
     borderBottomColor: C.line
   },
-  infoLabel: {
+  infoLabel: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 13
   },
-  infoValue: {
+  infoValue: { fontFamily: C.fontBody,
     flex: 1,
     color: C.white,
     fontSize: 13,
@@ -687,7 +726,7 @@ const s = makeThemedStyles(C => ({
     borderBottomWidth: 1,
     borderBottomColor: C.line
   },
-  menuText: {
+  menuText: { fontFamily: C.fontBody,
     color: C.white,
     fontSize: 15,
     fontWeight: "800"
@@ -700,7 +739,7 @@ const s = makeThemedStyles(C => ({
     borderWidth: 1,
     borderColor: C.red
   },
-  logoutText: {
+  logoutText: { fontFamily: C.fontBold,
     color: C.red,
     fontWeight: "900"
   }

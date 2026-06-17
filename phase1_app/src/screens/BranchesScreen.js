@@ -81,7 +81,7 @@ function BranchAction({ icon, label, disabled, onPress }) {
         borderRadius: 999,
         borderWidth: 1,
         borderColor: disabled ? C.line : C.gold,
-        backgroundColor: disabled ? C.surface2 : "rgba(212, 175, 55, 0.12)",
+        backgroundColor: disabled ? C.surface2 : C.goldSoft,
         alignItems: "center",
         justifyContent: "center",
         flexDirection: "row",

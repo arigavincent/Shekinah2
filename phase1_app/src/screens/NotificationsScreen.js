@@ -45,7 +45,7 @@ function NotificationSummary({ preferences, appLanguage }) {
             width: 46,
             height: 46,
             borderRadius: 23,
-            backgroundColor: allEnabled ? C.gold : "rgba(212, 175, 55, 0.14)",
+            backgroundColor: allEnabled ? C.gold : C.goldSoft,
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 1,
@@ -197,7 +197,7 @@ export function NotificationsScreen({ go, preferences, setPreferences, appLangua
               {
                 flex: 1,
                 borderColor: C.gold,
-                backgroundColor: allEnabled ? "rgba(212, 175, 55, 0.14)" : C.surface
+                backgroundColor: allEnabled ? C.goldSoft : C.surface
               }
             ]}
             onPress={enableAll}
