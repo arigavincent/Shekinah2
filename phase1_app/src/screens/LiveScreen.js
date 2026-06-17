@@ -3,6 +3,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -13,7 +14,9 @@ import {
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { VideoView, useVideoPlayer } from "expo-video";
 import YoutubePlayer from "react-native-youtube-iframe";
+import { WebView } from "react-native-webview";
 
 import { PHASE1_IMAGES } from "../content";
 import { C } from "../constants/theme";
@@ -35,6 +38,316 @@ import {
 
 function youtubeWatchUrl(videoId) {
   return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+function CloudflareWhepPlayer({ source, height }) {
+  const [fullscreen, setFullscreen] = useState(false);
+  const whepUrl = JSON.stringify(source);
+
+  const html = `
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      object-fit: cover;
+    }
+
+    #status {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.56);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    #playButton {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      color: #07111f;
+      background: #fff;
+      font-size: 14px;
+      font-weight: 800;
+      display: none;
+    }
+
+    #muteButton {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.68);
+      font-size: 13px;
+      font-weight: 800;
+    }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay playsinline controls></video>\n  <button id="muteButton">Mute</button>
+  <button id="playButton">Tap to play live</button>
+  <div id="status">Connecting to live stream...</div>
+
+  <script>
+    const WHEP_URL = ${whepUrl};
+    const video = document.getElementById("video");
+    const status = document.getElementById("status");
+    const playButton = document.getElementById("playButton");
+    const muteButton = document.getElementById("muteButton");
+
+    function post(type, payload) {
+      try {
+        window.ReactNativeWebView?.postMessage(JSON.stringify({ type, payload }));
+      } catch (_) {}
+    }
+
+    function setStatus(message) {
+      status.textContent = message;
+      post("status", message);
+    }
+
+    function waitForIceGatheringComplete(peerConnection) {
+      if (peerConnection.iceGatheringState === "complete") {
+        return Promise.resolve();
+      }
+
+      return new Promise(resolve => {
+        const timeout = setTimeout(resolve, 5000);
+
+        peerConnection.addEventListener("icegatheringstatechange", () => {
+          post("iceGatheringState", peerConnection.iceGatheringState);
+
+          if (peerConnection.iceGatheringState === "complete") {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+      });
+    }
+
+    async function start() {
+      if (!WHEP_URL) {
+        throw new Error("Missing Cloudflare WHEP playback URL.");
+      }
+
+      const remoteStream = new MediaStream();
+      video.srcObject = remoteStream;
+
+      const peerConnection = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }]
+      });
+
+      peerConnection.addEventListener("connectionstatechange", () => {
+        post("connectionState", peerConnection.connectionState);
+
+        if (peerConnection.connectionState === "connected") {
+          setStatus("Live stream connected");
+        }
+
+        if (peerConnection.connectionState === "failed") {
+          setStatus("Live connection failed. Please refresh.");
+        }
+      });
+
+      peerConnection.addEventListener("iceconnectionstatechange", () => {
+        post("iceConnectionState", peerConnection.iceConnectionState);
+      });
+
+      peerConnection.addEventListener("track", event => {
+        post("track", { kind: event.track.kind, readyState: event.track.readyState });
+        remoteStream.addTrack(event.track);
+
+        video.play().catch(error => {
+          post("playBlocked", error.message);
+          playButton.style.display = "block";
+          setStatus("Tap to start live stream");
+        });
+      });
+
+      playButton.addEventListener("click", () => {
+        video.play()
+          .then(() => {
+            playButton.style.display = "none";
+            setStatus("Live stream playing");
+          })
+          .catch(error => {
+            post("manualPlayFailed", error.message);
+            setStatus("Could not start playback");
+          });
+      });
+
+      muteButton.addEventListener("click", () => {
+        video.muted = !video.muted;
+        muteButton.textContent = video.muted ? "Unmute" : "Mute";
+        post("muted", video.muted);
+      });
+
+      peerConnection.addTransceiver("audio", { direction: "recvonly" });
+      peerConnection.addTransceiver("video", { direction: "recvonly" });
+
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      await waitForIceGatheringComplete(peerConnection);
+
+      const response = await fetch(WHEP_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/sdp",
+          "Accept": "application/sdp"
+        },
+        body: peerConnection.localDescription.sdp
+      });
+
+      const answerSdp = await response.text();
+
+      post("whepResponse", {
+        status: response.status,
+        ok: response.ok,
+        contentType: response.headers.get("content-type"),
+        answerLength: answerSdp.length
+      });
+
+      if (!response.ok) {
+        throw new Error(answerSdp || "Cloudflare WHEP playback failed with HTTP " + response.status);
+      }
+
+      await peerConnection.setRemoteDescription({
+        type: "answer",
+        sdp: answerSdp
+      });
+
+      setStatus("Receiving live stream...");
+    }
+
+    start().catch(error => {
+      console.error(error);
+      post("error", error.message);
+      setStatus(error.message || "Live stream failed");
+    });
+  </script>
+</body>
+</html>
+`;
+
+  const renderPlayer = () => (
+    <WebView
+      source={{ html, baseUrl: "https://shekinah-live.local" }}
+      style={{ width: "100%", height: "100%", backgroundColor: "#000" }}
+      originWhitelist={["*"]}
+      javaScriptEnabled
+      domStorageEnabled
+      allowsInlineMediaPlayback
+      mediaPlaybackRequiresUserAction={false}
+      allowsFullscreenVideo
+      mediaCapturePermissionGrantType="grant"
+    />
+  );
+
+  return (
+    <View style={{ width: "100%", height, backgroundColor: "#000" }}>
+      {renderPlayer()}
+
+      <Pressable
+        onPress={() => setFullscreen(true)}
+        style={{
+          position: "absolute",
+          right: 14,
+          bottom: 14,
+          width: 42,
+          height: 42,
+          borderRadius: 21,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "rgba(0,0,0,0.62)"
+        }}
+      >
+        <Ionicons name="expand" size={22} color="#fff" />
+      </Pressable>
+
+      <Modal
+        visible={fullscreen}
+        animationType="fade"
+        supportedOrientations={["portrait", "landscape", "landscape-left", "landscape-right"]}
+        onRequestClose={() => setFullscreen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: "#000" }}>
+          {renderPlayer()}
+
+          <Pressable
+            onPress={() => setFullscreen(false)}
+            style={{
+              position: "absolute",
+              top: 42,
+              right: 18,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(0,0,0,0.68)"
+            }}
+          >
+            <Ionicons name="contract" size={24} color="#fff" />
+          </Pressable>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function CloudflareLivePlayer({ source, height, playing }) {
+  const player = useVideoPlayer(source, player => {
+    player.loop = false;
+    player.muted = false;
+
+    if (playing) {
+      player.play();
+    }
+  });
+
+  useEffect(() => {
+    if (playing) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [player, playing]);
+
+  return (
+    <VideoView
+      style={{ width: "100%", height }}
+      player={player}
+      allowsFullscreen
+      allowsPictureInPicture
+      nativeControls
+    />
+  );
 }
 
 function playablePastService(item) {
@@ -88,9 +401,15 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const [chatLoading, setChatLoading] = useState(true);
   const [chatText, setChatText] = useState("");
   const [sending, setSending] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(true);
   const [socketState, setSocketState] = useState("disconnected");
   const live = data.live;
   const liveVideoId = extractYouTubeId(live.youtubeId || live.youtubeUrl || "");
+  const liveProvider = String(live.provider || "").trim().toLowerCase();
+  const livePlaybackHlsUrl = String(live.playbackHlsUrl || "").trim();
+  const liveWebRtcPlaybackUrl = String(live.webRtcPlaybackUrl || "").trim();
+  const shouldUseWhepPlayer = liveProvider === "cloudflare_stream" && Boolean(liveWebRtcPlaybackUrl);
+  const shouldUseCloudflarePlayer = !shouldUseWhepPlayer && liveProvider === "cloudflare_stream" && Boolean(livePlaybackHlsUrl);
   const playerWidth = Math.max(280, width - 32);
   const liveStageHeight = Math.max(460, Math.min(620, width * 1.42));
   const pastServices = data.sermons
@@ -296,6 +615,112 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
         ? tr(appLanguage, "Reconnecting live chat...")
         : tr(appLanguage, "Connecting live chat...");
 
+  function renderLiveChatPanel() {
+    return (
+      <View
+        style={{
+          marginTop: 16,
+          borderRadius: 22,
+          padding: 14,
+          backgroundColor: "rgba(255,255,255,0.055)",
+          borderWidth: 1,
+          borderColor: "rgba(255,255,255,0.08)"
+        }}
+      >
+        <Pressable
+          onPress={() => setChatExpanded(current => !current)}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: chatExpanded ? 12 : 0
+          }}
+        >
+          <View>
+            <Text style={[s.rowTitle, { color: C.text }]}>{tr(appLanguage, "Live Chat")}</Text>
+            <Text style={[s.mutedText, { marginTop: 2 }]}>{liveStatusLabel}</Text>
+          </View>
+          <Ionicons
+            name={chatExpanded ? "chevron-up-outline" : "chevron-down-outline"}
+            size={22}
+            color={C.gold}
+          />
+        </Pressable>
+
+        {chatExpanded ? (
+          <>
+            <ScrollView
+              ref={chatScrollRef}
+              style={[s.liveChatList, { maxHeight: 230 }]}
+              contentContainerStyle={s.liveChatListContent}
+              onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              {chatLoading ? (
+                <View style={s.liveChatEmpty}>
+                  <Text style={s.liveChatSubtle}>{tr(appLanguage, "Loading live chat...")}</Text>
+                </View>
+              ) : chatMessages.length === 0 ? (
+                <View style={s.liveChatEmpty}>
+                  <Text style={[s.liveChatTitle, { fontSize: 13 }]}>{tr(appLanguage, "No live responses yet")}</Text>
+                  <Text style={s.liveChatSubtle}>
+                    {tr(appLanguage, "Live responses will appear here while the stream is active.")}
+                  </Text>
+                </View>
+              ) : (
+                chatMessages.map(item => (
+                  <View key={item.id} style={s.liveMessageRow}>
+                    <View style={s.liveAvatar}>
+                      <Text style={s.liveAvatarText}>{messageInitial(item.displayName || tr(appLanguage, "Member"))}</Text>
+                    </View>
+                    <View style={s.liveMessageBody}>
+                      <View style={s.liveMessageMeta}>
+                        <Text style={s.liveMessageName}>{item.displayName || tr(appLanguage, "Member")}</Text>
+                        <Text style={s.liveMessageTime}>{liveTimeLabel(item.createdAt)}</Text>
+                      </View>
+                      <Text style={s.liveMessageText}>{item.message}</Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            <View style={[s.liveComposer, { marginTop: 12 }]}>
+              <TextInput
+                style={s.liveComposerInput}
+                placeholder={tr(appLanguage, "Share a live response...")}
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                multiline
+                textAlignVertical="center"
+                selectionColor={C.gold}
+                returnKeyType="send"
+                value={chatText}
+                onChangeText={setChatText}
+                onSubmitEditing={() => {
+                  if (!sending) {
+                    submitLiveChat();
+                  }
+                }}
+              />
+              <Pressable
+                style={[s.liveSendBtn, sending && { opacity: 0.65 }]}
+                onPress={submitLiveChat}
+                disabled={sending}
+              >
+                <Ionicons
+                  name={sending ? "time-outline" : "send"}
+                  size={18}
+                  color={C.black}
+                />
+              </Pressable>
+            </View>
+          </>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <Screen>
       <TopBar title="Live Stream" go={go} onMenu={openDrawer} appLanguage={appLanguage} />
@@ -319,7 +744,18 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
               keyboardVerticalOffset={Platform.OS === "ios" ? 84 : 24}
             >
               <View style={[s.liveStage, { height: liveStageHeight }]}>
-                {liveVideoId ? (
+                {shouldUseWhepPlayer ? (
+                  <CloudflareWhepPlayer
+                    source={liveWebRtcPlaybackUrl}
+                    height={liveStageHeight}
+                  />
+                ) : shouldUseCloudflarePlayer ? (
+                  <CloudflareLivePlayer
+                    source={livePlaybackHlsUrl}
+                    height={liveStageHeight}
+                    playing={playing}
+                  />
+                ) : liveVideoId ? (
                   <YoutubePlayer
                     height={liveStageHeight}
                     width={playerWidth}
@@ -366,76 +802,10 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                     </View>
                   </View>
 
-                  <View style={s.liveOverlayPanel}>
-                    <ScrollView
-                      ref={chatScrollRef}
-                      style={s.liveChatList}
-                      contentContainerStyle={s.liveChatListContent}
-                      onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
-                      keyboardShouldPersistTaps="handled"
-                      nestedScrollEnabled
-                    >
-                      {chatLoading ? (
-                        <View style={s.liveChatEmpty}>
-                          <Text style={[s.liveChatSubtle, { color: C.textOnBrand }]}>{tr(appLanguage, "Loading live chat...")}</Text>
-                        </View>
-                      ) : chatMessages.length === 0 ? (
-                        <View style={s.liveChatEmpty}>
-                          <Text style={[s.liveChatTitle, { fontSize: 13 }]}>{tr(appLanguage, "No live responses yet")}</Text>
-                          <Text style={[s.liveChatSubtle, { color: "rgba(255,255,255,0.78)" }]}>
-                            {tr(appLanguage, "Live responses will appear here while the stream is active.")}
-                          </Text>
-                        </View>
-                      ) : (
-                        chatMessages.map(item => (
-                          <View key={item.id} style={s.liveMessageRow}>
-                            <View style={s.liveAvatar}>
-                              <Text style={s.liveAvatarText}>{messageInitial(item.displayName || tr(appLanguage, "Member"))}</Text>
-                            </View>
-                            <View style={s.liveMessageBody}>
-                              <View style={s.liveMessageMeta}>
-                                <Text style={s.liveMessageName}>{item.displayName || tr(appLanguage, "Member")}</Text>
-                                <Text style={s.liveMessageTime}>{liveTimeLabel(item.createdAt)}</Text>
-                              </View>
-                              <Text style={s.liveMessageText}>{item.message}</Text>
-                            </View>
-                          </View>
-                        ))
-                      )}
-                    </ScrollView>
-
-                    <View style={s.liveComposer}>
-                      <TextInput
-                        style={s.liveComposerInput}
-                        placeholder={tr(appLanguage, "Share a live response...")}
-                        placeholderTextColor="rgba(255,255,255,0.6)"
-                        multiline
-                        textAlignVertical="center"
-                        selectionColor={C.gold}
-                        returnKeyType="send"
-                        value={chatText}
-                        onChangeText={setChatText}
-                        onSubmitEditing={() => {
-                          if (!sending) {
-                            submitLiveChat();
-                          }
-                        }}
-                      />
-                      <Pressable
-                        style={[s.liveSendBtn, sending && { opacity: 0.65 }]}
-                        onPress={submitLiveChat}
-                        disabled={sending}
-                      >
-                        <Ionicons
-                          name={sending ? "time-outline" : "send"}
-                          size={18}
-                          color={C.black}
-                        />
-                      </Pressable>
-                    </View>
-                  </View>
                 </View>
               </View>
+
+              {renderLiveChatPanel()}
             </KeyboardAvoidingView>
           </>
         ) : (

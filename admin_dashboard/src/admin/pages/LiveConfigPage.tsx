@@ -98,6 +98,9 @@ export function LiveConfigPage() {
   const [startingCamera, setStartingCamera] = useState(false);
   const [broadcastStatus, setBroadcastStatus] = useState<BrowserBroadcastStatus>("idle");
   const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [hasLocalMedia, setHasLocalMedia] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(true);
   const [error, setError] = useState("");
 
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
@@ -176,6 +179,32 @@ export function LiveConfigPage() {
     if (videoPreviewRef.current) {
       videoPreviewRef.current.srcObject = null;
     }
+
+    setHasLocalMedia(false);
+    setMicEnabled(true);
+    setCameraEnabled(true);
+  }
+
+  function toggleMic() {
+    const stream = localStreamRef.current;
+    if (!stream) return;
+
+    const next = !micEnabled;
+    stream.getAudioTracks().forEach(track => {
+      track.enabled = next;
+    });
+    setMicEnabled(next);
+  }
+
+  function toggleCamera() {
+    const stream = localStreamRef.current;
+    if (!stream) return;
+
+    const next = !cameraEnabled;
+    stream.getVideoTracks().forEach(track => {
+      track.enabled = next;
+    });
+    setCameraEnabled(next);
   }
 
   async function submit(event: FormEvent) {
@@ -339,6 +368,9 @@ export function LiveConfigPage() {
         await videoPreviewRef.current.play();
       }
 
+      setHasLocalMedia(true);
+      setMicEnabled(stream.getAudioTracks().some(track => track.enabled));
+      setCameraEnabled(stream.getVideoTracks().some(track => track.enabled));
       setBroadcastStatus("camera-ready");
       setBroadcastMessage("Camera and microphone are ready.");
     } catch (err) {
@@ -434,7 +466,7 @@ export function LiveConfigPage() {
       }));
 
       setBroadcastStatus("broadcasting");
-      setBroadcastMessage("Browser broadcast is live. Members can watch from the app after APK WebRTC playback is added.");
+      setBroadcastMessage("Browser broadcast is live. Members can watch from the app through Cloudflare WebRTC playback.");
       showToast({
         title: "Browser broadcast started",
         message: "Cloudflare accepted the WebRTC broadcast.",
@@ -637,6 +669,16 @@ export function LiveConfigPage() {
                   <button type="button" className="secondary" onClick={startCamera} disabled={startingCamera || isBroadcasting}>
                     {startingCamera ? "Starting Camera..." : "Start Camera"}
                   </button>
+                  {hasLocalMedia ? (
+                    <>
+                      <button type="button" className="secondary" onClick={toggleMic}>
+                        {micEnabled ? "Mute Mic" : "Unmute Mic"}
+                      </button>
+                      <button type="button" className="secondary" onClick={toggleCamera}>
+                        {cameraEnabled ? "Turn Camera Off" : "Turn Camera On"}
+                      </button>
+                    </>
+                  ) : null}
                   <button type="button" className="primary" onClick={startBrowserBroadcast} disabled={!canStartBrowserBroadcast}>
                     {broadcastStatus === "connecting" ? "Connecting..." : "Start Broadcast"}
                   </button>
