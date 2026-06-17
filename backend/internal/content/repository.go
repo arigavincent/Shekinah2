@@ -49,6 +49,7 @@ func (r Repository) LiveStream(ctx context.Context) (LiveStream, error) {
 			COALESCE(playback_hls_url, ''),
 			COALESCE(playback_dash_url, ''),
 			COALESCE(embed_url, ''),
+			COALESCE(webrtc_playback_url, ''),
 			COALESCE(replay_url, '')
 		FROM live_stream_config
 		WHERE id = 'main'
@@ -66,6 +67,7 @@ func (r Repository) LiveStream(ctx context.Context) (LiveStream, error) {
 		&item.PlaybackHLSURL,
 		&item.PlaybackDASHURL,
 		&item.EmbedURL,
+		&item.WebRTCPlaybackURL,
 		&item.ReplayURL,
 	)
 	if err != nil {

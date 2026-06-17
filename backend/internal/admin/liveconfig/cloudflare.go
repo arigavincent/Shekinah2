@@ -74,6 +74,12 @@ type cloudflareCreateLiveInputResponse struct {
 			StreamID   string `json:"streamId"`
 			Passphrase string `json:"passphrase"`
 		} `json:"srt"`
+		WebRTC struct {
+			URL string `json:"url"`
+		} `json:"webRTC"`
+		WebRTCPlayback struct {
+			URL string `json:"url"`
+		} `json:"webRTCPlayback"`
 	} `json:"result"`
 }
 
@@ -145,12 +151,14 @@ func (c CloudflareStreamClient) CreateLiveInput(ctx context.Context, name string
 	}
 
 	return CloudflareLiveInput{
-		UID:           strings.TrimSpace(decoded.Result.UID),
-		RTMPSURL:      strings.TrimSpace(decoded.Result.RTMPS.URL),
-		StreamKey:     strings.TrimSpace(decoded.Result.RTMPS.StreamKey),
-		SRTURL:        strings.TrimSpace(decoded.Result.SRT.URL),
-		SRTStreamID:   strings.TrimSpace(decoded.Result.SRT.StreamID),
-		SRTPassphrase: strings.TrimSpace(decoded.Result.SRT.Passphrase),
+		UID:               strings.TrimSpace(decoded.Result.UID),
+		RTMPSURL:          strings.TrimSpace(decoded.Result.RTMPS.URL),
+		StreamKey:         strings.TrimSpace(decoded.Result.RTMPS.StreamKey),
+		SRTURL:            strings.TrimSpace(decoded.Result.SRT.URL),
+		SRTStreamID:       strings.TrimSpace(decoded.Result.SRT.StreamID),
+		SRTPassphrase:     strings.TrimSpace(decoded.Result.SRT.Passphrase),
+		WebRTCPublishURL:  strings.TrimSpace(decoded.Result.WebRTC.URL),
+		WebRTCPlaybackURL: strings.TrimSpace(decoded.Result.WebRTCPlayback.URL),
 	}, nil
 }
 

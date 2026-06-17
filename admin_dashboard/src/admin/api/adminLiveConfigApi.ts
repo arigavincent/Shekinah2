@@ -16,6 +16,8 @@ export type LiveConfig = {
   playbackHlsUrl?: string;
   playbackDashUrl?: string;
   embedUrl?: string;
+  webRtcPublishUrl?: string;
+  webRtcPlaybackUrl?: string;
   rtmpsUrl?: string;
   srtUrl?: string;
   srtStreamId?: string;

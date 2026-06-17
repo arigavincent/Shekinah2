@@ -15,6 +15,8 @@ type LiveConfig struct {
 	PlaybackHLSURL         string    `json:"playbackHlsUrl,omitempty"`
 	PlaybackDASHURL        string    `json:"playbackDashUrl,omitempty"`
 	EmbedURL               string    `json:"embedUrl,omitempty"`
+	WebRTCPublishURL       string    `json:"webRtcPublishUrl,omitempty"`
+	WebRTCPlaybackURL      string    `json:"webRtcPlaybackUrl,omitempty"`
 	RTMPSURL               string    `json:"rtmpsUrl,omitempty"`
 	SRTURL                 string    `json:"srtUrl,omitempty"`
 	SRTStreamID            string    `json:"srtStreamId,omitempty"`
@@ -48,6 +50,8 @@ type Command struct {
 	PlaybackHLSURL        string
 	PlaybackDASHURL       string
 	EmbedURL              string
+	WebRTCPublishURL      string
+	WebRTCPlaybackURL     string
 	RTMPSURL              string
 	SRTURL                string
 	SRTStreamID           string
@@ -57,10 +61,12 @@ type Command struct {
 }
 
 type CloudflareLiveInput struct {
-	UID           string
-	RTMPSURL      string
-	StreamKey     string
-	SRTURL        string
-	SRTStreamID   string
-	SRTPassphrase string
+	UID               string
+	RTMPSURL          string
+	StreamKey         string
+	SRTURL            string
+	SRTStreamID       string
+	SRTPassphrase     string
+	WebRTCPublishURL  string
+	WebRTCPlaybackURL string
 }

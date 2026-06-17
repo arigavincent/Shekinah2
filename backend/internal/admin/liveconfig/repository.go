@@ -34,6 +34,8 @@ func (r Repository) Get(ctx context.Context) (LiveConfig, error) {
 			COALESCE(playback_hls_url, ''),
 			COALESCE(playback_dash_url, ''),
 			COALESCE(embed_url, ''),
+			COALESCE(webrtc_publish_url, ''),
+			COALESCE(webrtc_playback_url, ''),
 			COALESCE(rtmps_url, ''),
 			COALESCE(srt_url, ''),
 			COALESCE(srt_stream_id, ''),
@@ -73,6 +75,8 @@ func (r Repository) Upsert(ctx context.Context, command Command) (LiveConfig, er
 			playback_hls_url,
 			playback_dash_url,
 			embed_url,
+			webrtc_publish_url,
+			webrtc_playback_url,
 			rtmps_url,
 			srt_url,
 			srt_stream_id,
@@ -81,7 +85,7 @@ func (r Repository) Upsert(ctx context.Context, command Command) (LiveConfig, er
 			replay_url,
 			updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, now())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, now())
 		ON CONFLICT (id)
 		DO UPDATE SET
 			is_live = EXCLUDED.is_live,
@@ -95,6 +99,8 @@ func (r Repository) Upsert(ctx context.Context, command Command) (LiveConfig, er
 			playback_hls_url = EXCLUDED.playback_hls_url,
 			playback_dash_url = EXCLUDED.playback_dash_url,
 			embed_url = EXCLUDED.embed_url,
+			webrtc_publish_url = EXCLUDED.webrtc_publish_url,
+			webrtc_playback_url = EXCLUDED.webrtc_playback_url,
 			rtmps_url = EXCLUDED.rtmps_url,
 			srt_url = EXCLUDED.srt_url,
 			srt_stream_id = EXCLUDED.srt_stream_id,
@@ -115,6 +121,8 @@ func (r Repository) Upsert(ctx context.Context, command Command) (LiveConfig, er
 			COALESCE(playback_hls_url, ''),
 			COALESCE(playback_dash_url, ''),
 			COALESCE(embed_url, ''),
+			COALESCE(webrtc_publish_url, ''),
+			COALESCE(webrtc_playback_url, ''),
 			COALESCE(rtmps_url, ''),
 			COALESCE(srt_url, ''),
 			COALESCE(srt_stream_id, ''),
@@ -140,6 +148,8 @@ func (r Repository) Upsert(ctx context.Context, command Command) (LiveConfig, er
 			command.PlaybackHLSURL,
 			command.PlaybackDASHURL,
 			command.EmbedURL,
+			command.WebRTCPublishURL,
+			command.WebRTCPlaybackURL,
 			command.RTMPSURL,
 			command.SRTURL,
 			command.SRTStreamID,
@@ -175,6 +185,8 @@ func scanLiveConfig(row liveConfigScanner) (LiveConfig, error) {
 		&item.PlaybackHLSURL,
 		&item.PlaybackDASHURL,
 		&item.EmbedURL,
+		&item.WebRTCPublishURL,
+		&item.WebRTCPlaybackURL,
 		&item.RTMPSURL,
 		&item.SRTURL,
 		&item.SRTStreamID,

@@ -107,6 +107,8 @@ func (s Service) CreateCloudflareLiveInput(ctx context.Context) (LiveConfig, err
 	command.PlaybackHLSURL = "https://videodelivery.net/" + playbackUID + "/manifest/video.m3u8"
 	command.PlaybackDASHURL = "https://videodelivery.net/" + playbackUID + "/manifest/video.mpd"
 	command.EmbedURL = "https://iframe.videodelivery.net/" + playbackUID
+	command.WebRTCPublishURL = input.WebRTCPublishURL
+	command.WebRTCPlaybackURL = input.WebRTCPlaybackURL
 	command.RTMPSURL = input.RTMPSURL
 	command.SRTURL = input.SRTURL
 	command.SRTStreamID = input.SRTStreamID
@@ -140,6 +142,8 @@ func (s Service) ResetCloudflareLiveInput(ctx context.Context) (LiveConfig, erro
 	command.PlaybackHLSURL = ""
 	command.PlaybackDASHURL = ""
 	command.EmbedURL = ""
+	command.WebRTCPublishURL = ""
+	command.WebRTCPlaybackURL = ""
 	command.RTMPSURL = ""
 	command.SRTURL = ""
 	command.SRTStreamID = ""
@@ -167,6 +171,8 @@ func commandFromConfig(current LiveConfig) Command {
 		PlaybackHLSURL:        current.PlaybackHLSURL,
 		PlaybackDASHURL:       current.PlaybackDASHURL,
 		EmbedURL:              current.EmbedURL,
+		WebRTCPublishURL:      current.WebRTCPublishURL,
+		WebRTCPlaybackURL:     current.WebRTCPlaybackURL,
 		RTMPSURL:              current.RTMPSURL,
 		SRTURL:                current.SRTURL,
 		SRTStreamID:           current.SRTStreamID,

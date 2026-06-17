@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   createCloudflareLiveInput,
@@ -23,6 +23,8 @@ const emptyForm: LiveConfigPayload = {
   replayUrl: ""
 };
 
+type BrowserBroadcastStatus = "idle" | "camera-ready" | "connecting" | "broadcasting";
+
 function normalizeYouTubeInput(value: string) {
   const raw = value.trim();
   if (!raw) return raw;
@@ -43,7 +45,7 @@ function copyValue(value: string | undefined, label: string, showToast: ReturnTy
   navigator.clipboard.writeText(clean);
   showToast({
     title: `${label} copied`,
-    message: "Paste it into OBS or your encoder.",
+    message: "Copied to clipboard.",
     tone: "success"
   });
 }
@@ -62,6 +64,29 @@ function SecretValue({ value }: { value?: string }) {
   );
 }
 
+async function waitForIceGatheringComplete(peerConnection: RTCPeerConnection) {
+  if (peerConnection.iceGatheringState === "complete") {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(() => {
+      peerConnection.removeEventListener("icegatheringstatechange", onChange);
+      resolve();
+    }, 5000);
+
+    function onChange() {
+      if (peerConnection.iceGatheringState === "complete") {
+        window.clearTimeout(timeout);
+        peerConnection.removeEventListener("icegatheringstatechange", onChange);
+        resolve();
+      }
+    }
+
+    peerConnection.addEventListener("icegatheringstatechange", onChange);
+  });
+}
+
 export function LiveConfigPage() {
   const { showToast } = useAdminFeedback();
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null);
@@ -70,7 +95,15 @@ export function LiveConfigPage() {
   const [saving, setSaving] = useState(false);
   const [creatingInput, setCreatingInput] = useState(false);
   const [resettingInput, setResettingInput] = useState(false);
+  const [startingCamera, setStartingCamera] = useState(false);
+  const [broadcastStatus, setBroadcastStatus] = useState<BrowserBroadcastStatus>("idle");
+  const [broadcastMessage, setBroadcastMessage] = useState("");
   const [error, setError] = useState("");
+
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const whipResourceUrlRef = useRef<string>("");
 
   async function load() {
     setLoading(true);
@@ -99,6 +132,11 @@ export function LiveConfigPage() {
 
   useEffect(() => {
     load();
+
+    return () => {
+      stopLocalTracks();
+      peerConnectionRef.current?.close();
+    };
   }, []);
 
   function updateField<K extends keyof LiveConfigPayload>(
@@ -124,11 +162,20 @@ export function LiveConfigPage() {
       return "YouTube video/live ID is invalid.";
     }
 
-    if (form.provider === "cloudflare_stream" && form.isLive && !liveConfig?.playbackHlsUrl) {
+    if (form.provider === "cloudflare_stream" && form.isLive && !liveConfig?.webRtcPlaybackUrl && !liveConfig?.playbackHlsUrl) {
       return "Create a Cloudflare live input before going live with Shekinah Live.";
     }
 
     return "";
+  }
+
+  function stopLocalTracks() {
+    localStreamRef.current?.getTracks().forEach(track => track.stop());
+    localStreamRef.current = null;
+
+    if (videoPreviewRef.current) {
+      videoPreviewRef.current.srcObject = null;
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -182,7 +229,7 @@ export function LiveConfigPage() {
       }));
       showToast({
         title: "Cloudflare live input created",
-        message: "Copy the RTMPS URL and stream key into OBS or your encoder.",
+        message: "Browser publishing and native playback URLs are ready.",
         tone: "success"
       });
     } catch (err) {
@@ -228,13 +275,14 @@ export function LiveConfigPage() {
 
   async function resetInput() {
     const confirmation = window.prompt(
-      "This will delete the current Cloudflare live input and clear RTMPS/SRT credentials. Type RESET to continue."
+      "This will delete the current Cloudflare live input and clear all stream credentials. Type RESET to continue."
     );
 
     if (confirmation !== "RESET") {
       return;
     }
 
+    await stopBrowserBroadcast({ markOffline: false });
     setResettingInput(true);
     setError("");
 
@@ -258,7 +306,173 @@ export function LiveConfigPage() {
     }
   }
 
+  async function startCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("This browser does not support camera and microphone access.");
+      return;
+    }
+
+    setStartingCamera(true);
+    setError("");
+    setBroadcastMessage("");
+
+    try {
+      stopLocalTracks();
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      localStreamRef.current = stream;
+
+      if (videoPreviewRef.current) {
+        videoPreviewRef.current.srcObject = stream;
+        await videoPreviewRef.current.play();
+      }
+
+      setBroadcastStatus("camera-ready");
+      setBroadcastMessage("Camera and microphone are ready.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start camera");
+      stopLocalTracks();
+      setBroadcastStatus("idle");
+    } finally {
+      setStartingCamera(false);
+    }
+  }
+
+  async function startBrowserBroadcast() {
+    if (!liveConfig?.webRtcPublishUrl) {
+      setError("Create a Cloudflare live input first. The WebRTC publish URL is missing.");
+      return;
+    }
+
+    if (!form.nextService.trim()) {
+      setError("Next service is required before starting a browser broadcast.");
+      return;
+    }
+
+    setBroadcastStatus("connecting");
+    setBroadcastMessage("Connecting browser camera to Cloudflare...");
+    setError("");
+
+    try {
+      let stream = localStreamRef.current;
+      if (!stream) {
+        await startCamera();
+        stream = localStreamRef.current;
+      }
+
+      if (!stream) {
+        throw new Error("Camera stream was not started.");
+      }
+
+      peerConnectionRef.current?.close();
+
+      const peerConnection = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }]
+      });
+
+      peerConnectionRef.current = peerConnection;
+      stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      await waitForIceGatheringComplete(peerConnection);
+
+      if (!peerConnection.localDescription?.sdp) {
+        throw new Error("Browser did not create a WebRTC offer.");
+      }
+
+      const response = await fetch(liveConfig.webRtcPublishUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/sdp"
+        },
+        body: peerConnection.localDescription.sdp
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text().catch(() => "");
+        throw new Error(responseText || `Cloudflare WHIP publish failed with HTTP ${response.status}`);
+      }
+
+      const answerSdp = await response.text();
+      const resourceUrl = response.headers.get("Location") || "";
+
+      await peerConnection.setRemoteDescription({
+        type: "answer",
+        sdp: answerSdp
+      });
+
+      whipResourceUrlRef.current = resourceUrl;
+
+      const liveResponse = await updateLiveConfig({
+        isLive: true,
+        title: form.title.trim(),
+        viewers: form.viewers.trim(),
+        nextService: form.nextService.trim(),
+        youtubeId: form.youtubeId.trim(),
+        provider: "cloudflare_stream",
+        replayUrl: form.replayUrl?.trim() || ""
+      });
+
+      setLiveConfig(liveResponse.liveConfig);
+      setForm(current => ({
+        ...current,
+        isLive: true,
+        provider: "cloudflare_stream"
+      }));
+
+      setBroadcastStatus("broadcasting");
+      setBroadcastMessage("Browser broadcast is live. Members can watch from the app after APK WebRTC playback is added.");
+      showToast({
+        title: "Browser broadcast started",
+        message: "Cloudflare accepted the WebRTC broadcast.",
+        tone: "success"
+      });
+    } catch (err) {
+      peerConnectionRef.current?.close();
+      peerConnectionRef.current = null;
+      whipResourceUrlRef.current = "";
+      setBroadcastStatus(localStreamRef.current ? "camera-ready" : "idle");
+      setBroadcastMessage("");
+      setError(err instanceof Error ? err.message : "Failed to start browser broadcast");
+    }
+  }
+
+  async function stopBrowserBroadcast(options: { markOffline?: boolean } = { markOffline: true }) {
+    const resourceUrl = whipResourceUrlRef.current;
+
+    if (resourceUrl) {
+      await fetch(resourceUrl, { method: "DELETE" }).catch(() => undefined);
+    }
+
+    whipResourceUrlRef.current = "";
+    peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+    stopLocalTracks();
+
+    setBroadcastStatus("idle");
+    setBroadcastMessage("");
+
+    if (options.markOffline !== false && form.isLive) {
+      await markOfflineNow();
+    }
+  }
+
   const isCloudflare = form.provider === "cloudflare_stream";
+  const canStartBrowserBroadcast = Boolean(liveConfig?.webRtcPublishUrl) && broadcastStatus !== "connecting" && broadcastStatus !== "broadcasting";
+  const isBroadcasting = broadcastStatus === "broadcasting";
 
   return (
     <main>
@@ -267,7 +481,7 @@ export function LiveConfigPage() {
           <p className="eyebrow">Broadcast</p>
           <h1>Live Config</h1>
           <p className="muted">
-            Create a Shekinah-owned Cloudflare live input, manage OBS credentials, and control what the mobile app shows.
+            Create a Shekinah-owned Cloudflare live input, publish from the browser, and control what the mobile app shows.
           </p>
         </div>
 
@@ -358,7 +572,7 @@ export function LiveConfigPage() {
                 />
               </label>
 
-              <button disabled={saving}>
+              <button className="primary" type="submit" disabled={saving}>
                 {saving ? "Saving..." : "Save Live Config"}
               </button>
 
@@ -393,7 +607,7 @@ export function LiveConfigPage() {
             <p className="eyebrow">{isCloudflare ? "Cloudflare Stream" : "Fallback Provider"}</p>
             <h3>{liveConfig?.cloudflareLiveInputId ? "Live input ready" : "No Cloudflare input yet"}</h3>
             <p className="muted">
-              Create one live input, copy the broadcast settings into OBS, then reuse it for services.
+              Create one live input, then use browser broadcasting for the simplest church workflow.
             </p>
 
             <button
@@ -407,55 +621,105 @@ export function LiveConfigPage() {
           </div>
 
           {liveConfig?.cloudflareLiveInputId ? (
-            <div className="credential-grid">
-              <article>
-                <span>Playback HLS</span>
-                <code>{liveConfig.playbackHlsUrl || "Not generated"}</code>
-                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.playbackHlsUrl, "Playback HLS URL", showToast)}>
-                  Copy
-                </button>
-              </article>
+            <>
+              <div className="browser-live-card">
+                <div>
+                  <p className="eyebrow">Browser Broadcast</p>
+                  <h3>Go Live from Browser</h3>
+                  <p className="muted">
+                    Use this to publish camera and microphone directly to Cloudflare without OBS.
+                  </p>
+                </div>
 
-              <article>
-                <span>RTMPS URL</span>
-                <code>{liveConfig.rtmpsUrl || "Not generated"}</code>
-                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.rtmpsUrl, "RTMPS URL", showToast)}>
-                  Copy
-                </button>
-              </article>
+                <video ref={videoPreviewRef} className="browser-video-preview" playsInline muted />
 
-              <article>
-                <span>Stream Key</span>
-                <SecretValue value={liveConfig.streamKey} />
-                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.streamKey, "Stream key", showToast)}>
-                  Copy
-                </button>
-              </article>
+                <div className="browser-live-actions">
+                  <button type="button" className="secondary" onClick={startCamera} disabled={startingCamera || isBroadcasting}>
+                    {startingCamera ? "Starting Camera..." : "Start Camera"}
+                  </button>
+                  <button type="button" className="primary" onClick={startBrowserBroadcast} disabled={!canStartBrowserBroadcast}>
+                    {broadcastStatus === "connecting" ? "Connecting..." : "Start Broadcast"}
+                  </button>
+                  <button type="button" className="secondary" onClick={() => stopBrowserBroadcast()} disabled={!isBroadcasting && broadcastStatus !== "camera-ready"}>
+                    Stop Broadcast
+                  </button>
+                </div>
 
-              <article>
-                <span>SRT URL</span>
-                <code>{liveConfig.srtUrl || "Not generated"}</code>
-                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.srtUrl, "SRT URL", showToast)}>
-                  Copy
-                </button>
-              </article>
+                {broadcastMessage ? <p className="small-muted">{broadcastMessage}</p> : null}
+                {!liveConfig.webRtcPublishUrl ? (
+                  <InlineAlert
+                    title="WebRTC publish URL missing"
+                    message="Create a fresh Cloudflare live input after deploying the backend WebRTC migration."
+                  />
+                ) : null}
+              </div>
 
-              <article>
-                <span>SRT Stream ID</span>
-                <code>{liveConfig.srtStreamId || "Not generated"}</code>
-                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.srtStreamId, "SRT stream ID", showToast)}>
-                  Copy
-                </button>
-              </article>
+              <div className="credential-grid">
+                <article>
+                  <span>WebRTC Playback URL</span>
+                  <code>{liveConfig.webRtcPlaybackUrl || "Not generated"}</code>
+                  <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.webRtcPlaybackUrl, "WebRTC playback URL", showToast)}>
+                    Copy
+                  </button>
+                </article>
 
-              <article>
-                <span>SRT Passphrase</span>
-                <SecretValue value={liveConfig.srtPassphrase} />
-                <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.srtPassphrase, "SRT passphrase", showToast)}>
-                  Copy
-                </button>
-              </article>
-            </div>
+                <article>
+                  <span>WebRTC Publish URL</span>
+                  <SecretValue value={liveConfig.webRtcPublishUrl} />
+                  <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.webRtcPublishUrl, "WebRTC publish URL", showToast)}>
+                    Copy
+                  </button>
+                </article>
+
+                <article>
+                  <span>Playback HLS</span>
+                  <code>{liveConfig.playbackHlsUrl || "Not generated"}</code>
+                  <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.playbackHlsUrl, "Playback HLS URL", showToast)}>
+                    Copy
+                  </button>
+                </article>
+
+                <article>
+                  <span>RTMPS URL</span>
+                  <code>{liveConfig.rtmpsUrl || "Not generated"}</code>
+                  <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.rtmpsUrl, "RTMPS URL", showToast)}>
+                    Copy
+                  </button>
+                </article>
+
+                <article>
+                  <span>Stream Key</span>
+                  <SecretValue value={liveConfig.streamKey} />
+                  <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.streamKey, "Stream key", showToast)}>
+                    Copy
+                  </button>
+                </article>
+
+                <article>
+                  <span>SRT URL</span>
+                  <code>{liveConfig.srtUrl || "Not generated"}</code>
+                  <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.srtUrl, "SRT URL", showToast)}>
+                    Copy
+                  </button>
+                </article>
+
+                <article>
+                  <span>SRT Stream ID</span>
+                  <code>{liveConfig.srtStreamId || "Not generated"}</code>
+                  <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.srtStreamId, "SRT stream ID", showToast)}>
+                    Copy
+                  </button>
+                </article>
+
+                <article>
+                  <span>SRT Passphrase</span>
+                  <SecretValue value={liveConfig.srtPassphrase} />
+                  <button type="button" className="secondary compact" onClick={() => copyValue(liveConfig.srtPassphrase, "SRT passphrase", showToast)}>
+                    Copy
+                  </button>
+                </article>
+              </div>
+            </>
           ) : null}
 
           <div className="danger-zone">
@@ -463,7 +727,7 @@ export function LiveConfigPage() {
               <strong>Danger Zone</strong>
               <p>
                 Reset only if stream credentials were exposed, compromised, or you need a fresh Cloudflare input.
-                This deletes the current Cloudflare live input and clears the saved RTMPS/SRT credentials.
+                This deletes the current Cloudflare live input and clears the saved broadcast credentials.
               </p>
             </div>
             <button
