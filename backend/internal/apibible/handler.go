@@ -1,9 +1,12 @@
 package apibible
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,6 +74,51 @@ type apiBibleBiblesResponse struct {
 type apiBibleAudioBiblesResponse struct {
 	Data []apiBibleAudioBible `json:"data"`
 }
+
+type apiBibleBook struct {
+	ID           string `json:"id"`
+	BibleID      string `json:"bibleId"`
+	Abbreviation string `json:"abbreviation"`
+	Name         string `json:"name"`
+	NameLong     string `json:"nameLong"`
+}
+
+type apiBibleBooksResponse struct {
+	Data []apiBibleBook `json:"data"`
+}
+
+type apiBibleChapter struct {
+	ID        string `json:"id"`
+	BibleID   string `json:"bibleId"`
+	BookID    string `json:"bookId"`
+	Number    string `json:"number"`
+	Reference string `json:"reference"`
+}
+
+type apiBibleChaptersResponse struct {
+	Data []apiBibleChapter `json:"data"`
+}
+
+type apiBibleChapterContent struct {
+	ID         string `json:"id"`
+	BibleID    string `json:"bibleId"`
+	Number     string `json:"number"`
+	BookID     string `json:"bookId"`
+	Reference  string `json:"reference"`
+	Content    string `json:"content"`
+	VerseCount int    `json:"verseCount"`
+}
+
+type apiBibleChapterContentResponse struct {
+	Data apiBibleChapterContent `json:"data"`
+}
+
+type parsedVerse struct {
+	Number int
+	Text   string
+}
+
+var verseMarkerPattern = regexp.MustCompile(`\[(\d+)\]`)
 
 func (h Handler) configured(c *gin.Context) bool {
 	if strings.TrimSpace(h.cfg.APIBibleKey) == "" {
@@ -281,4 +329,200 @@ func (h Handler) ListAudioBibles(c *gin.Context) {
 		"provider":    "api.bible",
 		"audioBibles": response.Data,
 	})
+}
+
+func cleanVerseText(value string) string {
+	value = strings.ReplaceAll(value, "\n", " ")
+	value = strings.ReplaceAll(value, "\r", " ")
+	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+}
+
+func parseChapterVerses(content string) []parsedVerse {
+	matches := verseMarkerPattern.FindAllStringSubmatchIndex(content, -1)
+	verses := make([]parsedVerse, 0, len(matches))
+
+	for index, match := range matches {
+		if len(match) < 4 {
+			continue
+		}
+
+		numberRaw := content[match[2]:match[3]]
+		number, err := strconv.Atoi(strings.TrimSpace(numberRaw))
+		if err != nil || number <= 0 {
+			continue
+		}
+
+		textStart := match[1]
+		textEnd := len(content)
+
+		if index+1 < len(matches) {
+			textEnd = matches[index+1][0]
+		}
+
+		if textEnd < textStart {
+			continue
+		}
+
+		text := cleanVerseText(content[textStart:textEnd])
+		if text == "" {
+			continue
+		}
+
+		verses = append(verses, parsedVerse{
+			Number: number,
+			Text:   text,
+		})
+	}
+
+	return verses
+}
+
+func safeExportFileName(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "api_bible_export_vpl.txt"
+	}
+
+	var out strings.Builder
+	for _, ch := range value {
+		if ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '-' || ch == '_' {
+			out.WriteRune(ch)
+		} else {
+			out.WriteRune('_')
+		}
+	}
+
+	clean := strings.Trim(out.String(), "_")
+	if clean == "" {
+		clean = "api_bible_export"
+	}
+
+	return clean + "_vpl.txt"
+}
+
+func (h Handler) fetchBooks(c *gin.Context, bibleID string) ([]apiBibleBook, bool) {
+	var response apiBibleBooksResponse
+	path := "/bibles/" + url.PathEscape(bibleID) + "/books"
+
+	if !h.getJSON(c, path, nil, &response) {
+		return nil, false
+	}
+
+	return response.Data, true
+}
+
+func (h Handler) fetchChapters(c *gin.Context, bibleID string, bookID string) ([]apiBibleChapter, bool) {
+	var response apiBibleChaptersResponse
+	path := "/bibles/" + url.PathEscape(bibleID) + "/books/" + url.PathEscape(bookID) + "/chapters"
+
+	if !h.getJSON(c, path, nil, &response) {
+		return nil, false
+	}
+
+	return response.Data, true
+}
+
+func (h Handler) fetchChapterContent(c *gin.Context, bibleID string, chapterID string) (apiBibleChapterContent, bool) {
+	params := url.Values{}
+	params.Set("content-type", "text")
+	params.Set("include-notes", "false")
+	params.Set("include-titles", "false")
+	params.Set("include-chapter-numbers", "false")
+	params.Set("include-verse-numbers", "true")
+
+	var response apiBibleChapterContentResponse
+	path := "/bibles/" + url.PathEscape(bibleID) + "/chapters/" + url.PathEscape(chapterID)
+
+	if !h.getJSON(c, path, params, &response) {
+		return apiBibleChapterContent{}, false
+	}
+
+	return response.Data, true
+}
+
+func numericChapterNumber(chapter apiBibleChapter) (int, bool) {
+	number, err := strconv.Atoi(strings.TrimSpace(chapter.Number))
+	if err != nil || number <= 0 {
+		return 0, false
+	}
+
+	return number, true
+}
+
+func (h Handler) ExportVPL(c *gin.Context) {
+	bibleID := strings.TrimSpace(c.Param("bibleId"))
+	if bibleID == "" {
+		httpx.Error(c, http.StatusBadRequest, "api_bible_id_required", "API.Bible bible id is required")
+		return
+	}
+
+	bookFilter := strings.ToUpper(strings.TrimSpace(c.Query("bookId")))
+
+	books, ok := h.fetchBooks(c, bibleID)
+	if !ok {
+		return
+	}
+
+	var buffer bytes.Buffer
+	totalVerses := 0
+	totalChapters := 0
+
+	for _, book := range books {
+		bookCode := strings.ToUpper(strings.TrimSpace(book.ID))
+		if bookCode == "" {
+			continue
+		}
+
+		if bookFilter != "" && bookCode != bookFilter {
+			continue
+		}
+
+		chapters, ok := h.fetchChapters(c, bibleID, bookCode)
+		if !ok {
+			return
+		}
+
+		for _, chapter := range chapters {
+			chapterNumber, numeric := numericChapterNumber(chapter)
+			if !numeric {
+				continue
+			}
+
+			content, ok := h.fetchChapterContent(c, bibleID, chapter.ID)
+			if !ok {
+				return
+			}
+
+			verses := parseChapterVerses(content.Content)
+			if len(verses) == 0 {
+				continue
+			}
+
+			for _, verse := range verses {
+				buffer.WriteString(bookCode)
+				buffer.WriteByte(' ')
+				buffer.WriteString(strconv.Itoa(chapterNumber))
+				buffer.WriteByte(':')
+				buffer.WriteString(strconv.Itoa(verse.Number))
+				buffer.WriteByte(' ')
+				buffer.WriteString(verse.Text)
+				buffer.WriteByte('\n')
+				totalVerses++
+			}
+
+			totalChapters++
+		}
+	}
+
+	if totalVerses == 0 {
+		httpx.Error(c, http.StatusNotFound, "api_bible_export_empty", "No exportable verses were found for this API.Bible version")
+		return
+	}
+
+	fileName := safeExportFileName("api_bible_" + bibleID)
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.Header("Content-Disposition", `attachment; filename="`+fileName+`"`)
+	c.Header("X-Bible-Export-Chapters", strconv.Itoa(totalChapters))
+	c.Header("X-Bible-Export-Verses", strconv.Itoa(totalVerses))
+	c.String(http.StatusOK, buffer.String())
 }
