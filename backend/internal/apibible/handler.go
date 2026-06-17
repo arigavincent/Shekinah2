@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ariga/shekinah-backend/internal/config"
@@ -119,6 +120,21 @@ type parsedVerse struct {
 }
 
 var verseMarkerPattern = regexp.MustCompile(`\[(\d+)\]`)
+
+type exportCacheEntry struct {
+	Body          string
+	Chapters      int
+	Verses        int
+	FileName      string
+	ContentLength int
+}
+
+var exportCache = struct {
+	sync.RWMutex
+	items map[string]exportCacheEntry
+}{
+	items: make(map[string]exportCacheEntry),
+}
 
 func (h Handler) configured(c *gin.Context) bool {
 	if strings.TrimSpace(h.cfg.APIBibleKey) == "" {
@@ -449,6 +465,16 @@ func numericChapterNumber(chapter apiBibleChapter) (int, bool) {
 	return number, true
 }
 
+func writeExportResponse(c *gin.Context, entry exportCacheEntry, cacheStatus string) {
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.Header("Content-Disposition", `attachment; filename="`+entry.FileName+`"`)
+	c.Header("Content-Length", strconv.Itoa(entry.ContentLength))
+	c.Header("X-Bible-Export-Chapters", strconv.Itoa(entry.Chapters))
+	c.Header("X-Bible-Export-Verses", strconv.Itoa(entry.Verses))
+	c.Header("X-Bible-Export-Cache", cacheStatus)
+	c.String(http.StatusOK, entry.Body)
+}
+
 func (h Handler) ExportVPL(c *gin.Context) {
 	bibleID := strings.TrimSpace(c.Param("bibleId"))
 	if bibleID == "" {
@@ -457,6 +483,16 @@ func (h Handler) ExportVPL(c *gin.Context) {
 	}
 
 	bookFilter := strings.ToUpper(strings.TrimSpace(c.Query("bookId")))
+	cacheKey := bibleID + "|" + bookFilter
+
+	exportCache.RLock()
+	cached, found := exportCache.items[cacheKey]
+	exportCache.RUnlock()
+
+	if found {
+		writeExportResponse(c, cached, "hit")
+		return
+	}
 
 	books, ok := h.fetchBooks(c, bibleID)
 	if !ok {
@@ -519,10 +555,18 @@ func (h Handler) ExportVPL(c *gin.Context) {
 		return
 	}
 
-	fileName := safeExportFileName("api_bible_" + bibleID)
-	c.Header("Content-Type", "text/plain; charset=utf-8")
-	c.Header("Content-Disposition", `attachment; filename="`+fileName+`"`)
-	c.Header("X-Bible-Export-Chapters", strconv.Itoa(totalChapters))
-	c.Header("X-Bible-Export-Verses", strconv.Itoa(totalVerses))
-	c.String(http.StatusOK, buffer.String())
+	body := buffer.String()
+	entry := exportCacheEntry{
+		Body:          body,
+		Chapters:      totalChapters,
+		Verses:        totalVerses,
+		FileName:      safeExportFileName("api_bible_" + bibleID),
+		ContentLength: len([]byte(body)),
+	}
+
+	exportCache.Lock()
+	exportCache.items[cacheKey] = entry
+	exportCache.Unlock()
+
+	writeExportResponse(c, entry, "miss")
 }
