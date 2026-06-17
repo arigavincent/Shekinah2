@@ -186,6 +186,7 @@ function TestamentLabel({ value }) {
 export function BibleScreen({ go, appLanguage = "en" }) {
   const [db, setDb] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [stage, setStage] = useState("books");
   const [tab, setTab] = useState("ALL");
   const [books, setBooks] = useState([]);
@@ -260,6 +261,212 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     await persistBibleState(nextState);
     return rows;
   }
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadOfflineBible() {
+      try {
+        setLoading(true);
+        setLoadError("");
+
+        const database = await openBibleDb();
+        const [savedState, bookRows] = await Promise.all([
+          loadBibleState(),
+          getBooks(database)
+        ]);
+
+        if (!mounted) return;
+
+        setDb(database);
+        setBooks(bookRows);
+
+        const savedFontScaleIndex = savedState?.preferences?.fontScaleIndex;
+        setFontScaleIndex(
+          Number.isInteger(savedFontScaleIndex)
+            ? savedFontScaleIndex
+            : DEFAULT_BIBLE_STATE.preferences.fontScaleIndex
+        );
+
+        await syncInstalled(database, savedState);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to load the offline Bible database.";
+
+        console.warn("Bible startup failed", error);
+
+        if (mounted) {
+          setLoadError(message);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadOfflineBible();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const cleanQuery = catalogQuery.trim();
+
+    if (!cleanQuery) {
+      setCatalogVersions([]);
+      setCatalogError("");
+      setCatalogLoading(false);
+      return;
+    }
+
+    setCatalogLoading(true);
+    setCatalogError("");
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await listBibleVersions(cleanQuery);
+        const versions = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.versions)
+            ? response.versions
+            : [];
+
+        if (!cancelled) {
+          setCatalogVersions(versions);
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to load Bible versions.";
+
+        console.warn("Bible catalog search failed", error);
+
+        if (!cancelled) {
+          setCatalogVersions([]);
+          setCatalogError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setCatalogLoading(false);
+        }
+      }
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [catalogQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadChapterCount() {
+      if (!db || !book) {
+        return;
+      }
+
+      try {
+        const count = await getChapterCount(db, book.id);
+
+        if (!cancelled) {
+          setChapterCount(count || 0);
+        }
+      } catch (error) {
+        console.warn("Bible chapter count failed", error);
+
+        if (!cancelled) {
+          setChapterCount(0);
+        }
+      }
+    }
+
+    void loadChapterCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [db, book?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadVerseCount() {
+      if (!db || !book || !chapter) {
+        return;
+      }
+
+      try {
+        const count = await getVerseCount(db, book.id, chapter);
+
+        if (!cancelled) {
+          setVerseCount(count || 0);
+        }
+      } catch (error) {
+        console.warn("Bible verse count failed", error);
+
+        if (!cancelled) {
+          setVerseCount(0);
+        }
+      }
+    }
+
+    void loadVerseCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [db, book?.id, chapter]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadChapterVerses() {
+      if (!db || !book || !chapter) {
+        return;
+      }
+
+      try {
+        if (readingMode === "parallel") {
+          const verses = await getParallelVerses(db, book.id, chapter);
+
+          if (!cancelled) {
+            setParallelVerses(verses);
+            setSingleVersionVerses([]);
+          }
+
+          return;
+        }
+
+        const verses = await getVersionChapterVerses(db, readingMode, book.id, chapter);
+
+        if (!cancelled) {
+          setSingleVersionVerses(verses);
+          setParallelVerses([]);
+        }
+      } catch (error) {
+        console.warn("Bible chapter verses failed", error);
+
+        if (!cancelled) {
+          setSingleVersionVerses([]);
+          setParallelVerses([]);
+        }
+      }
+    }
+
+    void loadChapterVerses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [db, book?.id, chapter, readingMode]);
 
   const visibleBooks = useMemo(() => {
     if (tab === "OT") return books.filter(b => b.testament === "OT");
@@ -698,6 +905,17 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     );
   }
 
+  if (loadError) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <Text style={styles.title}>Bible failed to load</Text>
+          <Text style={styles.muted}>{loadError}</Text>
+        </View>
+      </Screen>
+    );
+  }
+
   if (stage === "books") {
     return (
       <Screen>
@@ -825,10 +1043,18 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             catalogVersions.slice(0, 30).map(version => (
               <View key={version.id} style={styles.versionCard}>
                 <View style={styles.versionMeta}>
-                  <Text style={styles.versionTitle}>{version.name}</Text>
-                  <Text style={styles.muted}>
-                    {version.languageName || version.languageCode || version.provider}
+                  <Text style={styles.versionTitle}>
+                    {version.name}
+                    {version.abbreviation ? ` (${version.abbreviation})` : ""}
                   </Text>
+                  <Text style={styles.muted}>
+                    {version.provider === "api.bible"
+                      ? `API.Bible • ${version.languageName || version.languageCode || "Provider version"}`
+                      : version.languageName || version.languageCode || version.provider}
+                  </Text>
+                  {version.provider === "api.bible" ? (
+                    <Text style={styles.muted}>Amplified Bible export • offline install</Text>
+                  ) : null}
                 </View>
 
                 <Pressable disabled={installingVersionId === version.id} onPress={() => handleInstallVersion(version)}>
