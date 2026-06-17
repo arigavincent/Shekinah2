@@ -32,12 +32,14 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
   const [savingNoteFor, setSavingNoteFor] = useState(0);
   const [savingReminder, setSavingReminder] = useState(false);
   const [canTrackProgress, setCanTrackProgress] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   async function loadPlans(showRefresh = false) {
     if (showRefresh) setRefreshing(true);
     else setLoading(true);
 
     try {
+      setLoadError("");
       let response;
       try {
         response = await listReadingPlans({ mine: true });
@@ -49,7 +51,9 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
 
       setPlans(Array.isArray(response?.plans) ? response.plans : []);
     } catch (error) {
-      Alert.alert("Reading Plans", error instanceof Error ? error.message : "Unable to load reading plans.");
+      setPlans([]);
+      setCanTrackProgress(false);
+      setLoadError(error instanceof Error ? error.message : "Unable to load reading plans.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -149,6 +153,13 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
             {loading ? (
               <View style={s.plainCard}>
                 <Text style={[s.mutedText, { color: C.muted }]}>Loading plans...</Text>
+              </View>
+            ) : loadError ? (
+              <View style={s.plainCard}>
+                <Text style={[s.rowTitle, { color: C.white }]}>Reading plans unavailable</Text>
+                <Text style={[s.mutedText, { color: C.muted }]}>
+                  We could not load reading plans right now. Pull down to refresh after a moment.
+                </Text>
               </View>
             ) : plans.length === 0 ? (
               <View style={s.plainCard}>
