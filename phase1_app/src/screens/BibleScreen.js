@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   BackHandler,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -27,11 +28,16 @@ import {
   openBibleDb,
   removeBibleVersion
 } from "../services/bibleVersionInstaller";
-import { isBibleSpeechActive, speakBibleText, stopBibleSpeech } from "../services/bibleReaderSpeech";
-
 const ENGLISH = "eng_msb";
 const SWAHILI = "swh_neno";
 const FONT_SCALES = [0.85, 1, 1.15, 1.3];
+
+const HIGHLIGHT_COLORS = [
+  { key: "gold", label: "Gold", light: "rgba(217, 162, 27, 0.22)", dark: "rgba(216, 166, 52, 0.24)" },
+  { key: "blue", label: "Blue", light: "rgba(31, 41, 55, 0.12)", dark: "rgba(18, 63, 119, 0.28)" },
+  { key: "green", label: "Green", light: "rgba(83, 107, 75, 0.16)", dark: "rgba(92, 154, 114, 0.20)" },
+  { key: "rose", label: "Rose", light: "rgba(164, 60, 60, 0.13)", dark: "rgba(214, 90, 90, 0.18)" }
+];
 
 function chapterRef(bookId, chapter) {
   return `${bookId}:${chapter}`;
@@ -201,13 +207,13 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   const [results, setResults] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
   const [selectedVerse, setSelectedVerse] = useState(1);
-  const [speechPlaying, setSpeechPlaying] = useState(false);
-  const [speechMessage, setSpeechMessage] = useState("");
+  const [verseMenu, setVerseMenu] = useState(null);
   const [bibleState, setBibleState] = useState(() => ({
     ...DEFAULT_BIBLE_STATE,
     bookmarks: [...DEFAULT_BIBLE_STATE.bookmarks],
     verseBookmarks: [...DEFAULT_BIBLE_STATE.verseBookmarks],
     highlights: [...DEFAULT_BIBLE_STATE.highlights],
+    highlightColors: { ...(DEFAULT_BIBLE_STATE.highlightColors || {}) },
     notes: { ...DEFAULT_BIBLE_STATE.notes },
     recent: [...DEFAULT_BIBLE_STATE.recent],
     preferences: { ...DEFAULT_BIBLE_STATE.preferences }
@@ -218,12 +224,6 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   const [readingMode, setReadingMode] = useState(
     DEFAULT_BIBLE_STATE.preferences.readingMode
   );
-
-  useEffect(() => {
-    return () => {
-      stopBibleSpeech().catch(() => {});
-    };
-  }, []);
 
   async function persistBibleState(nextState) {
     setBibleState(nextState);
@@ -261,172 +261,6 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     return rows;
   }
 
-  useEffect(() => {
-    let alive = true;
-
-    Promise.all([openBibleDb(), loadBibleState()])
-      .then(async ([database, savedState]) => {
-        if (!alive) return;
-
-        setDb(database);
-        setBibleState(savedState);
-        setFontScaleIndex(savedState.preferences.fontScaleIndex);
-        setReadingMode(savedState.preferences.readingMode);
-
-        const [nextBooks] = await Promise.all([
-          getBooks(database),
-          syncInstalled(database, savedState)
-        ]);
-
-        if (!alive) return;
-        setBooks(nextBooks);
-      })
-      .finally(() => alive && setLoading(false));
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!db || !book) return;
-
-    let alive = true;
-    setChapterCount(0);
-    setVerseCount(0);
-    setParallelVerses([]);
-    setSingleVersionVerses([]);
-
-    getChapterCount(db, book.id).then(total => {
-      if (!alive) return;
-      setChapterCount(total);
-    });
-
-    return () => {
-      alive = false;
-    };
-  }, [db, book?.id]);
-
-  useEffect(() => {
-    if (!db || !book) return;
-
-    let alive = true;
-    setVerseCount(0);
-    setParallelVerses([]);
-    setSingleVersionVerses([]);
-
-    Promise.all([
-      getVerseCount(db, book.id, chapter),
-      getParallelVerses(db, book.id, chapter)
-    ]).then(([count, rows]) => {
-      if (!alive) return;
-      setVerseCount(count);
-      setParallelVerses(rows);
-    });
-
-    return () => {
-      alive = false;
-    };
-  }, [db, book?.id, chapter]);
-
-  useEffect(() => {
-    if (selectedVerse <= verseCount || verseCount <= 0) return;
-    setSelectedVerse(1);
-  }, [selectedVerse, verseCount]);
-
-  useEffect(() => {
-    if (!db || !book || readingMode === "parallel") {
-      setSingleVersionVerses([]);
-      return;
-    }
-
-    let alive = true;
-    getVersionChapterVerses(db, readingMode, book.id, chapter).then(rows => {
-      if (!alive) return;
-      setSingleVersionVerses(Array.isArray(rows) ? rows : []);
-    });
-
-    return () => {
-      alive = false;
-    };
-  }, [db, book?.id, chapter, readingMode]);
-
-  useEffect(() => {
-    if (!db || !query.trim()) {
-      setResults([]);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      searchBible(db, query).then(setResults);
-    }, 250);
-
-    return () => clearTimeout(timer);
-  }, [db, query]);
-
-  useEffect(() => {
-    if (stage !== "library") return;
-
-    let alive = true;
-    setCatalogLoading(true);
-    setCatalogError("");
-
-    const timer = setTimeout(() => {
-      listBibleVersions(catalogQuery)
-        .then(response => {
-          if (!alive) return;
-          const installed = new Set(installedVersions.map(item => item.id));
-          setCatalogVersions(
-            (response?.versions || []).filter(item => !installed.has(item.id))
-          );
-        })
-        .catch(error => {
-          if (alive) {
-            setCatalogVersions([]);
-            setCatalogError(
-              error instanceof Error ? error.message : "Unable to load Bible versions right now."
-            );
-          }
-        })
-        .finally(() => {
-          if (alive) setCatalogLoading(false);
-        });
-    }, 250);
-
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-    };
-  }, [stage, catalogQuery, installedVersions]);
-
-  useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (stage === "library") {
-        setStage("books");
-        return true;
-      }
-
-      if (stage === "reader") {
-        setStage("verses");
-        return true;
-      }
-
-      if (stage === "verses") {
-        setStage("chapters");
-        return true;
-      }
-
-      if (stage === "chapters") {
-        setStage("books");
-        return true;
-      }
-
-      return false;
-    });
-
-    return () => sub.remove();
-  }, [stage]);
-
   const visibleBooks = useMemo(() => {
     if (tab === "OT") return books.filter(b => b.testament === "OT");
     if (tab === "NT") return books.filter(b => b.testament === "NT");
@@ -446,6 +280,11 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   const verseHighlightSet = useMemo(
     () => new Set(bibleState.highlights || []),
     [bibleState.highlights]
+  );
+
+  const highlightColorMap = useMemo(
+    () => bibleState.highlightColors || {},
+    [bibleState.highlightColors]
   );
 
   const recentChapters = useMemo(
@@ -554,8 +393,6 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   const currentRef = book ? chapterRef(book.id, chapter) : "";
   const isFavorite = currentRef ? favoriteRefs.has(currentRef) : false;
   const currentVerseRef = book ? verseRef(book.id, chapter, selectedVerse) : "";
-  const isVerseBookmarked = currentVerseRef ? verseBookmarkSet.has(currentVerseRef) : false;
-  const isVerseHighlighted = currentVerseRef ? verseHighlightSet.has(currentVerseRef) : false;
   const selectedParallelVerse = parallelVerses.find(item => item.verse === selectedVerse) || null;
   const selectedSingleVerse = singleVersionVerses.find(item => item.verse === selectedVerse) || null;
 
@@ -572,12 +409,14 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     });
   }
 
-  async function toggleVerseBookmark() {
-    if (!currentVerseRef) return;
+  async function toggleVerseBookmark(verseNumber = selectedVerse) {
+    if (!book) return;
 
-    const nextBookmarks = isVerseBookmarked
-      ? (bibleState.verseBookmarks || []).filter(ref => ref !== currentVerseRef)
-      : [...(bibleState.verseBookmarks || []), currentVerseRef];
+    const targetRef = verseRef(book.id, chapter, verseNumber);
+    const currentlyBookmarked = verseBookmarkSet.has(targetRef);
+    const nextBookmarks = currentlyBookmarked
+      ? (bibleState.verseBookmarks || []).filter(ref => ref !== targetRef)
+      : [...(bibleState.verseBookmarks || []), targetRef];
 
     await persistBibleState({
       ...bibleState,
@@ -585,16 +424,35 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     });
   }
 
-  async function toggleVerseHighlight() {
-    if (!currentVerseRef) return;
+  async function setVerseHighlightColor(verseNumber, colorKey) {
+    if (!book) return;
 
-    const nextHighlights = isVerseHighlighted
-      ? (bibleState.highlights || []).filter(ref => ref !== currentVerseRef)
-      : [...(bibleState.highlights || []), currentVerseRef];
+    const targetRef = verseRef(book.id, chapter, verseNumber);
+    const nextHighlights = verseHighlightSet.has(targetRef)
+      ? bibleState.highlights || []
+      : [...(bibleState.highlights || []), targetRef];
 
     await persistBibleState({
       ...bibleState,
-      highlights: nextHighlights
+      highlights: nextHighlights,
+      highlightColors: {
+        ...(bibleState.highlightColors || {}),
+        [targetRef]: colorKey
+      }
+    });
+  }
+
+  async function clearVerseHighlight(verseNumber) {
+    if (!book) return;
+
+    const targetRef = verseRef(book.id, chapter, verseNumber);
+    const nextHighlightColors = { ...(bibleState.highlightColors || {}) };
+    delete nextHighlightColors[targetRef];
+
+    await persistBibleState({
+      ...bibleState,
+      highlights: (bibleState.highlights || []).filter(ref => ref !== targetRef),
+      highlightColors: nextHighlightColors
     });
   }
 
@@ -602,85 +460,20 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     setSelectedVerse(verseNumber);
   }
 
-  function textToReadForVersion(versionId, selectedOnly = false) {
-    if (!book) return "";
-
-    if (readingMode === "parallel") {
-      if (versionId === SWAHILI) {
-        if (selectedOnly) {
-          return selectedParallelVerse
-            ? `${book.swahili_name || book.english_name} ${chapter}:${selectedVerse}. ${selectedParallelVerse.swahili_text || ""}`
-            : "";
-        }
-
-        return parallelVerses
-          .map(item => `${item.verse}. ${item.swahili_text || ""}`)
-          .join(" ");
-      }
-
-      if (selectedOnly) {
-        return selectedParallelVerse
-          ? `${book.english_name} ${chapter}:${selectedVerse}. ${selectedParallelVerse.english_text || ""}`
-          : "";
-      }
-
-      return parallelVerses
-        .map(item => `${item.verse}. ${item.english_text || ""}`)
-        .join(" ");
-    }
-
-    const sourceVerse = selectedOnly
-      ? selectedSingleVerse
-      : null;
-
-    if (selectedOnly) {
-      return sourceVerse
-        ? `${activeVersionMeta?.name || book.english_name} ${chapter}:${selectedVerse}. ${sourceVerse.text || ""}`
-        : "";
-    }
-
-    return singleVersionVerses
-      .map(item => `${item.verse}. ${item.text || ""}`)
-      .join(" ");
+  function openVerseMenu(verseNumber) {
+    setSelectedVerse(verseNumber);
+    setVerseMenu({ verse: verseNumber });
   }
 
-  function speakCurrentText(versionId, selectedOnly = false) {
-    const text = textToReadForVersion(versionId, selectedOnly);
-    if (!text.trim()) {
-      Alert.alert("Bible Audio Reader", "No readable text is available for this selection.");
-      return;
-    }
-
-    setSpeechMessage(selectedOnly ? "Reading selected verse..." : "Reading chapter...");
-    speakBibleText({
-      text,
-      versionId,
-      onStart: () => {
-        setSpeechPlaying(true);
-      },
-      onDone: () => {
-        setSpeechPlaying(false);
-        setSpeechMessage("");
-      },
-      onStopped: () => {
-        setSpeechPlaying(false);
-        setSpeechMessage("");
-      },
-      onError: error => {
-        setSpeechPlaying(false);
-        setSpeechMessage("");
-        Alert.alert(
-          "Bible Audio Reader",
-          error instanceof Error ? error.message : "Unable to read this Bible passage aloud."
-        );
-      }
-    });
+  function closeVerseMenu() {
+    setVerseMenu(null);
   }
 
-  async function stopReading() {
-    await stopBibleSpeech();
-    setSpeechPlaying(false);
-    setSpeechMessage("");
+  function getHighlightStyle(ref) {
+    const colorKey = highlightColorMap[ref] || "gold";
+    const color = HIGHLIGHT_COLORS.find(item => item.key === colorKey) || HIGHLIGHT_COLORS[0];
+    const isLight = C.background === "#FBFAF7";
+    return { backgroundColor: isLight ? color.light : color.dark };
   }
 
   function cycleFontSize() {
@@ -814,6 +607,83 @@ export function BibleScreen({ go, appLanguage = "en" }) {
         selectedVersionId: versionId
       }
     });
+  }
+
+  function renderVerseMenuModal() {
+    if (!verseMenu || !book) return null;
+
+    const verseNumber = verseMenu.verse || selectedVerse;
+    const targetRef = verseRef(book.id, chapter, verseNumber);
+    const bookmarked = verseBookmarkSet.has(targetRef);
+
+    return (
+      <Modal
+        visible={!!verseMenu}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeVerseMenu}
+      >
+        <View style={styles.verseMenuBackdrop}>
+          <Pressable style={styles.verseMenuBackdropTouch} onPress={closeVerseMenu} />
+
+          <View style={styles.verseMenuCard}>
+            <Text style={styles.verseMenuTitle}>
+              {book.english_name} {chapter}:{verseNumber}
+            </Text>
+
+
+            <Pressable
+              style={styles.verseMenuItem}
+              onPress={() => {
+                void toggleVerseBookmark(verseNumber);
+                closeVerseMenu();
+              }}
+            >
+              <Ionicons
+                name={bookmarked ? "bookmark" : "bookmark-outline"}
+                size={20}
+                color={C.gold}
+              />
+              <Text style={styles.verseMenuText}>
+                {bookmarked ? "Remove bookmark" : "Bookmark verse"}
+              </Text>
+            </Pressable>
+
+            <Text style={styles.verseMenuSubtitle}>Highlight verse</Text>
+
+            <View style={styles.highlightColorRow}>
+              {HIGHLIGHT_COLORS.map(color => (
+                <Pressable
+                  key={color.key}
+                  style={[
+                    styles.highlightColorBtn,
+                    { backgroundColor: C.background === "#FBFAF7" ? color.light : color.dark }
+                  ]}
+                  onPress={() => {
+                    void setVerseHighlightColor(verseNumber, color.key);
+                    closeVerseMenu();
+                  }}
+                >
+                  <Text style={styles.highlightColorText}>{color.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Pressable
+              style={styles.verseMenuItem}
+              onPress={() => {
+                void clearVerseHighlight(verseNumber);
+                closeVerseMenu();
+              }}
+            >
+              <Ionicons name="close-circle-outline" size={20} color={C.red} />
+              <Text style={[styles.verseMenuText, { color: C.red }]}>Remove highlight</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    );
   }
 
   const fontScale = FONT_SCALES[fontScaleIndex];
@@ -1088,6 +958,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
               />
             </Pressable>
 
+
             <Pressable onPress={() => setShowSearch(v => !v)}>
               <Ionicons name="search" size={28} color={C.text} />
             </Pressable>
@@ -1140,117 +1011,6 @@ export function BibleScreen({ go, appLanguage = "en" }) {
           ))}
         </View>
 
-        <View style={styles.audioReaderCard}>
-          <View style={styles.audioReaderHeader}>
-            <Text style={styles.audioReaderTitle}>Audio Reader</Text>
-            {speechPlaying || isBibleSpeechActive() ? (
-              <Text style={styles.audioReaderMeta}>{speechMessage || "Reading..."}</Text>
-            ) : (
-              <Text style={styles.audioReaderMeta}>
-                {readingMode === "parallel"
-                  ? "Read English or Kiswahili aloud."
-                  : "Read the current version aloud."}
-              </Text>
-            )}
-          </View>
-
-          <View style={styles.audioReaderActions}>
-            {readingMode === "parallel" ? (
-              <>
-                <Pressable style={styles.audioReaderBtn} onPress={() => speakCurrentText(SWAHILI, false)}>
-                  <Ionicons name="volume-high-outline" size={18} color={C.gold} />
-                  <Text style={styles.audioReaderBtnText}>Read Kiswahili</Text>
-                </Pressable>
-                <Pressable style={styles.audioReaderBtn} onPress={() => speakCurrentText(ENGLISH, false)}>
-                  <Ionicons name="volume-high-outline" size={18} color={C.gold} />
-                  <Text style={styles.audioReaderBtnText}>Read English</Text>
-                </Pressable>
-              </>
-            ) : (
-              <Pressable style={styles.audioReaderBtn} onPress={() => speakCurrentText(readingMode, false)}>
-                <Ionicons name="volume-high-outline" size={18} color={C.gold} />
-                <Text style={styles.audioReaderBtnText}>Read Chapter</Text>
-              </Pressable>
-            )}
-
-            <Pressable
-              style={[styles.audioReaderBtn, !speechPlaying && styles.audioReaderBtnDisabled]}
-              onPress={stopReading}
-              disabled={!speechPlaying}
-            >
-              <Ionicons name="stop-outline" size={18} color={speechPlaying ? C.red : C.muted} />
-              <Text style={[styles.audioReaderBtnText, { color: speechPlaying ? C.red : C.muted }]}>Stop</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.selectionCard}>
-          <View style={styles.selectionHeader}>
-            <Text style={styles.selectionTitle}>Selected Verse</Text>
-            <Text style={styles.selectionMeta}>
-              {book?.english_name} {chapter}:{selectedVerse}
-            </Text>
-          </View>
-
-          <View style={styles.selectionActions}>
-            <Pressable
-              style={[styles.selectionBtn, isVerseBookmarked && styles.selectionBtnActive]}
-              onPress={toggleVerseBookmark}
-            >
-              <Ionicons
-                name={isVerseBookmarked ? "bookmark" : "bookmark-outline"}
-                size={16}
-                color={isVerseBookmarked ? C.textOnAccent : C.gold}
-              />
-              <Text
-                style={[
-                  styles.selectionBtnText,
-                  isVerseBookmarked && styles.selectionBtnTextActive
-                ]}
-              >
-                {isVerseBookmarked ? "Bookmarked" : "Bookmark"}
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.selectionBtn, isVerseHighlighted && styles.selectionBtnActive]}
-              onPress={toggleVerseHighlight}
-            >
-              <Ionicons
-                name={isVerseHighlighted ? "color-fill" : "color-fill-outline"}
-                size={16}
-                color={isVerseHighlighted ? C.textOnAccent : C.gold}
-              />
-              <Text
-                style={[
-                  styles.selectionBtnText,
-                  isVerseHighlighted && styles.selectionBtnTextActive
-                ]}
-              >
-                {isVerseHighlighted ? "Highlighted" : "Highlight"}
-              </Text>
-            </Pressable>
-
-            {readingMode === "parallel" ? (
-              <>
-                <Pressable style={styles.selectionBtn} onPress={() => speakCurrentText(SWAHILI, true)}>
-                  <Ionicons name="volume-medium-outline" size={16} color={C.gold} />
-                  <Text style={styles.selectionBtnText}>Read SW</Text>
-                </Pressable>
-                <Pressable style={styles.selectionBtn} onPress={() => speakCurrentText(ENGLISH, true)}>
-                  <Ionicons name="volume-medium-outline" size={16} color={C.gold} />
-                  <Text style={styles.selectionBtnText}>Read EN</Text>
-                </Pressable>
-              </>
-            ) : (
-              <Pressable style={styles.selectionBtn} onPress={() => speakCurrentText(readingMode, true)}>
-                <Ionicons name="volume-medium-outline" size={16} color={C.gold} />
-                <Text style={styles.selectionBtnText}>Read Verse</Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-
         {readingMode === "parallel" ? (
           <>
             <View style={styles.readerLabels}>
@@ -1271,9 +1031,11 @@ export function BibleScreen({ go, appLanguage = "en" }) {
                     style={[
                       styles.parallelVerseRow,
                       selected && styles.parallelVerseRowSelected,
-                      highlighted && styles.parallelVerseRowHighlighted
+                      highlighted && getHighlightStyle(nextRef)
                     ]}
                     onPress={() => selectVerse(item.verse)}
+                    onLongPress={() => openVerseMenu(item.verse)}
+                    delayLongPress={350}
                   >
                     <View style={styles.parallelVerseTop}>
                       <Text style={styles.parallelVerseNo}>{item.verse}</Text>
@@ -1319,9 +1081,11 @@ export function BibleScreen({ go, appLanguage = "en" }) {
                   styles.singleVerseRow,
                   selectedVerse === item.verse && styles.singleVerseRowSelected,
                   verseHighlightSet.has(verseRef(book?.id, chapter, item.verse)) &&
-                    styles.singleVerseRowHighlighted
+                    getHighlightStyle(verseRef(book?.id, chapter, item.verse))
                 ]}
                 onPress={() => selectVerse(item.verse)}
+                onLongPress={() => openVerseMenu(item.verse)}
+                delayLongPress={350}
               >
                 <View style={styles.parallelVerseTop}>
                   <Text style={styles.parallelVerseNo}>{item.verse}</Text>
@@ -1350,7 +1114,9 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             ) : null}
           </View>
         )}
+
       </ScrollView>
+      {renderVerseMenuModal()}
     </Screen>
   );
 }
@@ -1386,12 +1152,12 @@ const styles = makeThemedStyles(C => ({
   headerTitleWrap: {
     flex: 1
   },
-  headerTitle: {
+  headerTitle: { fontFamily: C.fontDisplay,
     color: C.text,
     fontSize: 24,
     fontWeight: "900"
   },
-  headerSubtitle: {
+  headerSubtitle: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 13,
     marginTop: 3
@@ -1415,7 +1181,7 @@ const styles = makeThemedStyles(C => ({
   tabActive: {
     borderBottomColor: C.gold
   },
-  tabText: {
+  tabText: { fontFamily: C.fontBold,
     color: C.textOnBrand,
     fontSize: 13,
     fontWeight: "900",
@@ -1440,17 +1206,17 @@ const styles = makeThemedStyles(C => ({
   bookMeta: {
     flex: 1
   },
-  bookTitle: {
+  bookTitle: { fontFamily: C.fontDisplay,
     color: C.text,
     fontSize: 21,
     fontWeight: "700"
   },
-  muted: {
+  muted: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 16,
     marginTop: 8
   },
-  sectionTitle: {
+  sectionTitle: { fontFamily: C.fontDisplay,
     color: C.text,
     fontSize: 22,
     fontWeight: "900",
@@ -1471,12 +1237,12 @@ const styles = makeThemedStyles(C => ({
     alignItems: "center",
     justifyContent: "center"
   },
-  gridNumber: {
+  gridNumber: { fontFamily: C.fontBold,
     color: C.text,
     fontSize: 28,
     fontWeight: "900"
   },
-  gridLabel: {
+  gridLabel: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 14,
     marginTop: 6
@@ -1506,7 +1272,7 @@ const styles = makeThemedStyles(C => ({
     borderColor: C.gold,
     backgroundColor: C.surface2
   },
-  modeText: {
+  modeText: { fontFamily: C.fontBold,
     color: C.muted,
     fontSize: 14,
     fontWeight: "800"
@@ -1526,12 +1292,12 @@ const styles = makeThemedStyles(C => ({
   audioReaderHeader: {
     gap: 4
   },
-  audioReaderTitle: {
+  audioReaderTitle: { fontFamily: C.fontDisplay,
     color: C.text,
     fontSize: 16,
     fontWeight: "900"
   },
-  audioReaderMeta: {
+  audioReaderMeta: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 13,
     lineHeight: 19
@@ -1555,7 +1321,7 @@ const styles = makeThemedStyles(C => ({
   audioReaderBtnDisabled: {
     opacity: 0.55
   },
-  audioReaderBtnText: {
+  audioReaderBtnText: { fontFamily: C.fontBold,
     color: C.text,
     fontSize: 13,
     fontWeight: "800"
@@ -1572,12 +1338,12 @@ const styles = makeThemedStyles(C => ({
   selectionHeader: {
     gap: 4
   },
-  selectionTitle: {
+  selectionTitle: { fontFamily: C.fontDisplay,
     color: C.text,
     fontSize: 15,
     fontWeight: "900"
   },
-  selectionMeta: {
+  selectionMeta: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 13
   },
@@ -1601,7 +1367,7 @@ const styles = makeThemedStyles(C => ({
     backgroundColor: C.gold,
     borderColor: C.gold
   },
-  selectionBtnText: {
+  selectionBtnText: { fontFamily: C.fontBold,
     color: C.text,
     fontSize: 13,
     fontWeight: "800"
@@ -1613,7 +1379,7 @@ const styles = makeThemedStyles(C => ({
     flexDirection: "row",
     marginBottom: 20
   },
-  readerLabel: {
+  readerLabel: { fontFamily: C.fontDisplay,
     flex: 1,
     color: C.text,
     fontSize: 20,
@@ -1625,20 +1391,20 @@ const styles = makeThemedStyles(C => ({
   singleColumn: {
     paddingBottom: 12
   },
-  chapterHeading: {
+  chapterHeading: { fontFamily: C.fontDisplay,
     color: C.gold,
     fontSize: 32,
     fontWeight: "900",
     marginBottom: 24
   },
-  verseText: {
+  verseText: { fontFamily: C.fontBody,
     color: C.text,
     fontSize: 26,
     lineHeight: 42,
     fontWeight: "600",
     marginBottom: 0
   },
-  verseNo: {
+  verseNo: { fontFamily: C.fontBold,
     color: C.green,
     fontSize: 17,
     fontWeight: "900"
@@ -1667,7 +1433,7 @@ const styles = makeThemedStyles(C => ({
     alignItems: "center",
     justifyContent: "space-between"
   },
-  parallelVerseNo: {
+  parallelVerseNo: { fontFamily: C.fontBold,
     color: C.gold,
     fontSize: 16,
     fontWeight: "900"
@@ -1681,7 +1447,7 @@ const styles = makeThemedStyles(C => ({
     flexDirection: "row",
     gap: 18
   },
-  parallelVerseText: {
+  parallelVerseText: { fontFamily: C.fontBody,
     flex: 1,
     color: C.text,
     fontWeight: "600"
@@ -1706,12 +1472,12 @@ const styles = makeThemedStyles(C => ({
   singleVerseRowHighlighted: {
     backgroundColor: C.surface2
   },
-  fontIcon: {
+  fontIcon: { fontFamily: C.fontBold,
     color: C.text,
     fontSize: 27,
     fontWeight: "900"
   },
-  title: {
+  title: { fontFamily: C.fontDisplay,
     color: C.text,
     fontSize: 20,
     fontWeight: "800"
@@ -1725,7 +1491,7 @@ const styles = makeThemedStyles(C => ({
     borderWidth: 1,
     borderColor: C.line
   },
-  searchInput: {
+  searchInput: { fontFamily: C.fontBody,
     minHeight: 48,
     borderWidth: 1,
     borderColor: C.line,
@@ -1740,13 +1506,13 @@ const styles = makeThemedStyles(C => ({
     borderBottomWidth: 1,
     borderBottomColor: C.line
   },
-  searchRef: {
+  searchRef: { fontFamily: C.fontBold,
     color: C.gold,
     fontSize: 15,
     fontWeight: "900",
     marginBottom: 4
   },
-  searchText: {
+  searchText: { fontFamily: C.fontBody,
     color: C.text,
     fontSize: 15,
     lineHeight: 22
@@ -1767,17 +1533,17 @@ const styles = makeThemedStyles(C => ({
   versionMeta: {
     flex: 1
   },
-  versionTitle: {
+  versionTitle: { fontFamily: C.fontDisplay,
     color: C.text,
     fontSize: 18,
     fontWeight: "800"
   },
-  versionState: {
+  versionState: { fontFamily: C.fontBold,
     color: C.gold,
     fontSize: 14,
     fontWeight: "900"
   },
-  versionAction: {
+  versionAction: { fontFamily: C.fontBold,
     color: C.text,
     fontSize: 13,
     fontWeight: "800"
@@ -1790,13 +1556,13 @@ const styles = makeThemedStyles(C => ({
     borderColor: C.blue,
     backgroundColor: C.surface2
   },
-  infoTitle: {
+  infoTitle: { fontFamily: C.fontDisplay,
     color: C.text,
     fontSize: 16,
     fontWeight: "900",
     marginBottom: 8
   },
-  infoText: {
+  infoText: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 14,
     lineHeight: 22
@@ -1813,7 +1579,86 @@ const styles = makeThemedStyles(C => ({
     alignItems: "center",
     gap: 16
   },
-  emptyText: {
+  verseMenuBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.58)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 18
+  },
+  verseMenuBackdropTouch: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0
+  },
+  verseMenuCard: {
+    width: "100%",
+    maxWidth: 430,
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: C.line,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10
+  },
+  verseMenuTitle: {
+    fontFamily: C.fontDisplay,
+    color: C.text,
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 4
+  },
+  verseMenuSubtitle: {
+    fontFamily: C.fontBold,
+    color: C.muted,
+    fontSize: 13,
+    marginTop: 8
+  },
+  verseMenuItem: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: C.surface2,
+    borderWidth: 1,
+    borderColor: C.line,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
+  },
+  verseMenuText: {
+    fontFamily: C.fontBold,
+    color: C.text,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  highlightColorRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  highlightColorBtn: {
+    minHeight: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.line,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  highlightColorText: {
+    fontFamily: C.fontBold,
+    color: C.text,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  emptyText: { fontFamily: C.fontBody,
     color: C.muted,
     fontSize: 15,
     marginBottom: 26

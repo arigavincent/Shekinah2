@@ -6,6 +6,6 @@ const envBaseUrl =
     : null;
 
 export const API_CONFIG = {
-  baseUrl: envBaseUrl || "http://localhost:3000",
+  baseUrl: envBaseUrl || "https://shekinah-sons-backend.onrender.com",
   timeoutMs: 10000
 };

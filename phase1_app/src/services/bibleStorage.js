@@ -6,6 +6,7 @@ export const DEFAULT_BIBLE_STATE = {
   bookmarks: [],
   verseBookmarks: [],
   highlights: [],
+  highlightColors: {},
   notes: {},
   recent: [],
   preferences: {
@@ -25,6 +26,10 @@ function normalizeBibleState(value) {
     bookmarks: Array.isArray(value.bookmarks) ? value.bookmarks : [],
     verseBookmarks: Array.isArray(value.verseBookmarks) ? value.verseBookmarks : [],
     highlights: Array.isArray(value.highlights) ? value.highlights : [],
+    highlightColors:
+      value.highlightColors && typeof value.highlightColors === "object"
+        ? value.highlightColors
+        : {},
     notes: value.notes && typeof value.notes === "object" ? value.notes : {},
     recent: Array.isArray(value.recent) ? value.recent : [],
     preferences:

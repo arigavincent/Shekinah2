@@ -12,6 +12,7 @@ import (
 	adminreadingplans "github.com/ariga/shekinah-backend/internal/admin/readingplans"
 	adminsermons "github.com/ariga/shekinah-backend/internal/admin/sermons"
 	adminupdates "github.com/ariga/shekinah-backend/internal/admin/updates"
+	"github.com/ariga/shekinah-backend/internal/apibible"
 	"github.com/ariga/shekinah-backend/internal/auth"
 	"github.com/ariga/shekinah-backend/internal/bibleversions"
 	"github.com/ariga/shekinah-backend/internal/checkins"
@@ -89,6 +90,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	readingPlanHandler := readingplans.NewHandler(db)
 	checkinHandler := checkins.NewHandler(db)
 	bibleVersionsHandler := bibleversions.NewHandler(db, cfg)
+	apiBibleHandler := apibible.NewHandler(cfg)
 	privateChatHandler := privatechat.NewHandler(db)
 	libraryHandler := library.NewHandler(db)
 
@@ -134,6 +136,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/library/:id", libraryHandler.Detail)
 		api.GET("/bible/versions", bibleVersionsHandler.List)
 		api.GET("/bible/versions/:id/download", bibleVersionsHandler.Download)
+		api.GET("/bible/provider/api-bible/versions", apiBibleHandler.ListBibles)
+		api.GET("/bible/provider/api-bible/audio-bibles", apiBibleHandler.ListAudioBibles)
 		api.GET("/bible/installs", auth.RequireAuth(authService), bibleVersionsHandler.ListInstalled)
 		api.POST("/bible/installs", auth.RequireAuth(authService), bibleVersionsHandler.RecordInstall)
 		api.POST("/private-chat/device", auth.RequireAuth(authService), privateChatHandler.RegisterDevice)

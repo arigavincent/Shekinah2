@@ -74,7 +74,7 @@ function MinistryCard({ ministry, active, onPress }) {
         s.plainCard,
         {
           borderColor: active ? C.gold : C.line,
-          backgroundColor: active ? "rgba(212, 175, 55, 0.12)" : C.surface
+          backgroundColor: active ? C.goldSoft : C.surface
         }
       ]}
     >

@@ -6,8 +6,17 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
+import { useFonts } from "expo-font";
+
+import {
+  Roboto_400Regular,
+  Roboto_500Medium,
+  Roboto_700Bold,
+  Roboto_900Black
+} from "@expo-google-fonts/roboto";
 
 import { AuthProfileScreen } from "../features/profile/AuthProfileScreen";
+import { loadSavedSession } from "../features/auth/authSession";
 
 import { ContentProvider } from "../providers/ContentProvider";
 
@@ -15,6 +24,7 @@ import { C, setThemeMode, ThemeContext } from "../constants/theme";
 import {
   DEFAULT_APP_LANGUAGE,
   DEFAULT_APP_THEME,
+  DEFAULT_APP_THEME_PALETTE,
   DEFAULT_NOTIFICATION_PREFS,
   STORAGE_KEYS
 } from "../constants/storage";
@@ -102,6 +112,12 @@ function notificationTargetScreen(data) {
 }
 
 function App() {
+  const [fontsLoaded] = useFonts({
+    Roboto_400Regular,
+    Roboto_500Medium,
+    Roboto_700Bold,
+    Roboto_900Black
+  });
   const [screen, setScreen] = useState("Home");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -120,8 +136,37 @@ function App() {
   const [appLanguage, setAppLanguage] = useState(DEFAULT_APP_LANGUAGE);
   const [appLanguageLoaded, setAppLanguageLoaded] = useState(false);
   const [appTheme, setAppTheme] = useState(DEFAULT_APP_THEME);
+  const [appThemePalette, setAppThemePalette] = useState(DEFAULT_APP_THEME_PALETTE);
   const [appThemeLoaded, setAppThemeLoaded] = useState(false);
   const [miniPlayer, setMiniPlayer] = useState(null);
+  const [authSession, setAuthSession] = useState({ token: null, user: null });
+
+  const themeUserKey = String(authSession?.user?.id || authSession?.user?.email || "").trim();
+  const themeModeStorageKey = themeUserKey
+    ? `${STORAGE_KEYS.appTheme}:${themeUserKey}`
+    : STORAGE_KEYS.appTheme;
+  const themePaletteStorageKey = themeUserKey
+    ? `${STORAGE_KEYS.appThemePalette}:${themeUserKey}`
+    : STORAGE_KEYS.appThemePalette;
+
+useEffect(() => {
+  let mounted = true;
+
+  async function loadAuthSession() {
+    try {
+      const saved = await loadSavedSession();
+      if (mounted) setAuthSession(saved);
+    } catch {
+      if (mounted) setAuthSession({ token: null, user: null });
+    }
+  }
+
+  loadAuthSession();
+
+  return () => {
+    mounted = false;
+  };
+}, []);
 
 useEffect(() => {
   let mounted = true;
@@ -162,18 +207,25 @@ useEffect(() => {
 useEffect(() => {
   let mounted = true;
 
-  async function loadAppTheme() {
+  async function loadAppAppearance() {
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEYS.appTheme);
+      const [rawTheme, rawPalette] = await Promise.all([
+        AsyncStorage.getItem(themeModeStorageKey),
+        AsyncStorage.getItem(themePaletteStorageKey)
+      ]);
 
       if (!mounted) return;
 
-      setAppTheme(raw === "light" ? "light" : DEFAULT_APP_THEME);
+      setAppTheme(rawTheme === "light" ? "light" : DEFAULT_APP_THEME);
+      setAppThemePalette(
+        DEFAULT_APP_THEME_PALETTE
+      );
     } catch (error) {
-      console.warn("Failed to load app theme", error);
+      console.warn("Failed to load app appearance", error);
 
       if (mounted) {
         setAppTheme(DEFAULT_APP_THEME);
+        setAppThemePalette(DEFAULT_APP_THEME_PALETTE);
       }
     } finally {
       if (mounted) {
@@ -182,12 +234,12 @@ useEffect(() => {
     }
   }
 
-  loadAppTheme();
+  loadAppAppearance();
 
   return () => {
     mounted = false;
   };
-}, []);
+}, [themeModeStorageKey, themePaletteStorageKey]);
 
 useEffect(() => {
   let mounted = true;
@@ -281,14 +333,17 @@ useEffect(() => {
 useEffect(() => {
   if (!appThemeLoaded) return;
 
-  AsyncStorage.setItem(STORAGE_KEYS.appTheme, appTheme).catch(error => {
-    console.warn("Failed to save app theme", error);
+  AsyncStorage.multiSet([
+    [themeModeStorageKey, appTheme],
+    [themePaletteStorageKey, appThemePalette]
+  ]).catch(error => {
+    console.warn("Failed to save app appearance", error);
   });
-}, [appTheme, appThemeLoaded]);
+}, [appTheme, appThemePalette, appThemeLoaded, themeModeStorageKey, themePaletteStorageKey]);
 
 useEffect(() => {
-  setThemeMode(appTheme);
-}, [appTheme]);
+  setThemeMode(appTheme, appThemePalette);
+}, [appTheme, appThemePalette]);
 
 
   useEffect(() => {
@@ -441,7 +496,7 @@ useEffect(() => {
       case "Chat":
         return <ChatScreen go={go} openDrawer={openDrawer} tab={chatTab} setTab={setChatTab} detail={detail} appLanguage={appLanguage} />;
       case "Library":
-        return <LibraryScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
+        return <LibraryScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} session={authSession} />;
       case "MemberProfile":
         return <MemberProfileScreen go={go} detail={detail} appLanguage={appLanguage} />;
       case "PrivateChatThread":
@@ -458,6 +513,10 @@ useEffect(() => {
             setAppLanguage={setAppLanguage}
             appTheme={appTheme}
             setAppTheme={setAppTheme}
+            appThemePalette={appThemePalette}
+            setAppThemePalette={setAppThemePalette}
+            initialSession={authSession}
+            onSessionChange={setAuthSession}
           />
         );
       case "Bible":
@@ -498,19 +557,21 @@ useEffect(() => {
 
   const themeContextValue = {
     mode: appTheme,
+    palette: appThemePalette,
     setMode: setAppTheme,
+    setPalette: setAppThemePalette,
     toggleTheme: () => setAppTheme(current => (current === "light" ? "dark" : "light"))
   };
 
   const memoizedThemeContextValue = useMemo(
     () => themeContextValue,
-    [appTheme]
+    [appTheme, appThemePalette]
   );
 
-  if (!appThemeLoaded) {
+  if (!appThemeLoaded || !fontsLoaded) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#000000" }}>
-        <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
+        <StatusBar barStyle={appTheme === "light" ? "dark-content" : "light-content"} backgroundColor={C.background} />
       </SafeAreaView>
     );
   }
