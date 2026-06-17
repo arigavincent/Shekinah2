@@ -118,6 +118,7 @@ export function ReadingPlansScreen({ go, openDrawer, appLanguage = "en" }) {
         title="Reading Plans"
         go={go}
         back={selectedPlan ? "ReadingPlans" : undefined}
+        onBack={selectedPlan ? () => setSelectedPlan(null) : undefined}
         onMenu={selectedPlan ? undefined : openDrawer}
         appLanguage={appLanguage}
       />
