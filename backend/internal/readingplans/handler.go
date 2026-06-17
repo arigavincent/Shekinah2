@@ -83,7 +83,7 @@ func (h Handler) List(c *gin.Context) {
 			FROM reading_plans p
 			LEFT JOIN reading_plan_progress r
 			  ON r.plan_id = p.id
-			 AND ($1 <> '' AND r.user_id = $1)
+			 AND r.user_id = NULLIF($1, '')::uuid
 			WHERE p.is_active = TRUE
 			GROUP BY p.id
 			ORDER BY p.created_at DESC
@@ -153,7 +153,7 @@ func (h Handler) Detail(c *gin.Context) {
 			FROM reading_plans p
 			LEFT JOIN reading_plan_progress r
 			  ON r.plan_id = p.id
-			 AND ($2 <> '' AND r.user_id = $2)
+			 AND r.user_id = NULLIF($2, '')::uuid
 			WHERE p.id = $1
 			  AND p.is_active = TRUE
 			GROUP BY p.id
@@ -196,11 +196,11 @@ func (h Handler) Detail(c *gin.Context) {
 			LEFT JOIN reading_plan_progress r
 			  ON r.plan_id = d.plan_id
 			 AND r.day_number = d.day_number
-			 AND ($2 <> '' AND r.user_id = $2)
+			 AND r.user_id = NULLIF($2, '')::uuid
 			LEFT JOIN reading_plan_notes n
 			  ON n.plan_id = d.plan_id
 			 AND n.day_number = d.day_number
-			 AND ($2 <> '' AND n.user_id = $2)
+			 AND n.user_id = NULLIF($2, '')::uuid
 			WHERE d.plan_id = $1
 			ORDER BY d.day_number ASC
 		`,
