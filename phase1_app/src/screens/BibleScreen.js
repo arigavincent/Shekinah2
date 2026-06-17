@@ -26,7 +26,8 @@ import {
   installBibleVersion,
   listInstalledBibleVersions,
   openBibleDb,
-  removeBibleVersion
+  removeBibleVersion,
+  resetBibleDb
 } from "../services/bibleVersionInstaller";
 const ENGLISH = "eng_msb";
 const SWAHILI = "swh_neno";
@@ -69,30 +70,30 @@ async function getBooks(db) {
   `);
 }
 
-async function getChapterCount(db, bookId) {
+async function getChapterCount(db, versionId, bookId) {
   const row = await db.getFirstAsync(
     `
     SELECT MAX(chapter) AS total
     FROM verses
     WHERE version_id = ? AND book_id = ?
     `,
-    [ENGLISH, bookId]
+    [versionId, bookId]
   );
 
-  return Number(row?.total || 1);
+  return Number(row?.total || 0);
 }
 
-async function getVerseCount(db, bookId, chapter) {
+async function getVerseCount(db, versionId, bookId, chapter) {
   const row = await db.getFirstAsync(
     `
     SELECT MAX(verse) AS total
     FROM verses
     WHERE version_id = ? AND book_id = ? AND chapter = ?
     `,
-    [ENGLISH, bookId, chapter]
+    [versionId, bookId, chapter]
   );
 
-  return Number(row?.total || 1);
+  return Number(row?.total || 0);
 }
 
 async function getParallelVerses(db, bookId, chapter) {
@@ -369,12 +370,13 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     let cancelled = false;
 
     async function loadChapterCount() {
-      if (!db || !book) {
+      if (!db || !book?.id) {
         return;
       }
 
       try {
-        const count = await getChapterCount(db, book.id);
+        const countVersionId = readingMode === "parallel" ? ENGLISH : readingMode;
+        const count = await getChapterCount(db, countVersionId, book.id);
 
         if (!cancelled) {
           setChapterCount(count || 0);
@@ -393,18 +395,19 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     return () => {
       cancelled = true;
     };
-  }, [db, book?.id]);
+  }, [db, book?.id, readingMode]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadVerseCount() {
-      if (!db || !book || !chapter) {
+      if (!db || !book?.id || !chapter) {
         return;
       }
 
       try {
-        const count = await getVerseCount(db, book.id, chapter);
+        const countVersionId = readingMode === "parallel" ? ENGLISH : readingMode;
+        const count = await getVerseCount(db, countVersionId, book.id, chapter);
 
         if (!cancelled) {
           setVerseCount(count || 0);
@@ -423,13 +426,13 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     return () => {
       cancelled = true;
     };
-  }, [db, book?.id, chapter]);
+  }, [db, book?.id, chapter, readingMode]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadChapterVerses() {
-      if (!db || !book || !chapter) {
+      if (!db || !book?.id || !chapter || !readingMode) {
         return;
       }
 
@@ -893,6 +896,51 @@ export function BibleScreen({ go, appLanguage = "en" }) {
     );
   }
 
+  async function repairBibleDatabase() {
+    try {
+      setLoading(true);
+      setLoadError("");
+
+      const database = await resetBibleDb();
+      const [savedState, bookRows] = await Promise.all([
+        loadBibleState(),
+        getBooks(database)
+      ]);
+
+      setDb(database);
+      setBooks(bookRows);
+
+      const repairedState = {
+        ...savedState,
+        preferences: {
+          ...savedState.preferences,
+          readingMode: "parallel",
+          selectedVersionId: ENGLISH
+        }
+      };
+
+      await syncInstalled(database, repairedState);
+      setStage("books");
+      setBook(null);
+      setChapter(1);
+      setChapterCount(1);
+      setVerseCount(1);
+      setParallelVerses([]);
+      setSingleVersionVerses([]);
+
+      Alert.alert("Bible Repaired", "The offline Bible database was restored. Downloaded versions can be installed again.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to repair the offline Bible database.";
+
+      setLoadError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const fontScale = FONT_SCALES[fontScaleIndex];
 
   if (loading) {
@@ -911,6 +959,10 @@ export function BibleScreen({ go, appLanguage = "en" }) {
         <View style={styles.center}>
           <Text style={styles.title}>Bible failed to load</Text>
           <Text style={styles.muted}>{loadError}</Text>
+
+          <Pressable style={[styles.primaryButton, { marginTop: 18 }]} onPress={repairBibleDatabase}>
+            <Text style={styles.primaryButtonText}>Repair Bible Database</Text>
+          </Pressable>
         </View>
       </Screen>
     );
@@ -1132,14 +1184,20 @@ export function BibleScreen({ go, appLanguage = "en" }) {
         <ScrollView contentContainerStyle={styles.page}>
           <Text style={styles.sectionTitle}>{tr(appLanguage, "Select a Chapter")}</Text>
 
-          <View style={styles.grid}>
-            {Array.from({ length: chapterCount }, (_, i) => i + 1).map(item => (
-              <Pressable key={item} style={styles.gridCell} onPress={() => openChapter(item)}>
-                <Text style={styles.gridNumber}>{item}.</Text>
-                <Text style={styles.gridLabel}>{tr(appLanguage, "Chapter")}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {chapterCount > 0 ? (
+            <View style={styles.grid}>
+              {Array.from({ length: chapterCount }, (_, i) => i + 1).map(item => (
+                <Pressable key={item} style={styles.gridCell} onPress={() => openChapter(item)}>
+                  <Text style={styles.gridNumber}>{item}.</Text>
+                  <Text style={styles.gridLabel}>{tr(appLanguage, "Chapter")}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>
+              No chapters found for the selected Bible version. Remove and download this version again.
+            </Text>
+          )}
         </ScrollView>
       </Screen>
     );
@@ -1156,14 +1214,20 @@ export function BibleScreen({ go, appLanguage = "en" }) {
         <ScrollView contentContainerStyle={styles.page}>
           <Text style={styles.sectionTitle}>{tr(appLanguage, "Select a Verse")}</Text>
 
-          <View style={styles.grid}>
-            {Array.from({ length: verseCount }, (_, i) => i + 1).map(item => (
-              <Pressable key={item} style={styles.gridCell} onPress={() => openReader(item)}>
-                <Text style={styles.gridNumber}>{item}.</Text>
-                <Text style={styles.gridLabel}>{tr(appLanguage, "Verse")}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {verseCount > 0 ? (
+            <View style={styles.grid}>
+              {Array.from({ length: verseCount }, (_, i) => i + 1).map(item => (
+                <Pressable key={item} style={styles.gridCell} onPress={() => openReader(item)}>
+                  <Text style={styles.gridNumber}>{item}.</Text>
+                  <Text style={styles.gridLabel}>{tr(appLanguage, "Verse")}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>
+              No verses found for this chapter in the selected Bible version. Remove and download this version again.
+            </Text>
+          )}
         </ScrollView>
       </Screen>
     );

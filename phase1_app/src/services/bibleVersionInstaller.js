@@ -35,6 +35,16 @@ export async function openBibleDb() {
   return openDatabaseAsync(DB_NAME);
 }
 
+export async function resetBibleDb() {
+  const dir = `${FileSystem.documentDirectory}SQLite`;
+  const target = `${dir}/${DB_NAME}`;
+
+  await FileSystem.deleteAsync(target, { idempotent: true });
+  await ensureBibleDb();
+  return openDatabaseAsync(DB_NAME);
+}
+
+
 export async function listInstalledBibleVersions(database) {
   const db = database || (await openBibleDb());
   return db.getAllAsync(
