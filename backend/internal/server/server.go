@@ -27,6 +27,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/prayers"
 	"github.com/ariga/shekinah-backend/internal/privatechat"
 	"github.com/ariga/shekinah-backend/internal/readingplans"
+	"github.com/ariga/shekinah-backend/internal/settings"
 	"github.com/ariga/shekinah-backend/internal/testimonies"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -93,6 +94,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	apiBibleHandler := apibible.NewHandler(cfg)
 	privateChatHandler := privatechat.NewHandler(db)
 	libraryHandler := library.NewHandler(db)
+	settingsHandler := settings.NewHandler(db)
 
 	r.GET("/healthz", health.HandleHealthz(cfg, db))
 	r.Static("/uploads", "./uploads")
@@ -134,6 +136,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/checkin/history", auth.RequireAuth(authService), checkinHandler.Mine)
 		api.GET("/library", libraryHandler.List)
 		api.GET("/library/:id", libraryHandler.Detail)
+		api.GET("/settings/serve", settingsHandler.GetServe)
 		api.GET("/bible/versions", bibleVersionsHandler.List)
 		api.GET("/bible/versions/:id/download", bibleVersionsHandler.Download)
 		api.GET("/bible/provider/api-bible/versions", apiBibleHandler.ListBibles)
@@ -165,6 +168,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		adminGroup.Use(auth.RequireRole(authService, "admin", "super_admin"))
 		{
 			adminGroup.GET("/healthz", adminHandler.Healthz)
+			adminGroup.GET("/settings/serve", settingsHandler.AdminGetServe)
+			adminGroup.PATCH("/settings/serve", settingsHandler.AdminUpdateServe)
 
 			adminGroup.GET("/sermons", adminSermonHandler.List)
 			adminGroup.POST("/sermons", adminSermonHandler.Create)

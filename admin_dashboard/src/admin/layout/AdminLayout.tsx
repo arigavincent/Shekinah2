@@ -60,7 +60,8 @@ const navSections: NavSection[] = [
       { label: "Live", to: "/live", icon: Radio },
       { label: "Check-In", to: "/checkins", icon: ClipboardCheck },
       { label: "Giving", to: "/giving", icon: Wallet },
-      { label: "Notifications", to: "/notifications", icon: BellRing }
+      { label: "Notifications", to: "/notifications", icon: BellRing },
+      { label: "Serve Settings", to: "/serve-settings", icon: HandHeart }
     ]
   },
   {
