@@ -27,6 +27,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/prayers"
 	"github.com/ariga/shekinah-backend/internal/privatechat"
 	"github.com/ariga/shekinah-backend/internal/readingplans"
+	"github.com/ariga/shekinah-backend/internal/serve"
 	"github.com/ariga/shekinah-backend/internal/settings"
 	"github.com/ariga/shekinah-backend/internal/testimonies"
 	"github.com/gin-gonic/gin"
@@ -95,6 +96,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	privateChatHandler := privatechat.NewHandler(db)
 	libraryHandler := library.NewHandler(db)
 	settingsHandler := settings.NewHandler(db)
+	serveHandler := serve.NewHandler()
 
 	r.GET("/healthz", health.HandleHealthz(cfg, db))
 	r.Static("/uploads", "./uploads")
@@ -137,6 +139,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/library", libraryHandler.List)
 		api.GET("/library/:id", libraryHandler.Detail)
 		api.GET("/settings/serve", settingsHandler.GetServe)
+		api.POST("/serve/request-pdf", serveHandler.UploadRequestPDF)
 		api.GET("/bible/versions", bibleVersionsHandler.List)
 		api.GET("/bible/versions/:id/download", bibleVersionsHandler.Download)
 		api.GET("/bible/provider/api-bible/versions", apiBibleHandler.ListBibles)

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Alert,
   Linking,
@@ -8,6 +8,7 @@ import {
   TextInput,
   View
 } from "react-native";
+import * as Print from "expo-print";
 import { Ionicons } from "@expo/vector-icons";
 
 import { C } from "../constants/theme";
@@ -15,6 +16,7 @@ import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { getServeSettings } from "../api/serveSettingsApi";
+import { uploadServeRequestPdf } from "../api/serveRequestPdfApi";
 
 const MINISTRIES = [
   {
@@ -81,6 +83,204 @@ function ministryByName(name) {
   return MINISTRIES.find(item => item.name === name);
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function buildServeRequestPdfHtml(cleaned, selectedMinistry) {
+  const fullName = `${cleaned.firstName} ${cleaned.lastName}`.trim();
+  const submittedAt = new Date().toLocaleString();
+
+  const row = (label, value) => value
+    ? `<tr><td class="label">${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`
+    : "";
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page {
+      margin: 28px;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fbf6e8;
+      color: #2b2110;
+      font-family: Helvetica, Arial, sans-serif;
+    }
+
+    .card {
+      border: 2px solid #b8860b;
+      border-radius: 22px;
+      overflow: hidden;
+      background: #fffdf6;
+      box-shadow: 0 10px 30px rgba(43, 33, 16, 0.16);
+    }
+
+    .header {
+      background: #050505;
+      color: #f2efe8;
+      padding: 28px 30px;
+      border-bottom: 5px solid #d9a21b;
+    }
+
+    .eyebrow {
+      color: #d9a21b;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin: 0 0 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.15;
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      color: #d8c391;
+      font-size: 14px;
+    }
+
+    .section {
+      padding: 22px 30px;
+      border-bottom: 1px solid #ead9ad;
+    }
+
+    .section:last-child {
+      border-bottom: 0;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      color: #7a5708;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    td {
+      padding: 10px 0;
+      vertical-align: top;
+      border-bottom: 1px solid #f1e3bd;
+      font-size: 14px;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .label {
+      width: 34%;
+      color: #776846;
+      font-weight: 800;
+    }
+
+    .ministry-box {
+      background: #fbf0cf;
+      border: 1px solid #d8c391;
+      border-radius: 16px;
+      padding: 16px;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .footer {
+      background: #f3e8cf;
+      padding: 16px 30px;
+      color: #776846;
+      font-size: 12px;
+    }
+
+    .stamp {
+      display: inline-block;
+      background: #b8860b;
+      color: #fffdf6;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      margin-top: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <p class="eyebrow">Shekinah Sons Global Church</p>
+      <h1>Serve Request</h1>
+      <div class="subtitle">A member has requested to join a serving team.</div>
+      <div class="stamp">Pending Review</div>
+    </div>
+
+    <div class="section">
+      <h2>Member Details</h2>
+      <table>
+        ${row("Name", fullName)}
+        ${row("Phone", cleaned.phoneNumber)}
+        ${row("Email", cleaned.email)}
+        ${row("Date of Birth", cleaned.dateOfBirth)}
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Location</h2>
+      <table>
+        ${row("City", cleaned.city)}
+        ${row("Country", cleaned.country)}
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Ministry Interest</h2>
+      <div class="ministry-box">
+        <strong>${escapeHtml(cleaned.ministryInterest)}</strong><br />
+        ${escapeHtml(selectedMinistry?.description || "No ministry notes provided.")}
+      </div>
+    </div>
+
+    <div class="footer">
+      Submitted from the Shekinah Sons Global Church App<br />
+      ${escapeHtml(submittedAt)}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+async function createServeRequestPdf(cleaned, selectedMinistry) {
+  const html = buildServeRequestPdfHtml(cleaned, selectedMinistry);
+  const result = await Print.printToFileAsync({
+    html,
+    width: 612,
+    height: 792
+  });
+
+  if (!result?.uri) {
+    throw new Error("The PDF could not be created.");
+  }
+
+  return result.uri;
+}
+
+
 function MinistryCard({ ministry, active, onPress }) {
   return (
     <Pressable
@@ -131,34 +331,6 @@ export function ServeScreen({ go, appLanguage = "en" }) {
     country: "Kenya",
     ministryInterest: ""
   });
-  const [serveWhatsAppNumber, setServeWhatsAppNumber] = useState("");
-  const [loadingServeSettings, setLoadingServeSettings] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadServeSettings() {
-      setLoadingServeSettings(true);
-
-      try {
-        const response = await getServeSettings();
-        if (!active) return;
-
-        setServeWhatsAppNumber(normalizeWhatsAppNumber(response?.serve?.whatsappNumber || ""));
-      } catch {
-        if (active) setServeWhatsAppNumber("");
-      } finally {
-        if (active) setLoadingServeSettings(false);
-      }
-    }
-
-    loadServeSettings();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
   function updateField(key, value) {
     setForm(current => ({
       ...current,
@@ -215,31 +387,44 @@ export function ServeScreen({ go, appLanguage = "en" }) {
 
     const selectedMinistry = ministryByName(cleaned.ministryInterest);
 
-    const message = [
-      "Serve Request - Shekinah Sons Global",
-      "",
-      `Name: ${cleaned.firstName} ${cleaned.lastName}`,
-      `Phone: ${cleaned.phoneNumber}`,
-      `Email: ${cleaned.email}`,
-      cleaned.dateOfBirth ? `Date of Birth: ${cleaned.dateOfBirth}` : "",
-      `Location: ${cleaned.city}, ${cleaned.country}`,
-      `Ministry Interest: ${cleaned.ministryInterest}`,
-      selectedMinistry ? `Ministry Notes: ${selectedMinistry.description}` : ""
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    if (!serveWhatsAppNumber) {
-      Alert.alert(
-        "Serve Contact Missing",
-        "The church has not configured the WhatsApp contact for serve requests yet. Please try again later."
-      );
-      return;
-    }
-
     try {
-      const whatsappUrl = `https://wa.me/${serveWhatsAppNumber}?text=${encodeURIComponent(message)}`;
-      await Linking.openURL(whatsappUrl);
+      const pdfUri = await createServeRequestPdf(cleaned, selectedMinistry);
+      const uploadResponse = await uploadServeRequestPdf(pdfUri);
+      const pdfUrl = uploadResponse?.pdf?.url || "";
+
+      if (!pdfUrl) {
+        throw new Error("The PDF was created but the public link was not returned.");
+      }
+
+      const settingsResponse = await getServeSettings();
+      const authorityNumber = normalizeWhatsAppNumber(settingsResponse?.serve?.whatsappNumber || "");
+
+      if (!authorityNumber) {
+        Alert.alert(
+          "Serve Contact Missing",
+          "The church has not configured the WhatsApp contact for serve requests yet."
+        );
+        return;
+      }
+
+      const whatsappMessage = [
+        "🟨 *SERVE REQUEST*",
+        "*Shekinah Sons Global Church*",
+        "",
+        `Name: ${cleaned.firstName} ${cleaned.lastName}`,
+        `Phone: ${cleaned.phoneNumber}`,
+        `Email: ${cleaned.email}`,
+        cleaned.dateOfBirth ? `Date of Birth: ${cleaned.dateOfBirth}` : "",
+        `Location: ${cleaned.city}, ${cleaned.country}`,
+        `Ministry Interest: ${cleaned.ministryInterest}`,
+        "",
+        "📄 *Styled PDF:*",
+        pdfUrl
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      await Linking.openURL(`https://wa.me/${authorityNumber}?text=${encodeURIComponent(whatsappMessage)}`);
 
       setForm({
         firstName: "",
@@ -251,10 +436,10 @@ export function ServeScreen({ go, appLanguage = "en" }) {
         country: "Kenya",
         ministryInterest: ""
       });
-    } catch {
+    } catch (error) {
       Alert.alert(
-        "Unable To Open WhatsApp",
-        "Please make sure WhatsApp is installed, then try again."
+        "Unable To Send Serve Request",
+        error instanceof Error ? error.message : "Please try again."
       );
     }
   }
@@ -380,18 +565,12 @@ export function ServeScreen({ go, appLanguage = "en" }) {
         <View style={s.formNote}>
           <Ionicons name="information-circle-outline" size={20} color={C.gold} />
           <Text style={s.formNoteText}>
-            Submitting opens WhatsApp with a prepared serve request. Review it, then tap Send.
+            Submitting creates a styled PDF, uploads it securely, and opens WhatsApp to the responsible leader. Review it, then tap Send.
           </Text>
         </View>
 
-        <Pressable
-          style={[s.primaryBtn, loadingServeSettings && { opacity: 0.65 }]}
-          onPress={submitServeForm}
-          disabled={loadingServeSettings}
-        >
-          <Text style={s.primaryText}>
-            {loadingServeSettings ? "Preparing Serve Contact..." : "Submit Serve Request"}
-          </Text>
+        <Pressable style={s.primaryBtn} onPress={submitServeForm}>
+          <Text style={s.primaryText}>Create Serve Request PDF</Text>
         </Pressable>
       </ScrollView>
     </Screen>
