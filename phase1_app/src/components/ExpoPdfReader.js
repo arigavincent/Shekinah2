@@ -17,6 +17,13 @@ import { TopBar } from "./TopBar";
 import { C } from "../constants/theme";
 import { s } from "../styles/appStyles";
 
+const LIBRARY_HIGHLIGHT_COLORS = [
+  { key: "gold", label: "Gold", light: "rgba(201, 154, 46, 0.20)", dark: "rgba(201, 154, 46, 0.18)" },
+  { key: "bronze", label: "Bronze", light: "rgba(156, 121, 48, 0.18)", dark: "rgba(156, 121, 48, 0.14)" },
+  { key: "sand", label: "Sand", light: "rgba(185, 173, 139, 0.20)", dark: "rgba(185, 173, 139, 0.12)" }
+];
+
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -364,11 +371,19 @@ export function ExpoPdfReader({
   const [totalPages, setTotalPages] = useState(readerFeaturesEnabled ? Number(readerState.totalPages || 0) : 0);
   const [noteOpen, setNoteOpen] = useState(false);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
+  const [highlightOpen, setHighlightOpen] = useState(false);
+  const [highlightPickerOpen, setHighlightPickerOpen] = useState(false);
   const [draftNote, setDraftNote] = useState("");
 
   const bookmarks = Array.isArray(readerState.bookmarks) ? readerState.bookmarks : [];
+  const highlights = Array.isArray(readerState.highlights) ? readerState.highlights : [];
+  const highlightColors = readerState.highlightColors && typeof readerState.highlightColors === "object"
+    ? readerState.highlightColors
+    : {};
   const notes = readerState.notes && typeof readerState.notes === "object" ? readerState.notes : {};
   const hasBookmark = bookmarks.includes(page);
+  const hasHighlight = highlights.includes(page);
+  const pageHighlightColor = highlightColors[String(page)] || "gold";
   const pageNote = notes[String(page)] || "";
 
   function savePatch(patch) {
@@ -384,6 +399,7 @@ export function ExpoPdfReader({
     const safePage = Math.max(1, Math.min(totalPages || nextPage, Number(nextPage) || 1));
     webViewRef.current?.injectJavaScript(`window.goToPage && window.goToPage(${safePage}); true;`);
     setBookmarkOpen(false);
+    setHighlightOpen(false);
   }
 
   function toggleBookmark() {
@@ -392,6 +408,38 @@ export function ExpoPdfReader({
       : [...bookmarks, page].sort((a, b) => a - b);
 
     savePatch({ bookmarks: nextBookmarks, lastPage: page, totalPages });
+  }
+
+  function saveHighlight(colorKey = "gold") {
+    const nextHighlights = highlights.includes(page)
+      ? highlights
+      : [...highlights, page].sort((a, b) => a - b);
+
+    savePatch({
+      highlights: nextHighlights,
+      highlightColors: {
+        ...highlightColors,
+        [String(page)]: colorKey
+      },
+      lastPage: page,
+      totalPages
+    });
+
+    setHighlightPickerOpen(false);
+  }
+
+  function removeHighlight() {
+    const nextHighlightColors = { ...highlightColors };
+    delete nextHighlightColors[String(page)];
+
+    savePatch({
+      highlights: highlights.filter(item => item !== page),
+      highlightColors: nextHighlightColors,
+      lastPage: page,
+      totalPages
+    });
+
+    setHighlightPickerOpen(false);
   }
 
   function openNoteEditor() {
@@ -462,7 +510,7 @@ export function ExpoPdfReader({
       <TopBar title={title || "Library Reader"} go={go} back="Library" onBack={onBack} appLanguage={appLanguage} />
 
       {readerFeaturesEnabled ? (
-        <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingBottom: 10 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 12, paddingBottom: 10 }}>
           <Pressable style={[s.actionBtn, hasBookmark && { backgroundColor: C.gold }]} onPress={toggleBookmark}>
             <Text style={[s.actionText, hasBookmark && { color: C.black }]}>
               {hasBookmark ? "Bookmarked" : "Bookmark"}
@@ -473,8 +521,18 @@ export function ExpoPdfReader({
             <Text style={s.actionText}>{pageNote ? "Edit Note" : "Add Note"}</Text>
           </Pressable>
 
+          <Pressable style={[s.actionBtn, hasHighlight && { backgroundColor: C.gold }]} onPress={() => setHighlightPickerOpen(true)}>
+            <Text style={[s.actionText, hasHighlight && { color: C.black }]}>
+              {hasHighlight ? "Highlighted" : "Highlight"}
+            </Text>
+          </Pressable>
+
           <Pressable style={s.actionBtn} onPress={() => setBookmarkOpen(true)}>
             <Text style={s.actionText}>Bookmarks</Text>
+          </Pressable>
+
+          <Pressable style={s.actionBtn} onPress={() => setHighlightOpen(true)}>
+            <Text style={s.actionText}>Highlights</Text>
           </Pressable>
         </View>
       ) : (
@@ -482,7 +540,7 @@ export function ExpoPdfReader({
           <View style={[s.plainCard, { backgroundColor: C.surface2, marginBottom: 0 }]}>
             <Text style={[s.rowTitle, { color: C.white }]}>Sign in to save reading progress</Text>
             <Text style={[s.mutedText, { color: C.muted, marginTop: 6 }]}>
-              Bookmarks, notes, resume-last-page, and future highlights are available for logged-in members.
+              Bookmarks, notes, resume-last-page, and highlights are available for logged-in members.
             </Text>
             <Pressable style={[s.primaryBtn, { alignSelf: "flex-start" }]} onPress={onRequireLogin}>
               <Text style={s.primaryText}>Login / Register</Text>
@@ -573,6 +631,86 @@ export function ExpoPdfReader({
             </ScrollView>
 
             <Pressable style={s.primaryBtn} onPress={() => setBookmarkOpen(false)}>
+              <Text style={s.primaryText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={highlightPickerOpen} transparent animationType="slide" onRequestClose={() => setHighlightPickerOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.72)", justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: C.surface, padding: 16, borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
+            <Text style={[s.rowTitle, { color: C.white }]}>Highlight page {page}</Text>
+            <Text style={[s.mutedText, { color: C.muted, marginTop: 6 }]}>
+              Choose a highlight style for this page.
+            </Text>
+
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 }}>
+              {LIBRARY_HIGHLIGHT_COLORS.map(color => (
+                <Pressable
+                  key={color.key}
+                  style={[
+                    s.actionBtn,
+                    {
+                      backgroundColor: color.dark,
+                      borderWidth: pageHighlightColor === color.key ? 2 : 1,
+                      borderColor: pageHighlightColor === color.key ? C.gold2 : C.line
+                    }
+                  ]}
+                  onPress={() => saveHighlight(color.key)}
+                >
+                  <Text style={s.actionText}>{color.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+              <Pressable style={[s.actionBtn, { flex: 1, justifyContent: "center" }]} onPress={() => setHighlightPickerOpen(false)}>
+                <Text style={s.actionText}>Cancel</Text>
+              </Pressable>
+
+              {hasHighlight ? (
+                <Pressable style={[s.actionBtn, { flex: 1, justifyContent: "center", borderColor: C.red }]} onPress={removeHighlight}>
+                  <Text style={[s.actionText, { color: C.red }]}>Remove</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={highlightOpen} transparent animationType="slide" onRequestClose={() => setHighlightOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.72)", justifyContent: "flex-end" }}>
+          <View style={{ maxHeight: "70%", backgroundColor: C.surface, padding: 16, borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
+            <Text style={[s.rowTitle, { color: C.white }]}>Highlighted Pages</Text>
+
+            <ScrollView style={{ marginTop: 12 }}>
+              {highlights.length === 0 ? (
+                <Text style={[s.mutedText, { color: C.muted }]}>No highlighted pages yet.</Text>
+              ) : (
+                highlights.map(highlightPage => {
+                  const colorKey = highlightColors[String(highlightPage)] || "gold";
+                  const color = LIBRARY_HIGHLIGHT_COLORS.find(item => item.key === colorKey) || LIBRARY_HIGHLIGHT_COLORS[0];
+
+                  return (
+                    <Pressable
+                      key={highlightPage}
+                      style={[s.plainCard, { backgroundColor: color.dark, borderColor: C.gold, borderWidth: 1 }]}
+                      onPress={() => jumpToPage(highlightPage)}
+                    >
+                      <Text style={[s.rowTitle, { color: C.white }]}>Page {highlightPage} · {color.label}</Text>
+                    {notes[String(highlightPage)] ? (
+                      <Text style={[s.mutedText, { color: C.muted, marginTop: 6 }]} numberOfLines={2}>
+                        {notes[String(highlightPage)]}
+                      </Text>
+                    ) : null}
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            <Pressable style={s.primaryBtn} onPress={() => setHighlightOpen(false)}>
               <Text style={s.primaryText}>Close</Text>
             </Pressable>
           </View>
