@@ -76,6 +76,21 @@ type apiBibleAudioBiblesResponse struct {
 	Data []apiBibleAudioBible `json:"data"`
 }
 
+type apiBibleAudioChapter struct {
+	ExpiresAt   string `json:"expiresAt"`
+	ResourceURL string `json:"resourceUrl"`
+	ID          string `json:"id"`
+	BibleID     string `json:"bibleId"`
+	Number      string `json:"number"`
+	BookID      string `json:"bookId"`
+	Reference   string `json:"reference"`
+	Copyright   string `json:"copyright"`
+}
+
+type apiBibleAudioChapterResponse struct {
+	Data apiBibleAudioChapter `json:"data"`
+}
+
 type apiBibleBook struct {
 	ID           string `json:"id"`
 	BibleID      string `json:"bibleId"`
@@ -344,6 +359,40 @@ func (h Handler) ListAudioBibles(c *gin.Context) {
 	httpx.OK(c, gin.H{
 		"provider":    "api.bible",
 		"audioBibles": response.Data,
+	})
+}
+
+func (h Handler) GetAudioChapter(c *gin.Context) {
+	audioBibleID := strings.TrimSpace(c.Param("audioBibleId"))
+	chapterID := strings.TrimSpace(c.Param("chapterId"))
+
+	if audioBibleID == "" || chapterID == "" {
+		httpx.Error(c, http.StatusBadRequest, "audio_chapter_required", "Audio Bible id and chapter id are required")
+		return
+	}
+
+	var response apiBibleAudioChapterResponse
+	path := "/audio-bibles/" + url.PathEscape(audioBibleID) + "/chapters/" + url.PathEscape(chapterID)
+
+	if !h.getJSON(c, path, nil, &response) {
+		return
+	}
+
+	if strings.TrimSpace(response.Data.ResourceURL) == "" {
+		httpx.Error(c, http.StatusNotFound, "audio_resource_not_found", "No playable audio resource was found for this chapter")
+		return
+	}
+
+	httpx.OK(c, gin.H{
+		"provider":     "api.bible",
+		"audioBibleId": audioBibleID,
+		"chapterId":    response.Data.ID,
+		"bookId":       response.Data.BookID,
+		"number":       response.Data.Number,
+		"reference":    response.Data.Reference,
+		"resourceUrl":  response.Data.ResourceURL,
+		"expiresAt":    response.Data.ExpiresAt,
+		"copyright":    response.Data.Copyright,
 	})
 }
 

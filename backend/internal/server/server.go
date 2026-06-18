@@ -138,6 +138,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/bible/versions/:id/download", bibleVersionsHandler.Download)
 		api.GET("/bible/provider/api-bible/versions", apiBibleHandler.ListBibles)
 		api.GET("/bible/provider/api-bible/audio-bibles", apiBibleHandler.ListAudioBibles)
+		api.GET("/bible/provider/api-bible/audio-bibles/:audioBibleId/chapters/:chapterId", apiBibleHandler.GetAudioChapter)
 		api.GET("/bible/provider/api-bible/versions/:bibleId/export-vpl", apiBibleHandler.ExportVPL)
 		api.GET("/bible/installs", auth.RequireAuth(authService), bibleVersionsHandler.ListInstalled)
 		api.POST("/bible/installs", auth.RequireAuth(authService), bibleVersionsHandler.RecordInstall)
