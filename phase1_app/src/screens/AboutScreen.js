@@ -397,7 +397,7 @@ export function AboutScreen({ go, appLanguage = "en" }) {
         <View style={s.formNote}>
           <Ionicons name="information-circle-outline" size={20} color={C.gold} />
           <Text style={s.formNoteText}>
-            About content is loaded from the backend. Branch contact actions use the phone,
+            Branch contact actions use your phone,
             WhatsApp, email, and maps apps installed on this device.
           </Text>
         </View>

@@ -224,8 +224,6 @@ export const YOUTUBE_CLIPS = [
   }
 ];
 
-// Phase 1 uses backend-shaped local sample content.
-// Phase 2 should return this same shape from the Go API + PostgreSQL,
 // so screens can migrate from local imports to API data with minimal changes.
 export const DATA = {
   scripture: {

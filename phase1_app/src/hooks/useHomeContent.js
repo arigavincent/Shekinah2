@@ -64,7 +64,7 @@ export function useHomeContent({ enabled = false } = {}) {
       setData(normalizeHomeContent(payload));
       setSource("api");
     } catch (err) {
-      console.warn("Falling back to local content", err);
+      console.warn("Unable to refresh home content", err);
       setData(LOCAL_FALLBACK);
       setSource("local");
       setError(err);
@@ -100,7 +100,7 @@ export function useHomeContent({ enabled = false } = {}) {
       } catch (err) {
         if (!mounted) return;
 
-        console.warn("Falling back to local content", err);
+        console.warn("Unable to refresh home content", err);
         setData(LOCAL_FALLBACK);
         setSource("local");
         setError(err);

@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { Screen } from "../components/Screen";
-import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles, useAppTheme } from "../constants/theme";
+import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { listBibleVersions } from "../api/bibleVersionsApi";
 import { getAuthToken } from "../storage/authTokenStorage";
@@ -35,9 +35,9 @@ const SWAHILI = "swh_neno";
 const FONT_SCALES = [0.85, 1, 1.15, 1.3];
 
 const HIGHLIGHT_COLORS = [
-  { key: "gold", label: "Gold", light: "rgba(217, 162, 27, 0.22)", dark: "rgba(216, 166, 52, 0.24)" },
+  { key: "gold", label: "Gold", light: "rgba(217, 162, 27, 0.22)", dark: "rgba(201, 154, 46, 0.18)" },
   { key: "blue", label: "Blue", light: "rgba(31, 41, 55, 0.12)", dark: "rgba(18, 63, 119, 0.28)" },
-  { key: "green", label: "Green", light: "rgba(83, 107, 75, 0.16)", dark: "rgba(92, 154, 114, 0.20)" },
+  { key: "green", label: "Bronze", light: "rgba(184, 138, 46, 0.16)", dark: "rgba(156, 121, 48, 0.14)" },
   { key: "rose", label: "Rose", light: "rgba(164, 60, 60, 0.13)", dark: "rgba(214, 90, 90, 0.18)" }
 ];
 
@@ -146,8 +146,6 @@ async function searchBible(db, query) {
 }
 
 function Header({ title, subtitle, onBack, right }) {
-  const { mode, toggleTheme } = useAppTheme();
-
   return (
     <View style={styles.header}>
       {onBack ? (
@@ -165,13 +163,6 @@ function Header({ title, subtitle, onBack, right }) {
 
       <View style={styles.headerRight}>
         {right}
-        <Pressable style={styles.iconBtn} onPress={toggleTheme} hitSlop={10}>
-          <Ionicons
-            name={mode === "light" ? "moon-outline" : "sunny-outline"}
-            size={22}
-            color={C.gold}
-          />
-        </Pressable>
       </View>
     </View>
   );

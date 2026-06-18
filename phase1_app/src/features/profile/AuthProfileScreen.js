@@ -199,8 +199,6 @@ export function AuthProfileScreen({
 }
 
 function Top({ go, appLanguage = "en" }) {
-  const { mode, toggleTheme } = useAppTheme();
-
   return (
     <View style={s.topBar}>
       <Pressable style={s.iconBtn} onPress={() => go("Home")}>
@@ -212,9 +210,7 @@ function Top({ go, appLanguage = "en" }) {
         <Text style={s.subtitle}>{tr(appLanguage, "Account and member access")}</Text>
       </View>
 
-      <Pressable style={s.iconBtn} onPress={toggleTheme}>
-        <Ionicons name={mode === "light" ? "moon-outline" : "sunny-outline"} size={20} color={C.white} />
-      </Pressable>
+      <View style={s.iconBtn} />
     </View>
   );
 }
@@ -370,11 +366,6 @@ function SignedOutView({
         </Pressable>
       </View>
 
-      <View style={s.note}>
-        <Text style={s.noteText}>
-          {tr(appLanguage, "Phase 2 auth is live against the Go API. Profile data is now backed by JWT login and PostgreSQL users.")}
-        </Text>
-      </View>
     </>
   );
 }

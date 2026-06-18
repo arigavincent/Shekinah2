@@ -657,7 +657,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab, appLang
           categories.length === 0 ? (
             <View style={s.plainCard}>
               <Text style={s.rowTitle}>{tr(appLanguage, "No categories found")}</Text>
-              <Text style={s.mutedText}>Create sermon categories from backend/admin data.</Text>
+              <Text style={s.mutedText}>Sermon categories will appear here when available.</Text>
             </View>
           ) : (
             <View

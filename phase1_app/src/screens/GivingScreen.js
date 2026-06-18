@@ -428,7 +428,7 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
   async function clearHistory() {
     Alert.alert(
       "Clear Local History",
-      "This only clears transaction history from this device. It does not delete backend records.",
+      "This only clears transaction history saved on this device.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -650,8 +650,8 @@ export function GivingScreen({ go, tab, setTab, appLanguage = "en" }) {
               <Ionicons name="information-circle-outline" size={20} color={C.gold} />
               <Text style={s.formNoteText}>
                 {method === "M-Pesa"
-                  ? "If Daraja credentials are not configured yet, the app will show the backend configuration error."
-                  : "Card giving uses a hosted checkout flow. In local development, the backend can open a mock sandbox page if live provider keys are not configured."}
+                  ? "If mobile giving is temporarily unavailable, please try again later or contact the church office."
+                  : "Card giving uses a secure checkout flow. Follow the prompts to complete your gift."}
               </Text>
             </View>
 

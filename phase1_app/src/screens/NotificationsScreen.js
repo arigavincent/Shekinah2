@@ -218,7 +218,7 @@ export function NotificationsScreen({ go, preferences, setPreferences, appLangua
         <ActionCard
           icon="notifications-outline"
           title={tr(appLanguage, "Register Remote Push")}
-          text={tr(appLanguage, "Use this on a development build or release app to register this device for backend broadcasts.")}
+          text={tr(appLanguage, "Enable notifications to receive church updates, service reminders, and important announcements on this device.")}
           onPress={requestPushPermission}
         />
 

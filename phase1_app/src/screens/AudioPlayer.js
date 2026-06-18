@@ -397,7 +397,7 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
           {error ? <Text style={[s.mutedText, { textAlign: "center" }]}>{error}</Text> : null}
           {statusText ? <Text style={[s.mutedText, { textAlign: "center" }]}>{statusText}</Text> : null}
           {!remoteMediaUrl ? (
-            <Text style={[s.mutedText, { color: C.gold, textAlign: "center" }]}>No backend audio URL detected.</Text>
+            <Text style={[s.mutedText, { color: C.gold, textAlign: "center" }]}>Audio is not available for this item yet.</Text>
           ) : null}
           {downloadProgress > 0 && downloadProgress < 100 ? (
             <Text style={[s.mutedText, { textAlign: "center" }]}>Downloading... {downloadProgress}%</Text>
