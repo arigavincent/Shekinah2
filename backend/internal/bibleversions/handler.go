@@ -286,25 +286,46 @@ func min(a, b int) int {
 	return b
 }
 
-func (h Handler) List(c *gin.Context) {
+func (h Handler) catalogItems() []Version {
 	items := localCatalog()
 
 	if body, err := os.ReadFile(catalogSnapshotPath()); err == nil {
 		if parsed := parseCatalogFromCSV(string(body)); len(parsed) > 0 {
-			items = parsed
+			return parsed
 		}
-	} else {
-		resp, err := h.client.Get("https://ebible.org/Scriptures/translations.csv")
-		if err == nil && resp != nil {
-			defer resp.Body.Close()
-			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 20*1024*1024))
-			if readErr == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				if parsed := parseCatalogFromCSV(string(body)); len(parsed) > 0 {
-					items = parsed
-				}
+	}
+
+	resp, err := h.client.Get("https://ebible.org/Scriptures/translations.csv")
+	if err == nil && resp != nil {
+		defer resp.Body.Close()
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 20*1024*1024))
+		if readErr == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			if parsed := parseCatalogFromCSV(string(body)); len(parsed) > 0 {
+				return parsed
 			}
 		}
 	}
+
+	return items
+}
+
+func (h Handler) findCatalogVersion(versionID string) (Version, bool) {
+	cleanID := strings.TrimSpace(versionID)
+	if cleanID == "" {
+		return Version{}, false
+	}
+
+	for _, item := range h.catalogItems() {
+		if strings.EqualFold(item.ID, cleanID) {
+			return item, true
+		}
+	}
+
+	return Version{}, false
+}
+
+func (h Handler) List(c *gin.Context) {
+	items := h.catalogItems()
 
 	query := strings.ToLower(strings.TrimSpace(c.Query("query")))
 	if query != "" {
@@ -336,19 +357,61 @@ func (h Handler) List(c *gin.Context) {
 func (h Handler) Download(c *gin.Context) {
 	versionID := strings.TrimSpace(c.Param("id"))
 	path := sampleFilePath(versionID)
-	if path == "" {
+
+	if path != "" {
+		if _, err := os.Stat(path); err == nil {
+			c.Header("Content-Type", "text/plain; charset=utf-8")
+			c.Header("Content-Disposition", `attachment; filename="`+versionID+`_vpl.txt"`)
+			c.File(path)
+			return
+		}
+	}
+
+	version, ok := h.findCatalogVersion(versionID)
+	if !ok || strings.TrimSpace(version.DownloadURL) == "" {
 		httpx.Error(c, http.StatusNotFound, "bible_version_not_found", "bible version download not found")
 		return
 	}
 
-	if _, err := os.Stat(path); err != nil {
-		httpx.Error(c, http.StatusNotFound, "bible_version_not_found", "bible version download not found")
+	request, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, version.DownloadURL, nil)
+	if err != nil {
+		httpx.Error(c, http.StatusBadGateway, "bible_download_failed", "failed to prepare bible version download")
 		return
 	}
 
-	c.Header("Content-Type", "text/plain; charset=utf-8")
-	c.Header("Content-Disposition", `attachment; filename="`+versionID+`_vpl.txt"`)
-	c.File(path)
+	response, err := h.client.Do(request)
+	if err != nil {
+		httpx.Error(c, http.StatusBadGateway, "bible_download_failed", "failed to download bible version package")
+		return
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		httpx.Error(c, http.StatusBadGateway, "bible_download_failed", "provider rejected bible version download")
+		return
+	}
+
+	contentType := response.Header.Get("Content-Type")
+	if contentType == "" {
+		if strings.HasSuffix(strings.ToLower(version.DownloadURL), ".zip") {
+			contentType = "application/zip"
+		} else {
+			contentType = "text/plain; charset=utf-8"
+		}
+	}
+
+	fileName := filepath.Base(version.DownloadURL)
+	if fileName == "." || fileName == "/" || fileName == "" {
+		fileName = versionID + "_vpl.zip"
+	}
+
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", `attachment; filename="`+fileName+`"`)
+	if response.ContentLength > 0 {
+		c.Header("Content-Length", strconv.FormatInt(response.ContentLength, 10))
+	}
+
+	_, _ = io.Copy(c.Writer, response.Body)
 }
 
 func (h Handler) RecordInstall(c *gin.Context) {

@@ -41,3 +41,26 @@ func TestParseCatalogFromCSVSnapshot(t *testing.T) {
 		t.Fatal("expected swhonen entry in parsed catalog")
 	}
 }
+
+func TestCatalogSnapshotKikuyuDownloadURL(t *testing.T) {
+	body, err := os.ReadFile("catalog/translations.csv")
+	if err != nil {
+		t.Fatalf("read catalog snapshot: %v", err)
+	}
+
+	items := parseCatalogFromCSV(string(body))
+
+	for _, item := range items {
+		if item.ID == "kik" {
+			if item.DownloadURL != "https://ebible.org/Scriptures/kik_vpl.zip" {
+				t.Fatalf("unexpected Kikuyu download URL: %s", item.DownloadURL)
+			}
+			if item.FileType != "vpl-text" {
+				t.Fatalf("unexpected Kikuyu file type: %s", item.FileType)
+			}
+			return
+		}
+	}
+
+	t.Fatal("expected kik entry in parsed catalog")
+}

@@ -300,9 +300,9 @@ export async function removeBibleVersion(versionId) {
   const db = await openBibleDb();
 
   await db.withTransactionAsync(async () => {
-    await db.runAsync(`DELETE FROM verses WHERE version_id = ?`, versionId);
-    await db.runAsync(`DELETE FROM book_labels WHERE version_id = ?`, versionId);
-    await db.runAsync(`DELETE FROM versions WHERE id = ?`, versionId);
+    await db.runAsync(`DELETE FROM verses WHERE version_id = ?`, [versionId]);
+    await db.runAsync(`DELETE FROM book_labels WHERE version_id = ?`, [versionId]);
+    await db.runAsync(`DELETE FROM versions WHERE id = ?`, [versionId]);
   });
 
   try {
