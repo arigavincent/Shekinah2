@@ -19,7 +19,6 @@ import {
   logoutSession,
   registerAndSaveSession
 } from "../auth/authSession";
-import { API_CONFIG } from "../../config/apiConfig";
 import { APP_LANGUAGES, tr } from "../../i18n/labels";
 import { C, makeThemedStyles, THEME_OPTIONS, THEME_PALETTE_OPTIONS, useAppTheme } from "../../constants/theme";
 
@@ -151,11 +150,6 @@ export function AuthProfileScreen({
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        <View style={s.apiCard}>
-          <Text style={s.apiLabel}>API</Text>
-          <Text style={s.apiText}>{API_CONFIG.baseUrl}</Text>
-        </View>
-
         <LanguageCard
           appLanguage={appLanguage}
           setAppLanguage={setAppLanguage}
@@ -497,24 +491,6 @@ const s = makeThemedStyles(C => ({
     alignItems: "center",
     justifyContent: "center",
     gap: 10
-  },
-  apiCard: {
-    backgroundColor: C.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: C.line
-  },
-  apiLabel: { fontFamily: C.fontBold,
-    color: C.gold,
-    fontSize: 11,
-    fontWeight: "900",
-    marginBottom: 4
-  },
-  apiText: {
-    color: C.muted,
-    fontSize: 12
   },
   hero: {
     backgroundColor: C.blue,
