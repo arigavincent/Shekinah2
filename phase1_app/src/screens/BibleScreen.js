@@ -15,6 +15,7 @@ import { Screen } from "../components/Screen";
 import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles, useAppTheme } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { listBibleVersions } from "../api/bibleVersionsApi";
+import { getAuthToken } from "../storage/authTokenStorage";
 import {
   DEFAULT_BIBLE_STATE,
   loadBibleState,
@@ -734,12 +735,22 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   }
 
   async function handleInstallVersion(version) {
+    const token = await getAuthToken();
+
+    if (!token) {
+      Alert.alert(
+        tr(appLanguage, "Sign In Required"),
+        "Please sign in to download additional Bible versions. Built-in Bible versions remain available offline."
+      );
+      return;
+    }
+
     setInstallingVersionId(version.id);
     setInstallStage(tr(appLanguage, "Downloading package..."));
 
     try {
       setInstallStage(tr(appLanguage, "Installing offline text..."));
-      const installed = await installBibleVersion(version);
+      const installed = await installBibleVersion(version, db);
       setInstallStage(tr(appLanguage, "Finalizing library..."));
       const nextState = {
         ...bibleState,
@@ -776,7 +787,7 @@ export function BibleScreen({ go, appLanguage = "en" }) {
             setRemovingVersionId(versionId);
 
             try {
-              await removeBibleVersion(versionId);
+              await removeBibleVersion(versionId, db);
               const nextState = {
                 ...bibleState,
                 preferences: {

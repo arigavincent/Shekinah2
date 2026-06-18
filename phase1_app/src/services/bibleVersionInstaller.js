@@ -221,8 +221,8 @@ function buildVerseInsertBatch(versionId, batch) {
   };
 }
 
-export async function installBibleVersion(version) {
-  const db = await openBibleDb();
+export async function installBibleVersion(version, database) {
+  const db = database || (await openBibleDb());
   const versionId = normalizeVersionId(version.id);
   const versionName = String(version.name || version.id || "Bible Version").trim();
   const versionAbbreviation = String(version.abbreviation || version.id || "BIBLE").trim().slice(0, 24);
@@ -292,14 +292,14 @@ export async function installBibleVersion(version) {
   };
 }
 
-export async function removeBibleVersion(versionId) {
+export async function removeBibleVersion(versionId, database) {
   if (BUNDLED_VERSION_IDS.includes(versionId)) {
     throw new Error("Bundled Bible versions cannot be removed.");
   }
 
-  const db = await openBibleDb();
+  const db = database || (await openBibleDb());
 
-  await db.withTransactionAsync(async () => {
+  await db.withExclusiveTransactionAsync(async () => {
     await db.runAsync(`DELETE FROM verses WHERE version_id = ?`, [versionId]);
     await db.runAsync(`DELETE FROM book_labels WHERE version_id = ?`, [versionId]);
     await db.runAsync(`DELETE FROM versions WHERE id = ?`, [versionId]);
