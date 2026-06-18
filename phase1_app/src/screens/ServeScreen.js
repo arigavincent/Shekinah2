@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Linking,
   Pressable,
   ScrollView,
-  Share,
   Text,
   TextInput,
   View
@@ -14,6 +14,7 @@ import { C } from "../constants/theme";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
+import { getServeSettings } from "../api/serveSettingsApi";
 
 const MINISTRIES = [
   {
@@ -60,6 +61,20 @@ const MINISTRIES = [
 
 function normalizePhone(value) {
   return value.replace(/\s+/g, "");
+}
+
+function normalizeWhatsAppNumber(value) {
+  const digits = String(value || "").replace(/\D+/g, "");
+
+  if (digits.startsWith("0") && digits.length === 10) {
+    return `254${digits.slice(1)}`;
+  }
+
+  if ((digits.startsWith("7") || digits.startsWith("1")) && digits.length === 9) {
+    return `254${digits}`;
+  }
+
+  return digits;
 }
 
 function ministryByName(name) {
@@ -116,6 +131,33 @@ export function ServeScreen({ go, appLanguage = "en" }) {
     country: "Kenya",
     ministryInterest: ""
   });
+  const [serveWhatsAppNumber, setServeWhatsAppNumber] = useState("");
+  const [loadingServeSettings, setLoadingServeSettings] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadServeSettings() {
+      setLoadingServeSettings(true);
+
+      try {
+        const response = await getServeSettings();
+        if (!active) return;
+
+        setServeWhatsAppNumber(normalizeWhatsAppNumber(response?.serve?.whatsappNumber || ""));
+      } catch {
+        if (active) setServeWhatsAppNumber("");
+      } finally {
+        if (active) setLoadingServeSettings(false);
+      }
+    }
+
+    loadServeSettings();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function updateField(key, value) {
     setForm(current => ({
@@ -187,13 +229,17 @@ export function ServeScreen({ go, appLanguage = "en" }) {
       .filter(Boolean)
       .join("\n");
 
-    try {
-      await Share.share({ message });
-
+    if (!serveWhatsAppNumber) {
       Alert.alert(
-        "Serve Request Ready",
-        "Your request has been prepared. Send it through your preferred app."
+        "Serve Contact Missing",
+        "The church has not configured the WhatsApp contact for serve requests yet. Please try again later."
       );
+      return;
+    }
+
+    try {
+      const whatsappUrl = `https://wa.me/${serveWhatsAppNumber}?text=${encodeURIComponent(message)}`;
+      await Linking.openURL(whatsappUrl);
 
       setForm({
         firstName: "",
@@ -206,7 +252,10 @@ export function ServeScreen({ go, appLanguage = "en" }) {
         ministryInterest: ""
       });
     } catch {
-      Alert.alert("Unable To Share", "Please try again.");
+      Alert.alert(
+        "Unable To Open WhatsApp",
+        "Please make sure WhatsApp is installed, then try again."
+      );
     }
   }
 
@@ -331,12 +380,18 @@ export function ServeScreen({ go, appLanguage = "en" }) {
         <View style={s.formNote}>
           <Ionicons name="information-circle-outline" size={20} color={C.gold} />
           <Text style={s.formNoteText}>
-            Submitting opens your phone share menu with a prepared serve request.
+            Submitting opens WhatsApp with a prepared serve request. Review it, then tap Send.
           </Text>
         </View>
 
-        <Pressable style={s.primaryBtn} onPress={submitServeForm}>
-          <Text style={s.primaryText}>Submit Serve Request</Text>
+        <Pressable
+          style={[s.primaryBtn, loadingServeSettings && { opacity: 0.65 }]}
+          onPress={submitServeForm}
+          disabled={loadingServeSettings}
+        >
+          <Text style={s.primaryText}>
+            {loadingServeSettings ? "Preparing Serve Contact..." : "Submit Serve Request"}
+          </Text>
         </Pressable>
       </ScrollView>
     </Screen>

@@ -21,6 +21,7 @@ import { CheckInPage } from "./pages/CheckInPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { ReadingPlansPage } from "./pages/ReadingPlansPage";
 import { AppearancePage } from "./pages/AppearancePage";
+import { ServeSettingsPage } from "./pages/ServeSettingsPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const token = getToken();
@@ -77,6 +78,7 @@ export default function App() {
         <Route path="checkins" element={<CheckInPage />} />
         <Route path="giving" element={<GivingPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="serve-settings" element={<ServeSettingsPage />} />
         <Route path="appearance" element={<AppearancePage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
