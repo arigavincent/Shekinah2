@@ -1,5 +1,5 @@
-import { Component, useEffect, useState, startTransition, type ReactNode } from "react";
-import { BrowserRouter } from "react-router-dom";
+import { Component, useEffect, useLayoutEffect, useState, startTransition, type ReactNode } from "react";
+import { BrowserRouter, useLocation } from "react-router-dom";
 
 import App from "./App";
 import { AdminFeedbackProvider } from "./feedback/AdminFeedback";
@@ -50,6 +50,18 @@ class AdminErrorBoundary extends Component<{ children: ReactNode }, AdminErrorBo
   }
 }
 
+function AdminRouteEffects() {
+  const location = useLocation();
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [location.pathname]);
+
+  return <App />;
+}
+
 /**
  * Client-only wrapper for the admin dashboard.
  * The dashboard uses BrowserRouter + window/localStorage at init,
@@ -77,7 +89,7 @@ export default function AdminApp() {
       <AdminFeedbackProvider>
         <AdminErrorBoundary>
           <BrowserRouter>
-            <App />
+            <AdminRouteEffects />
           </BrowserRouter>
         </AdminErrorBoundary>
       </AdminFeedbackProvider>
