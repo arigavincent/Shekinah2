@@ -7,6 +7,13 @@ Do not commit real secrets. Store production secrets in Render, EAS, and the rel
 - `DATABASE_URL`: Render managed database connection string.
 - `JWT_SECRET`: strong generated secret.
 - `ALLOWED_ORIGINS`: deployed admin dashboard origin, for example `https://shekinah-sons-admin.onrender.com`.
+- `PASSWORD_RESET_TTL_MINUTES`: reset code lifetime, default `15`.
+- `PASSWORD_RESET_MAX_ATTEMPTS`: failed-code limit, default `5`.
+- `SMTP_HOST`: SMTP host for password reset OTP email.
+- `SMTP_PORT`: SMTP port for password reset OTP email.
+- `SMTP_FROM`: sender email for password reset OTP email.
+- `SMTP_USERNAME`: SMTP username.
+- `SMTP_PASSWORD`: SMTP password.
 
 ## Media Storage
 

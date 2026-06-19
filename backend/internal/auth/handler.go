@@ -65,6 +65,61 @@ func (h Handler) Login(c *gin.Context) {
 	httpx.OK(c, response)
 }
 
+func (h Handler) RequestPasswordReset(c *gin.Context) {
+	var req PasswordResetRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
+	}
+
+	if err := h.service.RequestPasswordReset(c.Request.Context(), req); err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			httpx.Error(c, http.StatusBadRequest, "invalid_input", "valid email is required")
+		default:
+			httpx.Error(c, http.StatusInternalServerError, "password_reset_request_failed", "failed to request password reset")
+		}
+		return
+	}
+
+	httpx.OK(c, gin.H{
+		"message": "If this email is registered, a reset code has been sent.",
+	})
+}
+
+func (h Handler) ConfirmPasswordReset(c *gin.Context) {
+	var req PasswordResetConfirmRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
+	}
+
+	response, err := h.service.ConfirmPasswordReset(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			httpx.Error(c, http.StatusBadRequest, "invalid_input", "email, code, and new password are required")
+		case errors.Is(err, ErrWeakPassword):
+			httpx.Error(c, http.StatusBadRequest, "weak_password", "new password must be at least 8 characters")
+		case errors.Is(err, ErrPasswordReused):
+			httpx.Error(c, http.StatusBadRequest, "password_reused", "new password must be different from the current password")
+		case errors.Is(err, ErrInvalidResetCode):
+			httpx.Error(c, http.StatusBadRequest, "invalid_reset_code", "reset code is invalid or expired")
+		case errors.Is(err, ErrResetCodeLocked):
+			httpx.Error(c, http.StatusTooManyRequests, "reset_code_locked", "too many failed attempts; request a new code")
+		case errors.Is(err, ErrInactiveUser):
+			httpx.Error(c, http.StatusForbidden, "inactive_user", "account is inactive")
+		default:
+			httpx.Error(c, http.StatusInternalServerError, "password_reset_confirm_failed", "failed to reset password")
+		}
+		return
+	}
+
+	httpx.OK(c, response)
+}
+
 func (h Handler) Me(c *gin.Context) {
 	userID, ok := UserIDFromContext(c)
 	if !ok {

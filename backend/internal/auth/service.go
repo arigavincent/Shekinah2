@@ -2,8 +2,10 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -17,17 +19,21 @@ var (
 	ErrInactiveUser       = errors.New("inactive user")
 	ErrWeakPassword       = errors.New("weak password")
 	ErrPasswordReused     = errors.New("password reused")
+	ErrInvalidResetCode   = errors.New("invalid reset code")
+	ErrResetCodeLocked    = errors.New("reset code locked")
 )
 
 type Service struct {
 	repository Repository
 	jwtSecret  string
+	mailer     passwordResetMailer
 }
 
 func NewService(repository Repository, jwtSecret string) Service {
 	return Service{
 		repository: repository,
 		jwtSecret:  jwtSecret,
+		mailer:     passwordResetMailer{},
 	}
 }
 
@@ -163,6 +169,122 @@ func (s Service) ChangePassword(ctx context.Context, userID string, req ChangePa
 	}, nil
 }
 
+func (s Service) RequestPasswordReset(ctx context.Context, req PasswordResetRequest) error {
+	email := normalizeEmail(req.Email)
+	if email == "" {
+		return ErrInvalidInput
+	}
+
+	user, err := s.repository.FindByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return nil
+		}
+
+		return err
+	}
+
+	if !user.IsActive {
+		return nil
+	}
+
+	code, err := generateResetCode()
+	if err != nil {
+		return err
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password reset code: %w", err)
+	}
+
+	ttlMinutes := envInt("PASSWORD_RESET_TTL_MINUTES", 15)
+	if ttlMinutes < 5 {
+		ttlMinutes = 15
+	}
+
+	expiresAt := time.Now().UTC().Add(time.Duration(ttlMinutes) * time.Minute)
+	if err := s.repository.CreatePasswordReset(ctx, user.ID, email, string(hash), expiresAt); err != nil {
+		return err
+	}
+
+	return s.mailer.Send(email, code)
+}
+
+func (s Service) ConfirmPasswordReset(ctx context.Context, req PasswordResetConfirmRequest) (AuthResponse, error) {
+	email := normalizeEmail(req.Email)
+	code := strings.TrimSpace(req.Code)
+	newPassword := strings.TrimSpace(req.NewPassword)
+
+	if email == "" || code == "" || newPassword == "" {
+		return AuthResponse{}, ErrInvalidInput
+	}
+
+	if len(newPassword) < 8 {
+		return AuthResponse{}, ErrWeakPassword
+	}
+
+	token, err := s.repository.FindLatestPasswordReset(ctx, email)
+	if err != nil {
+		if errors.Is(err, ErrResetNotFound) {
+			return AuthResponse{}, ErrInvalidResetCode
+		}
+
+		return AuthResponse{}, err
+	}
+
+	maxAttempts := envInt("PASSWORD_RESET_MAX_ATTEMPTS", 5)
+	if maxAttempts < 3 {
+		maxAttempts = 5
+	}
+
+	if token.Attempts >= maxAttempts {
+		return AuthResponse{}, ErrResetCodeLocked
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(token.CodeHash), []byte(code)); err != nil {
+		_ = s.repository.IncrementPasswordResetAttempts(ctx, token.ID)
+		return AuthResponse{}, ErrInvalidResetCode
+	}
+
+	user, err := s.repository.FindByID(ctx, token.UserID)
+	if err != nil {
+		return AuthResponse{}, err
+	}
+
+	if !user.IsActive {
+		return AuthResponse{}, ErrInactiveUser
+	}
+
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(newPassword)) == nil {
+		return AuthResponse{}, ErrPasswordReused
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("hash password: %w", err)
+	}
+
+	updatedUser, err := s.repository.UsePasswordResetAndUpdatePassword(ctx, token.ID, user.ID, string(hash))
+	if err != nil {
+		if errors.Is(err, ErrResetNotFound) {
+			return AuthResponse{}, ErrInvalidResetCode
+		}
+
+		return AuthResponse{}, err
+	}
+
+	jwtToken, err := s.issueToken(updatedUser)
+	if err != nil {
+		return AuthResponse{}, err
+	}
+
+	return AuthResponse{
+		Token: jwtToken,
+		User:  ToPublicUser(updatedUser),
+	}, nil
+}
+
 func (s Service) ParseToken(tokenString string) (string, error) {
 	token, err := jwt.ParseWithClaims(tokenString, jwt.MapClaims{}, func(token *jwt.Token) (any, error) {
 		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
@@ -210,4 +332,14 @@ func (s Service) issueToken(user User) (string, error) {
 
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func generateResetCode() (string, error) {
+	max := big.NewInt(1000000)
+	value, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", fmt.Errorf("generate reset code: %w", err)
+	}
+
+	return fmt.Sprintf("%06d", value.Int64()), nil
 }

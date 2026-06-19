@@ -24,6 +24,20 @@ services:
         generateValue: true
       - key: ALLOWED_ORIGINS
         value: https://shekinah2.onrender.com,https://shekinah-sons-admin.onrender.com
+      - key: PASSWORD_RESET_TTL_MINUTES
+        value: "15"
+      - key: PASSWORD_RESET_MAX_ATTEMPTS
+        value: "5"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
 
       - key: CLOUDINARY_CLOUD_NAME
         sync: false

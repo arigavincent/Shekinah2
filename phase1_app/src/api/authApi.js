@@ -28,3 +28,23 @@ export async function getCurrentUser(token) {
     }
   });
 }
+
+export async function requestPasswordReset({ email }) {
+  return request("/api/v1/auth/password-reset/request", {
+    method: "POST",
+    body: {
+      email
+    }
+  });
+}
+
+export async function confirmPasswordReset({ email, code, newPassword }) {
+  return request("/api/v1/auth/password-reset/confirm", {
+    method: "POST",
+    body: {
+      email,
+      code,
+      newPassword
+    }
+  });
+}

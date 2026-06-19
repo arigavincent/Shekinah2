@@ -14,6 +14,17 @@ type User struct {
 	UpdatedAt             time.Time
 }
 
+type PasswordResetToken struct {
+	ID        string
+	UserID    string
+	Email     string
+	CodeHash  string
+	Attempts  int
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
 type PublicUser struct {
 	ID                    string `json:"id"`
 	Name                  string `json:"name"`
@@ -38,6 +49,16 @@ type LoginRequest struct {
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
 	NewPassword     string `json:"newPassword"`
+}
+
+type PasswordResetRequest struct {
+	Email string `json:"email"`
+}
+
+type PasswordResetConfirmRequest struct {
+	Email       string `json:"email"`
+	Code        string `json:"code"`
+	NewPassword string `json:"newPassword"`
 }
 
 type AuthResponse struct {

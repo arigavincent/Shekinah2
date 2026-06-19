@@ -163,6 +163,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		{
 			authGroup.POST("/register", authHandler.Register)
 			authGroup.POST("/login", authHandler.Login)
+			authGroup.POST("/password-reset/request", authHandler.RequestPasswordReset)
+			authGroup.POST("/password-reset/confirm", authHandler.ConfirmPasswordReset)
 			authGroup.GET("/me", auth.RequireAuth(authService), authHandler.Me)
 			authGroup.PATCH("/password", auth.RequireAuth(authService), authHandler.ChangePassword)
 		}
