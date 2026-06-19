@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"strings"
 	"time"
@@ -178,6 +179,7 @@ func (s Service) RequestPasswordReset(ctx context.Context, req PasswordResetRequ
 	user, err := s.repository.FindByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
+			log.Printf("password reset requested for unknown email=%s", email)
 			return nil
 		}
 
@@ -185,6 +187,7 @@ func (s Service) RequestPasswordReset(ctx context.Context, req PasswordResetRequ
 	}
 
 	if !user.IsActive {
+		log.Printf("password reset requested for inactive user email=%s", email)
 		return nil
 	}
 
