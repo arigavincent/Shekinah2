@@ -19,7 +19,7 @@ func (m passwordResetMailer) Send(email string, code string) error {
 	password := env("SMTP_PASSWORD")
 
 	if host == "" || port == "" || from == "" {
-		log.Printf("password reset OTP for %s: %s", email, code)
+		log.Printf("password reset SMTP not configured; OTP for %s: %s", email, code)
 		return nil
 	}
 
@@ -45,10 +45,14 @@ func (m passwordResetMailer) Send(email string, code string) error {
 		auth = smtp.PlainAuth("", username, password, host)
 	}
 
+	log.Printf("password reset SMTP send start to=%s host=%s port=%s from=%s username_set=%t password_set=%t", email, host, port, from, username != "", password != "")
+
 	if err := smtp.SendMail(addr, auth, from, []string{email}, []byte(message)); err != nil {
+		log.Printf("password reset SMTP send failed to=%s host=%s port=%s error=%v; OTP for manual testing: %s", email, host, port, err, code)
 		return fmt.Errorf("send password reset email: %w", err)
 	}
 
+	log.Printf("password reset SMTP send success to=%s host=%s port=%s", email, host, port)
 	return nil
 }
 
