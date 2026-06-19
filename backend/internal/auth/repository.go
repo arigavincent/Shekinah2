@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -49,7 +50,12 @@ func (r Repository) CreateUser(ctx context.Context, name string, email string, p
 		var pgErr *pgconn.PgError
 
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return User{}, ErrEmailTaken
+			if pgErr.ConstraintName == "users_email_key" {
+				return User{}, ErrEmailTaken
+			}
+
+			log.Printf("unexpected unique constraint during user registration constraint=%s detail=%s", pgErr.ConstraintName, pgErr.Detail)
+			return User{}, fmt.Errorf("create user unique constraint %s: %w", pgErr.ConstraintName, err)
 		}
 
 		return User{}, fmt.Errorf("create user: %w", err)
