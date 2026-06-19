@@ -62,7 +62,7 @@ func (r Repository) FindByEmail(ctx context.Context, email string) (User, error)
 	const query = `
 		SELECT id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
 		FROM users
-		WHERE email = $1
+		WHERE lower(trim(email)) = lower(trim($1))
 		LIMIT 1
 	`
 
@@ -173,7 +173,7 @@ func (r Repository) FindLatestPasswordReset(ctx context.Context, email string) (
 	const query = `
 		SELECT id::text, user_id::text, email, code_hash, attempts, expires_at, used_at, created_at
 		FROM password_reset_tokens
-		WHERE lower(email) = lower($1)
+		WHERE lower(trim(email)) = lower(trim($1))
 		  AND used_at IS NULL
 		  AND expires_at > now()
 		ORDER BY created_at DESC
