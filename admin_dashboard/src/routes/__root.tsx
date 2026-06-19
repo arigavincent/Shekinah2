@@ -77,16 +77,30 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Shekinah Admin Console" },
+      {
+        name: "description",
+        content: "Shekinah Sons Global admin dashboard for sermons, devotions, events, care, giving, and operations.",
+      },
+      { name: "application-name", content: "Shekinah Admin Console" },
+      { name: "author", content: "Shekinah Sons Global" },
+      { property: "og:title", content: "Shekinah Admin Console" },
+      {
+        property: "og:description",
+        content: "Shekinah Sons Global admin dashboard for sermons, devotions, events, care, giving, and operations.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Shekinah Admin Console" },
+      {
+        name: "twitter:description",
+        content: "Shekinah Sons Global admin dashboard for sermons, devotions, events, care, giving, and operations.",
+      },
     ],
     links: [
+      { rel: "icon", type: "image/png", href: "/favicon.png" },
+      { rel: "shortcut icon", href: "/favicon.png" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.jpg" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
