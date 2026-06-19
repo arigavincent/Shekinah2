@@ -1,4 +1,10 @@
-import { getCurrentUser, loginUser, registerUser } from "../../api/authApi";
+import {
+  confirmPasswordReset,
+  getCurrentUser,
+  loginUser,
+  registerUser,
+  requestPasswordReset
+} from "../../api/authApi";
 import {
   clearAuthToken,
   getAuthToken,
@@ -25,6 +31,31 @@ export async function loginAndSaveSession({ email, password }) {
 
   if (!response?.token || !response?.user) {
     throw new Error("Invalid login response");
+  }
+
+  await saveAuthToken(response.token);
+
+  return {
+    token: response.token,
+    user: response.user
+  };
+}
+
+export async function requestPasswordResetCode({ email }) {
+  return requestPasswordReset({
+    email: email.trim().toLowerCase()
+  });
+}
+
+export async function confirmPasswordResetAndSaveSession({ email, code, newPassword }) {
+  const response = await confirmPasswordReset({
+    email: email.trim().toLowerCase(),
+    code: code.trim(),
+    newPassword
+  });
+
+  if (!response?.token || !response?.user) {
+    throw new Error("Invalid password reset response");
   }
 
   await saveAuthToken(response.token);

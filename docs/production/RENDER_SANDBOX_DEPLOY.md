@@ -31,6 +31,8 @@ Required application variables:
 ```text
 APP_ENV=production
 ALLOWED_ORIGINS=https://shekinah2.onrender.com,https://shekinah-sons-admin.onrender.com
+PASSWORD_RESET_TTL_MINUTES=15
+PASSWORD_RESET_MAX_ATTEMPTS=5
 MPESA_ENV=sandbox
 MPESA_SHORTCODE=174379
 MPESA_TRANSACTION_TYPE=CustomerPayBillOnline
@@ -51,6 +53,18 @@ Other backend secrets:
 ```text
 JWT_SECRET=<let render generate or set a strong secret>
 ```
+
+Optional password-reset email delivery:
+
+```text
+SMTP_HOST=<smtp host>
+SMTP_PORT=<smtp port, usually 587>
+SMTP_FROM=<from email>
+SMTP_USERNAME=<smtp username>
+SMTP_PASSWORD=<smtp password>
+```
+
+If SMTP is not configured, password reset OTPs are logged by the backend for development/testing.
 
 Database:
 

@@ -14,9 +14,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import {
+  confirmPasswordResetAndSaveSession,
   loadSavedSession,
   loginAndSaveSession,
   logoutSession,
+  requestPasswordResetCode,
   registerAndSaveSession
 } from "../auth/authSession";
 import { APP_LANGUAGES, tr } from "../../i18n/labels";
@@ -37,6 +39,9 @@ export function AuthProfileScreen({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [resetCodeSent, setResetCodeSent] = useState(false);
   const [session, setSession] = useState(initialSession || { token: null, user: null });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -113,6 +118,68 @@ export function AuthProfileScreen({
     }
   };
 
+  const requestReset = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      Alert.alert(tr(appLanguage, "Check Form"), tr(appLanguage, "Enter a valid email address."));
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      await requestPasswordResetCode({ email: cleanEmail });
+      setResetCodeSent(true);
+      Alert.alert("Check your email", "If this email is registered, a reset code has been sent.");
+    } catch (error) {
+      Alert.alert("Reset Failed", error?.message || "Unable to request a reset code.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmReset = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      Alert.alert(tr(appLanguage, "Check Form"), tr(appLanguage, "Enter a valid email address."));
+      return;
+    }
+
+    if (resetCode.trim().length < 6) {
+      Alert.alert(tr(appLanguage, "Check Form"), "Enter the 6-digit reset code.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      Alert.alert(tr(appLanguage, "Check Form"), tr(appLanguage, "Password must be at least 8 characters."));
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const result = await confirmPasswordResetAndSaveSession({
+        email: cleanEmail,
+        code: resetCode,
+        newPassword
+      });
+
+      setResetCode("");
+      setNewPassword("");
+      setResetCodeSent(false);
+      setPassword("");
+      setMode("Login");
+      applySession(result);
+      Alert.alert("Password Updated", "Your password was reset successfully.");
+    } catch (error) {
+      Alert.alert("Reset Failed", error?.message || "Unable to reset your password.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const logout = async () => {
     setSubmitting(true);
 
@@ -182,7 +249,15 @@ export function AuthProfileScreen({
             setEmail={setEmail}
             password={password}
             setPassword={setPassword}
+            resetCode={resetCode}
+            setResetCode={setResetCode}
+            newPassword={newPassword}
+            setNewPassword={setNewPassword}
+            resetCodeSent={resetCodeSent}
+            setResetCodeSent={setResetCodeSent}
             submitAuth={submitAuth}
+            requestReset={requestReset}
+            confirmReset={confirmReset}
             submitting={submitting}
             appLanguage={appLanguage}
           />
@@ -283,10 +358,20 @@ function SignedOutView({
   setEmail,
   password,
   setPassword,
+  resetCode,
+  setResetCode,
+  newPassword,
+  setNewPassword,
+  resetCodeSent,
+  setResetCodeSent,
   submitAuth,
+  requestReset,
+  confirmReset,
   submitting,
   appLanguage
 }) {
+  const isResetMode = mode === "Reset";
+
   return (
     <>
       <View style={s.hero}>
@@ -305,7 +390,10 @@ function SignedOutView({
           <Pressable
             key={item}
             style={[s.modeBtn, mode === item && s.modeActive]}
-            onPress={() => setMode(item)}
+            onPress={() => {
+              setMode(item);
+              setResetCodeSent(false);
+            }}
           >
             <Text style={[s.modeText, mode === item && s.modeTextActive]}>
               {tr(appLanguage, item)}
@@ -315,7 +403,7 @@ function SignedOutView({
       </View>
 
       <View style={s.card}>
-        <Text style={s.sectionTitle}>{tr(appLanguage, mode)}</Text>
+        <Text style={s.sectionTitle}>{isResetMode ? "Reset Password" : tr(appLanguage, mode)}</Text>
 
         {mode === "Register" ? (
           <>
@@ -341,23 +429,100 @@ function SignedOutView({
           onChangeText={setEmail}
         />
 
-        <Text style={s.inputLabel}>{tr(appLanguage, "Password")}</Text>
-        <TextInput
-          style={s.input}
-          placeholder={tr(appLanguage, "Minimum 8 characters")}
-          placeholderTextColor={C.faint}
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+        {isResetMode ? (
+          <>
+            {resetCodeSent ? (
+              <>
+                <Text style={s.inputLabel}>Reset Code</Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="6-digit code"
+                  placeholderTextColor={C.faint}
+                  keyboardType="number-pad"
+                  value={resetCode}
+                  onChangeText={setResetCode}
+                  maxLength={6}
+                />
 
-        <Pressable style={s.primaryBtn} onPress={submitAuth} disabled={submitting}>
-          {submitting ? (
-            <ActivityIndicator color={C.black} />
-          ) : (
-            <Text style={s.primaryText}>{tr(appLanguage, mode)}</Text>
-          )}
-        </Pressable>
+                <Text style={s.inputLabel}>New Password</Text>
+                <TextInput
+                  style={s.input}
+                  placeholder={tr(appLanguage, "Minimum 8 characters")}
+                  placeholderTextColor={C.faint}
+                  secureTextEntry
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                />
+              </>
+            ) : (
+              <Text style={[s.noteText, { marginBottom: 14 }]}>
+                Enter your email and we will send a one-time code to reset your password.
+              </Text>
+            )}
+
+            <Pressable
+              style={s.primaryBtn}
+              onPress={resetCodeSent ? confirmReset : requestReset}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color={C.black} />
+              ) : (
+                <Text style={s.primaryText}>{resetCodeSent ? "Reset Password" : "Send Reset Code"}</Text>
+              )}
+            </Pressable>
+
+            {resetCodeSent ? (
+              <Pressable style={s.secondaryBtn} onPress={requestReset} disabled={submitting}>
+                <Text style={s.secondaryText}>Send a new code</Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              style={s.linkBtn}
+              onPress={() => {
+                setMode("Login");
+                setResetCodeSent(false);
+              }}
+              disabled={submitting}
+            >
+              <Text style={s.linkText}>Back to login</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Text style={s.inputLabel}>{tr(appLanguage, "Password")}</Text>
+            <TextInput
+              style={s.input}
+              placeholder={tr(appLanguage, "Minimum 8 characters")}
+              placeholderTextColor={C.faint}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+
+            <Pressable style={s.primaryBtn} onPress={submitAuth} disabled={submitting}>
+              {submitting ? (
+                <ActivityIndicator color={C.black} />
+              ) : (
+                <Text style={s.primaryText}>{tr(appLanguage, mode)}</Text>
+              )}
+            </Pressable>
+
+            {mode === "Login" ? (
+              <Pressable
+                style={s.linkBtn}
+                onPress={() => {
+                  setMode("Reset");
+                  setResetCodeSent(false);
+                }}
+                disabled={submitting}
+              >
+                <Text style={s.linkText}>Forgot password?</Text>
+              </Pressable>
+            ) : null}
+          </>
+        )}
       </View>
 
     </>
@@ -585,6 +750,30 @@ const s = makeThemedStyles(C => ({
   primaryText: { fontFamily: C.fontBold,
     color: C.textOnAccent,
     fontSize: 14,
+    fontWeight: "900"
+  },
+  secondaryBtn: {
+    backgroundColor: C.surface2,
+    borderRadius: 24,
+    paddingVertical: 13,
+    alignItems: "center",
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: C.line
+  },
+  secondaryText: { fontFamily: C.fontBold,
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  linkBtn: {
+    alignItems: "center",
+    paddingVertical: 12,
+    marginTop: 4
+  },
+  linkText: { fontFamily: C.fontBold,
+    color: C.gold,
+    fontSize: 13,
     fontWeight: "900"
   },
   note: {
