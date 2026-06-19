@@ -211,7 +211,13 @@ func (s Service) RequestPasswordReset(ctx context.Context, req PasswordResetRequ
 		return err
 	}
 
-	return s.mailer.Send(email, code)
+	go func() {
+		if err := s.mailer.Send(email, code); err != nil {
+			log.Printf("password reset email delivery failed email=%s error=%v", email, err)
+		}
+	}()
+
+	return nil
 }
 
 func (s Service) ConfirmPasswordReset(ctx context.Context, req PasswordResetConfirmRequest) (AuthResponse, error) {
