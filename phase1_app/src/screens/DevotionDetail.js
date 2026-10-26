@@ -17,7 +17,7 @@ import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles } from "../constants/the
 import { tr } from "../i18n/labels";
 import { Screen } from "../components/Screen";
 import { Ionicons } from "../components/Icon";
-import { useNavBarHeight } from "../components/BottomNav";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNav } from "../navigation/NavContext";
 
 const FONT_STEPS = [14, 15.5, 17, 18.5, 20, 22];
@@ -66,7 +66,8 @@ function HeaderAction({ icon, label, onPress, active, activeColor }) {
 
 export function DevotionDetail({ devotion, favorites = [], setFavorites, go, appLanguage = "en" }) {
   const { goBack } = useNav();
-  const navHeight = useNavBarHeight();
+  const insets = useSafeAreaInsets();
+  const navHeight = Math.max(insets.bottom, 12);
   const [fontStep, setFontStep] = useState(1);
   const [speaking, setSpeaking] = useState(false);
   const [section, setSection] = useState(null);

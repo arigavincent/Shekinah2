@@ -1,19 +1,25 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Animated,
   Image,
   Pressable,
   ScrollView,
+  Share,
+  StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "../components/Icon";
 
-import { C } from "../constants/theme";
+import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles } from "../constants/theme";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
-import { TopBar } from "../components/TopBar";
-import { EmptyState } from "../components/Cards";
+import { AudioArt } from "../components/AudioArt";
+import { useNav } from "../navigation/NavContext";
 import { PHASE1_IMAGES } from "../content";
 import { useContent } from "../providers/ContentProvider";
 import {
@@ -67,37 +73,39 @@ function PlayerAction({ icon, label, active, disabled, onPress }) {
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      style={[
-        s.plainCard,
-        {
-          flex: 1,
-          minHeight: 72,
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: disabled ? 0.45 : 1,
-          borderColor: active ? C.gold : C.line
-        }
-      ]}
+      hitSlop={6}
+      style={({ pressed }) => [ap.action, disabled && { opacity: 0.4 }, pressed && { opacity: 0.6 }]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: Boolean(active), disabled: Boolean(disabled) }}
     >
-      <Ionicons name={icon} size={22} color={active ? C.gold : C.white} />
-      <Text
-        style={[
-          s.mutedText,
-          {
-            marginTop: 6,
-            color: active ? C.gold : C.muted,
-            fontWeight: "800"
-          }
-        ]}
-      >
-        {label}
-      </Text>
+      <Ionicons name={icon} size={22} color={active ? C.accent : "#FFFFFF"} />
+      <Text style={[ap.actionLabel, active && { color: C.accentText }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function ControlButton({ icon, size = 24, onPress, label }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [ap.control, pressed && { backgroundColor: "rgba(255,255,255,0.12)" }]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Ionicons name={icon} size={size} color="#FFFFFF" />
     </Pressable>
   );
 }
 
 export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLanguage = "en" }) {
   const { data } = useContent();
+  const { goBack } = useNav();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [trackWidth, setTrackWidth] = useState(1);
+  const artScale = React.useRef(new Animated.Value(1)).current;
 
   const [audioState, setAudioState] = useState(getAudioPlaybackState());
   const [showQueue, setShowQueue] = useState(false);
@@ -160,6 +168,17 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
       setLocalError("");
     }
   }, [remoteMediaUrl]);
+
+  // Artwork settles back slightly when paused, like a record lifting.
+  useEffect(() => {
+    Animated.spring(artScale, { toValue: playing ? 1 : 0.9, friction: 7, tension: 60, useNativeDriver: true }).start();
+  }, [playing, artScale]);
+
+  async function seekToFraction(fraction) {
+    if (!durationMs) return;
+    const target = Math.max(0, Math.min(1, fraction)) * durationMs;
+    await seekBy(target - positionMs);
+  }
 
   useEffect(() => {
     async function hydrateDownloadedFile() {
@@ -353,156 +372,195 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
     switchTrack(audioQueue[currentIndex + 1]);
   }
 
-  function keepPlaying() {
+  function minimise() {
     setMiniPlayer(sermon);
-    go("Sermons");
+    goBack("Sermons");
   }
 
   if (!sermon) {
     return (
       <Screen>
-        <EmptyState title="No Audio Selected" text="Choose an audio sermon first." />
+        <View style={ap.emptyWrap}>
+          <Ionicons name="musical-notes-outline" size={46} color={C.faint} />
+          <Text style={ap.emptyTitle}>No audio selected</Text>
+          <Text style={ap.emptyText}>Choose an audio sermon to start listening.</Text>
+        </View>
       </Screen>
     );
   }
 
+  const artSize = Math.min(width - 64, 360);
+  const status = error || statusText || (!remoteMediaUrl ? "Audio is not available for this item yet." : "");
+
   return (
     <Screen>
-      <Image source={{ uri: thumbnail }} style={s.audioBg} blurRadius={22} />
-      <View style={s.audioShade} />
-      <View style={s.audioGlow} />
+      <Image source={{ uri: thumbnail }} style={StyleSheet.absoluteFill} blurRadius={40} />
+      <LinearGradient
+        colors={["rgba(212,175,55,0.30)", "rgba(10,8,2,0.82)", "#000000"]}
+        locations={[0, 0.45, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
-      <TopBar title="Audio Player" go={go} back="Sermons" appLanguage={appLanguage} />
+      <View style={[ap.header, { paddingTop: ANDROID_STATUS_BAR_HEIGHT + 6 }]}>
+        <ControlButton icon="chevron-down" label="Minimise player" onPress={minimise} />
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={ap.eyebrow}>PLAYING FROM</Text>
+          <Text style={ap.headerTitle} numberOfLines={1}>Audio Sermons</Text>
+        </View>
+        <ControlButton
+          icon="share-social-outline"
+          label="Share sermon"
+          size={21}
+          onPress={() => Share.share({ message: `${sermon.title}${sermon.speaker ? ` · ${sermon.speaker}` : ""}` })}
+        />
+      </View>
 
-      <ScrollView contentContainerStyle={s.audioContent}>
-        <View style={s.albumFrame}>
-          <Image source={{ uri: thumbnail }} style={s.albumLarge} />
+      <ScrollView
+        contentContainerStyle={{ alignItems: "center", paddingHorizontal: 24, paddingBottom: insets.bottom + 32 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View style={[ap.artShadow, { marginTop: 16, transform: [{ scale: artScale }] }]}>
+          <AudioArt item={sermon} size={artSize} radius={22} />
+        </Animated.View>
+
+        <View style={ap.meta}>
+          <Text style={ap.title} numberOfLines={3}>{sermon.title}</Text>
+          {sermon.speaker ? <Text style={ap.speaker}>{sermon.speaker}</Text> : null}
         </View>
 
-        <View style={s.audioInfoBlock}>
-          <Text style={s.audioTitle}>{sermon.title}</Text>
-          <Text style={[s.mutedText, { textAlign: "center" }]}>{sermon.speaker}</Text>
-
-          <View style={s.progressTrack}>
-            <View style={[s.progressFill, { width: `${progress}%` }]} />
+        <Pressable
+          style={ap.seekArea}
+          onLayout={event => setTrackWidth(event.nativeEvent.layout.width || 1)}
+          onPress={event => seekToFraction(event.nativeEvent.locationX / trackWidth)}
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Position ${formatTime(positionMs)} of ${formatTime(durationMs)}`}
+        >
+          <View style={ap.track}>
+            <View style={[ap.trackFill, { width: `${progress}%` }]} />
+            <View style={[ap.thumb, { left: `${progress}%` }]} />
           </View>
-
-          <View style={s.timeRow}>
-            <Text style={s.mutedText}>{formatTime(positionMs)}</Text>
-            <Text style={s.mutedText}>
-              {durationMs > 0 ? formatTime(durationMs) : sermon.duration || "0:00"}
-            </Text>
-          </View>
-
-          {error ? <Text style={[s.mutedText, { textAlign: "center" }]}>{error}</Text> : null}
-          {statusText ? <Text style={[s.mutedText, { textAlign: "center" }]}>{statusText}</Text> : null}
-          {!remoteMediaUrl ? (
-            <Text style={[s.mutedText, { color: C.gold, textAlign: "center" }]}>Audio is not available for this item yet.</Text>
-          ) : null}
-          {downloadProgress > 0 && downloadProgress < 100 ? (
-            <Text style={[s.mutedText, { textAlign: "center" }]}>Downloading... {downloadProgress}%</Text>
-          ) : null}
-          {!playbackUrl ? <Text style={[s.mutedText, { textAlign: "center" }]}>No uploaded audio URL found.</Text> : null}
+        </Pressable>
+        <View style={ap.timeRow}>
+          <Text style={ap.time}>{formatTime(positionMs)}</Text>
+          <Text style={ap.time}>{durationMs > 0 ? formatTime(durationMs) : sermon.duration || "0:00"}</Text>
         </View>
 
-        <View style={s.controls}>
-          <Pressable style={s.controlBtn} onPress={previousTrack}>
-            <Ionicons name="play-skip-back-outline" size={20} color={C.white} />
+        <View style={ap.controls}>
+          <ControlButton icon="play-skip-back" label="Previous" onPress={previousTrack} />
+          <ControlButton icon="play-back" label="Back 15 seconds" onPress={() => seekBy(-15000)} />
+          <Pressable
+            onPress={togglePlay}
+            disabled={loading || !playbackUrl}
+            style={({ pressed }) => [ap.playBtn, (loading || !playbackUrl) && { opacity: 0.5 }, pressed && { transform: [{ scale: 0.95 }] }]}
+            accessibilityRole="button"
+            accessibilityLabel={playing ? "Pause" : "Play"}
+          >
+            <Ionicons name={loading ? "hourglass-outline" : playing ? "pause" : "play"} size={32} color={C.textOnAccent} />
           </Pressable>
-
-          <Pressable style={s.controlBtn} onPress={() => seekBy(-15000)}>
-            <Ionicons name="play-back-outline" size={20} color={C.white} />
-          </Pressable>
-
-          <Pressable style={s.controlPrimary} onPress={togglePlay} disabled={loading || !playbackUrl}>
-            <Ionicons
-              name={loading ? "hourglass-outline" : playing ? "pause" : "play"}
-              size={28}
-              color={C.black}
-            />
-          </Pressable>
-
-          <Pressable style={s.controlBtn} onPress={() => seekBy(15000)}>
-            <Ionicons name="play-forward-outline" size={20} color={C.white} />
-          </Pressable>
-
-          <Pressable style={s.controlBtn} onPress={nextTrack}>
-            <Ionicons name="play-skip-forward-outline" size={20} color={C.white} />
-          </Pressable>
+          <ControlButton icon="play-forward" label="Forward 15 seconds" onPress={() => seekBy(15000)} />
+          <ControlButton icon="play-skip-forward" label="Next" onPress={nextTrack} />
         </View>
 
-        <Text style={s.categoryPill}>{sermon.category}</Text>
-
-        <Text style={s.mutedText}>
-          {currentIndex >= 0 ? `${currentIndex + 1} / ${audioQueue.length} From Audio Sermons` : "Audio Sermon"}
-        </Text>
-
-        {downloadedUri ? (
-          <Text style={s.mutedText}>Offline audio ready.</Text>
+        {status ? <Text style={ap.status}>{status}</Text> : null}
+        {downloadProgress > 0 && downloadProgress < 100 ? (
+          <Text style={ap.status}>Downloading… {downloadProgress}%</Text>
         ) : null}
 
-        <View style={s.bottomActions}>
+        <View style={ap.glassRow}>
+          <PlayerAction icon="repeat-outline" label="Repeat" active={repeatEnabled} disabled={!playbackUrl} onPress={toggleRepeat} />
           <PlayerAction
-            icon="repeat-outline"
-            label="Repeat"
-            active={repeatEnabled}
-            disabled={!playbackUrl}
-            onPress={toggleRepeat}
-          />
-
-          <PlayerAction
-            icon={downloadedUri ? "checkmark-circle-outline" : "download-outline"}
-            label={downloadedUri ? "Downloaded" : "Download"}
+            icon={downloadedUri ? "checkmark-circle" : "download-outline"}
+            label={downloadedUri ? "Offline" : "Download"}
             active={Boolean(downloadedUri)}
             disabled={!remoteMediaUrl}
             onPress={downloadAudio}
           />
-
-          <PlayerAction
-            icon="list-outline"
-            label="Queue"
-            active={showQueue}
-            disabled={audioQueue.length === 0}
-            onPress={() => setShowQueue(current => !current)}
-          />
+          <PlayerAction icon="list-outline" label="Up next" active={showQueue} disabled={audioQueue.length === 0} onPress={() => setShowQueue(current => !current)} />
         </View>
 
-        {showQueue ? (
-          <View style={[s.plainCard, { alignSelf: "stretch" }]}>
-            <Text style={s.rowTitle}>Audio Queue</Text>
-
-            {audioQueue.map((item, index) => (
-              <Pressable
-                key={item.id}
-                style={[
-                  s.listRow,
-                  {
-                    marginHorizontal: 0,
-                    borderColor: item.id === sermon.id ? C.gold : C.line
-                  }
-                ]}
-                onPress={() => switchTrack(item)}
-              >
-                <Image
-                  source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }}
-                  style={s.rowImage}
-                />
-
-                <View style={s.rowBody}>
-                  <Text style={s.rowTitle}>
-                    {index + 1}. {item.title}
-                  </Text>
-                  <Text style={s.mutedText}>{item.speaker}</Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
+        {currentIndex >= 0 ? (
+          <Text style={ap.position}>{`${currentIndex + 1} of ${audioQueue.length} · Audio Sermons`}</Text>
         ) : null}
 
-        <Pressable style={s.primaryBtn} onPress={keepPlaying}>
-          <Text style={s.primaryText}>Keep Playing</Text>
-        </Pressable>
+        {showQueue ? (
+          <View style={ap.queue}>
+            <Text style={ap.queueTitle}>Up next</Text>
+            {audioQueue.map((item, index) => {
+              const current = item.id === sermon.id;
+              return (
+                <Pressable
+                  key={item.id}
+                  style={({ pressed }) => [ap.queueRow, pressed && { opacity: 0.7 }]}
+                  onPress={() => switchTrack(item)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: current }}
+                >
+                  <AudioArt item={item} size={52} variant="thumb" radius={10} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[ap.queueItem, current && { color: C.gold }]} numberOfLines={2}>{item.title}</Text>
+                    <Text style={ap.queueMeta} numberOfLines={1}>{[item.speaker, item.date].filter(Boolean).join(" · ")}</Text>
+                  </View>
+                  {current ? <Ionicons name="volume-high-outline" size={18} color={C.gold} /> : <Text style={ap.queueIndex}>{index + 1}</Text>}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
       </ScrollView>
     </Screen>
   );
 }
+
+const ap = makeThemedStyles(C => ({
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingBottom: 4 },
+  eyebrow: { color: "rgba(255,255,255,0.6)", fontSize: 10, fontFamily: C.fontBold, letterSpacing: 1.6 },
+  headerTitle: { color: "#FFFFFF", fontSize: 14, fontFamily: C.fontBold, marginTop: 1 },
+  artShadow: { borderRadius: 22, elevation: 18, shadowColor: "#000", shadowOpacity: 0.6, shadowRadius: 24, shadowOffset: { width: 0, height: 12 } },
+  meta: { alignSelf: "stretch", marginTop: 28 },
+  title: { color: "#FFFFFF", fontSize: 22, lineHeight: 28, fontFamily: C.fontBold },
+  speaker: { color: C.gold2, fontSize: 15, fontFamily: C.fontMedium, marginTop: 6 },
+  seekArea: { alignSelf: "stretch", paddingVertical: 14, marginTop: 14 },
+  track: { height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)" },
+  trackFill: { height: 4, borderRadius: 2, backgroundColor: C.accent },
+  thumb: { position: "absolute", top: -5, width: 14, height: 14, marginLeft: -7, borderRadius: 7, backgroundColor: "#FFFFFF" },
+  timeRow: { alignSelf: "stretch", flexDirection: "row", justifyContent: "space-between" },
+  time: { color: "rgba(255,255,255,0.65)", fontSize: 12, fontFamily: C.fontMedium, fontVariant: ["tabular-nums"] },
+  controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", alignSelf: "stretch", marginTop: 18 },
+  control: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  playBtn: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: C.gold,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 10,
+    shadowColor: C.gold,
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 }
+  },
+  status: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontFamily: C.fontBody, textAlign: "center", marginTop: 12 },
+  glassRow: {
+    flexDirection: "row",
+    alignSelf: "stretch",
+    marginTop: 26,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)"
+  },
+  action: { flex: 1, alignItems: "center", gap: 5, paddingVertical: 4 },
+  actionLabel: { color: "rgba(255,255,255,0.75)", fontSize: 11.5, fontFamily: C.fontMedium },
+  position: { color: "rgba(255,255,255,0.5)", fontSize: 12, fontFamily: C.fontBody, marginTop: 14 },
+  queue: { alignSelf: "stretch", marginTop: 20, borderRadius: 18, padding: 14, backgroundColor: "rgba(0,0,0,0.45)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.12)" },
+  queueTitle: { color: "#FFFFFF", fontSize: 16, fontFamily: C.fontBold, marginBottom: 6 },
+  queueRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },
+  queueItem: { color: "#FFFFFF", fontSize: 14, lineHeight: 19, fontFamily: C.fontMedium },
+  queueMeta: { color: "rgba(255,255,255,0.55)", fontSize: 12, fontFamily: C.fontBody, marginTop: 2 },
+  queueIndex: { color: "rgba(255,255,255,0.45)", fontSize: 12, fontFamily: C.fontBold, width: 22, textAlign: "right" },
+  emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 32 },
+  emptyTitle: { color: C.white, fontSize: 19, fontFamily: C.fontBold },
+  emptyText: { color: C.muted, fontSize: 14, fontFamily: C.fontBody, textAlign: "center" }
+}));

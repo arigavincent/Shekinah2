@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
-  Dimensions,
   Image,
   Linking,
   Pressable,
   ScrollView,
+  Share,
+  StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from "react-native";
 import { Ionicons } from "../components/Icon";
@@ -16,12 +18,11 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import * as FileSystem from "expo-file-system/legacy";
 
 import { PHASE1_IMAGES } from "../content";
-import { C } from "../constants/theme";
+import { C, makeThemedStyles } from "../constants/theme";
 import { s } from "../styles/appStyles";
 import { useContent } from "../providers/ContentProvider";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
-import { SectionHeader } from "../components/SectionHeader";
 import {
   DOWNLOAD_TYPES,
   registerDownload
@@ -34,8 +35,6 @@ import {
   sermonMediaUrl,
   sermonThumbnail
 } from "../utils/mediaUrl";
-
-const { width } = Dimensions.get("window");
 
 const FILE_ROOT = FileSystem.documentDirectory || FileSystem.cacheDirectory || "";
 const VIDEO_DOWNLOAD_DIR = `${FILE_ROOT}shekinah-videos/`;
@@ -77,14 +76,16 @@ async function lockPortrait() {
 
 export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLanguage = "en" }) {
   const { data } = useContent();
+  const { width } = useWindowDimensions();
   const videoRef = useRef(null);
-  const [youtubePlaying, setYoutubePlaying] = useState(false);
+  const [youtubePlaying, setYoutubePlaying] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [downloadedUri, setDownloadedUri] = useState("");
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadStatus, setDownloadStatus] = useState("");
   const [downloadError, setDownloadError] = useState("");
 
-  const related = data.sermons.filter(item => item.id !== sermon?.id);
+  const related = data.sermons.filter(item => item.id !== sermon?.id && item.type === sermon?.type).slice(0, 20);
 
   const rawUrl = sermonMediaUrl(sermon);
   const resolvedUrl = resolveMediaUrl(rawUrl);
@@ -225,165 +226,111 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
     }
   }
 
+  const playerHeight = Math.round((width * 9) / 16);
+  const meta = [sermon?.speaker, sermon?.date || sermon?.sermonDate].filter(Boolean).join(" · ");
+
   return (
     <Screen>
-      <TopBar title={hasAudio ? "Audio Sermon" : "Video Sermon"} go={go} back="Sermons" appLanguage={appLanguage} />
+      <TopBar title={sermon?.title || (hasAudio ? "Audio Sermon" : "Video Sermon")} go={go} back="Sermons" appLanguage={appLanguage} />
 
-      <ScrollView contentContainerStyle={s.scrollPad}>
-        <View style={s.videoBox}>
-          {hasYouTubeVideo ? (
-            <YoutubePlayer
-              height={width * (9 / 16)}
-              width={width - 28}
-              play={youtubePlaying}
-              videoId={videoId}
-              onFullScreenChange={onFullScreenChange}
-              webViewProps={{
-                allowsFullscreenVideo: true,
-                mediaPlaybackRequiresUserAction: false
-              }}
-            />
-          ) : hasDirectVideo ? (
-            <Video
-              ref={videoRef}
-              source={{ uri: resolvedUrl }}
-              style={s.videoImage}
-              resizeMode={ResizeMode.CONTAIN}
-              useNativeControls
-              shouldPlay={false}
-              onFullscreenUpdate={async event => {
-                const update = event.fullscreenUpdate;
-
-                // 1 = player did present fullscreen
-                // 3 = player did dismiss fullscreen
-                if (update === 1) {
-                  await lockLandscape();
-                }
-
-                if (update === 3) {
-                  await lockPortrait();
-                }
-              }}
-            />
-          ) : (
-            <>
-              <Image source={{ uri: thumbnail }} style={s.videoImage} />
-
-              <View style={s.videoOverlay}>
-                <View style={s.playLarge}>
-                  <Ionicons name={hasAudio ? "musical-notes" : "play"} size={28} color={C.black} />
-                </View>
-              </View>
-            </>
-          )}
-        </View>
-
+      <View style={[vd.player, { height: playerHeight }]}>
         {hasYouTubeVideo ? (
-          <Pressable
-            style={s.plainCard}
-            onPress={() => setYoutubePlaying(current => !current)}
-          >
-            <Text style={s.rowTitle}>
-              {youtubePlaying ? "Pause YouTube Video" : "Play YouTube Video"}
-            </Text>
-            <Text style={s.mutedText}>
-              Uses embedded YouTube player. If blocked, open externally below.
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {hasYouTubeVideo ? (
-          <Pressable style={s.plainCard} onPress={openYoutubeExternal}>
-            <Text style={s.rowTitle}>Watch on YouTube</Text>
-            <Text style={s.mutedText}>Fallback for videos that block embedded playback.</Text>
-          </Pressable>
-        ) : null}
-
-        {hasAudio ? (
-          <Pressable style={s.plainCard} onPress={() => go("AudioPlayer", sermon)}>
-            <Text style={s.rowTitle}>Audio sermon available</Text>
-            <Text style={s.mutedText}>Tap to open audio player.</Text>
-          </Pressable>
-        ) : null}
-
-        {hasDirectVideo ? (
-          <Pressable style={s.plainCard} onPress={downloadVideo}>
-            <View style={s.rowTight}>
-              <Ionicons
-                name={downloadedUri ? "checkmark-circle-outline" : "download-outline"}
-                size={20}
-                color={C.gold}
-              />
-
-              <View style={{ flex: 1 }}>
-                <Text style={[s.rowTitle, { color: C.white }]}>
-                  {downloadedUri ? "Video downloaded" : "Download video"}
-                </Text>
-
-                <Text style={[s.mutedText, { color: C.muted }]}>
-                  Save this uploaded sermon video for offline playback.
-                </Text>
+          <YoutubePlayer
+            height={playerHeight}
+            width={width}
+            play={youtubePlaying}
+            videoId={videoId}
+            onChangeState={state => {
+              if (state === "ended") setYoutubePlaying(false);
+            }}
+            onFullScreenChange={onFullScreenChange}
+            initialPlayerParams={{ modestbranding: true, rel: false }}
+            webViewProps={{ allowsFullscreenVideo: true, mediaPlaybackRequiresUserAction: false }}
+          />
+        ) : hasDirectVideo ? (
+          <Video
+            ref={videoRef}
+            source={{ uri: downloadedUri || resolvedUrl }}
+            style={StyleSheet.absoluteFill}
+            resizeMode={ResizeMode.CONTAIN}
+            useNativeControls
+            shouldPlay
+            onFullscreenUpdate={async event => {
+              const update = event.fullscreenUpdate;
+              // 1 = player did present fullscreen, 3 = player did dismiss fullscreen
+              if (update === 1) await lockLandscape();
+              if (update === 3) await lockPortrait();
+            }}
+          />
+        ) : (
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => hasAudio && go("AudioPlayer", sermon)} accessibilityRole="button">
+            <Image source={{ uri: thumbnail }} style={StyleSheet.absoluteFill} />
+            <View style={vd.overlay}>
+              <View style={vd.bigPlay}>
+                <Ionicons name={hasAudio ? "musical-notes" : "play"} size={28} color={C.textOnAccent} />
               </View>
+              {!hasAudio ? <Text style={vd.overlayText}>No playable media yet</Text> : null}
             </View>
-
-            {downloadProgress > 0 && downloadProgress < 100 ? (
-              <Text style={[s.goldSmall, { color: C.gold, marginTop: 8 }]}>
-                Downloading... {downloadProgress}%
-              </Text>
-            ) : null}
-
-            {downloadStatus ? (
-              <Text style={[s.goldSmall, { color: C.gold, marginTop: 8 }]}>
-                {downloadStatus}
-              </Text>
-            ) : null}
-
-            {downloadError ? (
-              <Text style={[s.mutedText, { color: C.gold, marginTop: 8 }]}>
-                {downloadError}
-              </Text>
-            ) : null}
           </Pressable>
+        )}
+      </View>
+
+      <ScrollView contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+        <Pressable
+          style={({ pressed }) => [vd.titleRow, pressed && { backgroundColor: C.surface }]}
+          onPress={() => setExpanded(current => !current)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={`${sermon?.title}. ${expanded ? "Hide details" : "Show details"}`}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={vd.title} numberOfLines={expanded ? undefined : 2}>{sermon?.title}</Text>
+            {meta ? <Text style={vd.meta}>{meta}</Text> : null}
+          </View>
+          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={20} color={C.muted} />
+        </Pressable>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={vd.chips}>
+          <ActionChip icon="share-social-outline" label="Share" onPress={() => Share.share({ message: `${sermon?.title}${videoId ? `\n${youtubeWatchUrl(videoId)}` : ""}` })} />
+          {hasDirectVideo ? (
+            <ActionChip
+              icon={downloadedUri ? "checkmark-circle" : "download-outline"}
+              label={downloadedUri ? "Downloaded" : downloadProgress > 0 && downloadProgress < 100 ? `${downloadProgress}%` : "Download"}
+              active={Boolean(downloadedUri)}
+              onPress={downloadVideo}
+            />
+          ) : null}
+          {hasYouTubeVideo ? <ActionChip icon="logo-youtube" label="Watch on YouTube" onPress={openYoutubeExternal} /> : null}
+          {hasAudio ? <ActionChip icon="musical-notes-outline" label="Listen" onPress={() => go("AudioPlayer", sermon)} /> : null}
+        </ScrollView>
+
+        {downloadStatus || downloadError ? (
+          <Text style={[vd.notice, downloadError && { color: C.red }]}>{downloadError || downloadStatus}</Text>
         ) : null}
 
-        {hasYouTubeVideo ? (
-          <View style={s.plainCard}>
-            <Text style={[s.rowTitle, { color: C.white }]}>Download unavailable</Text>
-            <Text style={[s.mutedText, { color: C.muted }]}>
-              YouTube videos cannot be downloaded inside the app. Use Watch on YouTube.
-            </Text>
+        {expanded ? (
+          <View style={vd.details}>
+            {sermon?.category ? <Text style={vd.category}>{sermon.category}</Text> : null}
+            <Text style={vd.description}>{sermon?.description || "No description for this sermon yet."}</Text>
+            {hasYouTubeVideo ? <Text style={vd.hint}>Downloads aren't available for YouTube videos.</Text> : null}
           </View>
         ) : null}
 
-        {!hasDirectVideo && !hasYouTubeVideo && !hasAudio ? (
-          <View style={s.plainCard}>
-            <Text style={s.rowTitle}>No playable media</Text>
-            <Text style={s.mutedText}>
-              Upload a video/audio file or add a YouTube link in the admin dashboard.
-            </Text>
-          </View>
-        ) : null}
-
-        <Text style={s.detailTitle}>{sermon?.title}</Text>
-
-        <Text style={s.goldSmall}>
-          {sermon?.speaker} - {sermon?.date || sermon?.sermonDate}
-        </Text>
-
-        <Text style={s.detailBody}>{sermon?.description}</Text>
-
-        <SectionHeader title="Related Sermons" />
+        <View style={vd.divider} />
+        <Text style={vd.upNext}>Up next</Text>
 
         {related.map(item => (
-          <Pressable key={item.id} style={s.listRow} onPress={() => openSermon(item)}>
-            <Image
-              source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }}
-              style={s.rowImage}
-            />
-
-            <View style={s.rowBody}>
-              <Text style={s.rowTitle}>{item.title}</Text>
-              <Text style={s.mutedText}>{item.date || item.sermonDate}</Text>
+          <Pressable
+            key={item.id}
+            style={({ pressed }) => [vd.row, pressed && { opacity: 0.7 }]}
+            onPress={() => openSermon(item)}
+            accessibilityRole="button"
+            accessibilityLabel={item.title}
+          >
+            <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={vd.rowThumb} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={vd.rowTitle} numberOfLines={3}>{item.title}</Text>
+              <Text style={vd.rowMeta} numberOfLines={1}>{item.date || item.sermonDate}</Text>
             </View>
           </Pressable>
         ))}
@@ -391,3 +338,42 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
     </Screen>
   );
 }
+
+function ActionChip({ icon, label, onPress, active }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [vd.chip, active && vd.chipActive, pressed && { opacity: 0.7 }]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Ionicons name={icon} size={16} color={active ? C.accent : C.white} />
+      <Text style={[vd.chipText, active && { color: C.accentText }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const vd = makeThemedStyles(C => ({
+  player: { width: "100%", backgroundColor: "#000" },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center", gap: 10 },
+  bigPlay: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.gold, alignItems: "center", justifyContent: "center" },
+  overlayText: { color: "#FFFFFF", fontSize: 13, fontFamily: C.fontMedium },
+  titleRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
+  title: { color: C.white, fontSize: 17, lineHeight: 23, fontFamily: C.fontBold },
+  meta: { color: C.muted, fontSize: 13, fontFamily: C.fontBody, marginTop: 5 },
+  chips: { gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
+  chip: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: C.surface2, borderRadius: 999, paddingHorizontal: 14, height: 38 },
+  chipActive: { backgroundColor: C.accentSoft },
+  chipText: { color: C.white, fontSize: 13, fontFamily: C.fontBold },
+  notice: { color: C.accentText, fontSize: 13, fontFamily: C.fontMedium, paddingHorizontal: 16, marginTop: 6 },
+  details: { marginHorizontal: 16, marginTop: 10, padding: 14, borderRadius: 14, backgroundColor: C.surface },
+  category: { color: C.gold, fontSize: 11.5, fontFamily: C.fontBold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 },
+  description: { color: C.white, fontSize: 14.5, lineHeight: 22, fontFamily: C.fontBody, opacity: 0.85 },
+  hint: { color: C.faint, fontSize: 12, fontFamily: C.fontBody, marginTop: 10 },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: C.lineStrong, marginTop: 14 },
+  upNext: { color: C.white, fontSize: 16, fontFamily: C.fontBold, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
+  row: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingVertical: 10 },
+  rowThumb: { width: 150, aspectRatio: 16 / 9, borderRadius: 10, backgroundColor: C.surface2 },
+  rowTitle: { color: C.white, fontSize: 14.5, lineHeight: 20, fontFamily: C.fontMedium },
+  rowMeta: { color: C.muted, fontSize: 12.5, fontFamily: C.fontBody, marginTop: 4 }
+}));

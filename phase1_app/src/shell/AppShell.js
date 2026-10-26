@@ -65,6 +65,9 @@ import { VideoDetail } from "../screens/VideoDetail";
 // don't occur in the real APK, so keep them from covering the UI in dev.
 LogBox.ignoreLogs(["expo-notifications", "Expo AV has been deprecated", "`expo-notifications` functionality"]);
 
+// Immersive screens (players, reading) hide the bottom bar, as Phaneroo does.
+const FULLSCREEN_SCREENS = new Set(["AudioPlayer", "VideoDetail", "DevotionDetail"]);
+
 const NOTIFICATION_SCREENS = new Set([
   "Home",
   "Sermons",
@@ -603,7 +606,7 @@ useEffect(() => {
       <StatusBar barStyle={appTheme === "light" ? "dark-content" : "light-content"} backgroundColor="transparent" translucent />
       {renderScreen()}
 
-      {miniPlayer && screen !== "AudioPlayer" ? (
+      {miniPlayer && !FULLSCREEN_SCREENS.has(screen) ? (
         <MiniPlayer
           item={miniPlayer}
           onOpen={() => go("AudioPlayer", miniPlayer)}
@@ -615,7 +618,9 @@ useEffect(() => {
         />
       ) : null}
 
-      <BottomNav current={screen} go={go} appLanguage={appLanguage} />
+      {FULLSCREEN_SCREENS.has(screen) ? null : (
+        <BottomNav current={screen} go={go} appLanguage={appLanguage} />
+      )}
       <Drawer visible={drawerOpen} close={() => setDrawerOpen(false)} go={go} appLanguage={appLanguage} />
     </View>
   </ContentProvider>
