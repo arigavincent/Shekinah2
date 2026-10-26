@@ -1,8 +1,10 @@
-import { Audio } from "expo-av";
+import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 
+import { AUDIO_COVER } from "../content";
 import {
   resolveMediaUrl,
-  sermonMediaUrl
+  sermonMediaUrl,
+  sermonThumbnail
 } from "../utils/mediaUrl";
 import {
   clearPlaybackProgress,
@@ -10,11 +12,18 @@ import {
   savePlaybackProgress
 } from "./playbackProgressStore";
 
-let activeSound = null;
+// One shared player for the whole app (mini player, full player, lists).
+// Built on expo-audio: keeps playing in the background and shows the
+// sermon on the lock screen / notification with play, pause and skip.
+
+let activePlayer = null;
+let activeSubscription = null;
 let activeMediaUrl = "";
 let activeSermon = null;
 let repeatEnabled = false;
 let lastPersistBucket = -1;
+let restoredForUrl = "";
+let audioModeReady = false;
 
 const listeners = new Set();
 
@@ -41,25 +50,39 @@ function setState(patch) {
   emit();
 }
 
+function lockScreenMetadata(sermon) {
+  return {
+    title: sermon?.code ? `${sermon.code} ${sermon.title || ""}`.trim() : sermon?.title || "Audio Sermon",
+    artist: sermon?.speaker || "Shekinah Sons Global",
+    albumTitle: "Shekinah Sons Global",
+    artworkUrl: sermonThumbnail(sermon, AUDIO_COVER)
+  };
+}
+
 function handlePlaybackStatus(status) {
-  if (!status.isLoaded) {
-    if (status.error) {
-      setState({ error: status.error });
-    }
+  if (!status?.isLoaded) {
     return;
   }
 
+  const positionMs = Math.round((status.currentTime || 0) * 1000);
+  const durationMs = Math.round((status.duration || 0) * 1000);
+
   setState({
     loaded: true,
-    loading: false,
-    playing: Boolean(status.isPlaying),
-    positionMs: status.positionMillis || 0,
-    durationMs: status.durationMillis || 0,
+    loading: Boolean(status.isBuffering && !status.playing),
+    playing: Boolean(status.playing),
+    positionMs,
+    durationMs,
     error: ""
   });
 
+  if (restoredForUrl !== activeMediaUrl) {
+    restoredForUrl = activeMediaUrl;
+    restoreSavedPosition(durationMs).catch(() => {});
+  }
+
   if (activeSermon) {
-    persistPlaybackStatus(status).catch(() => {});
+    persistPlaybackStatus(positionMs, durationMs).catch(() => {});
   }
 
   if (status.didJustFinish && !repeatEnabled) {
@@ -67,13 +90,10 @@ function handlePlaybackStatus(status) {
   }
 }
 
-async function persistPlaybackStatus(status, { force = false } = {}) {
-  if (!activeSermon?.id || !status?.isLoaded) {
+async function persistPlaybackStatus(positionMs, durationMs, { force = false } = {}) {
+  if (!activeSermon?.id) {
     return;
   }
-
-  const positionMs = Math.max(0, Number(status.positionMillis || 0));
-  const durationMs = Math.max(0, Number(status.durationMillis || 0));
 
   if (durationMs > 0 && positionMs >= durationMs * 0.98) {
     lastPersistBucket = -1;
@@ -104,48 +124,39 @@ async function persistPlaybackStatus(status, { force = false } = {}) {
   });
 }
 
-async function restoreSavedPosition(sound, sermon) {
-  if (!sound || !sermon?.id) {
+async function restoreSavedPosition(durationMs) {
+  if (!activePlayer || !activeSermon?.id) {
     return;
   }
 
-  const saved = await getPlaybackProgress(sermon.id);
+  const saved = await getPlaybackProgress(activeSermon.id);
   if (!saved?.positionMs) {
     lastPersistBucket = -1;
     return;
   }
 
-  const status = await sound.getStatusAsync();
-  if (!status.isLoaded) {
-    return;
-  }
+  const knownDuration = durationMs || Number(saved.durationMs || 0);
+  const maxPosition = knownDuration > 3000 ? knownDuration - 3000 : knownDuration;
+  const target = Math.min(Math.max(0, Number(saved.positionMs || 0)), maxPosition || Number(saved.positionMs || 0));
 
-  const durationMs = Math.max(0, Number(status.durationMillis || saved.durationMs || 0));
-  const maxPosition = durationMs > 3000 ? durationMs - 3000 : durationMs;
-  const targetPosition = Math.min(Math.max(0, Number(saved.positionMs || 0)), maxPosition || Number(saved.positionMs || 0));
-
-  if (targetPosition < 5000) {
+  if (target < 5000) {
     lastPersistBucket = -1;
     return;
   }
 
-  await sound.setPositionAsync(targetPosition);
-  lastPersistBucket = Math.floor(targetPosition / 30000);
-
-  setState({
-    positionMs: targetPosition,
-    durationMs: durationMs || state.durationMs
-  });
+  await activePlayer.seekTo(target / 1000);
+  lastPersistBucket = Math.floor(target / 30000);
+  setState({ positionMs: target });
 }
 
 async function configureAudio() {
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: false,
-    staysActiveInBackground: true,
-    playsInSilentModeIOS: true,
-    shouldDuckAndroid: true,
-    playThroughEarpieceAndroid: false
+  if (audioModeReady) return;
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    shouldPlayInBackground: true,
+    interruptionMode: "doNotMix"
   });
+  audioModeReady = true;
 }
 
 export function subscribeAudioPlayback(listener) {
@@ -162,10 +173,12 @@ export function getAudioPlaybackState() {
 }
 
 function resetAudioState() {
-  activeSound = null;
+  activePlayer = null;
+  activeSubscription = null;
   activeMediaUrl = "";
   activeSermon = null;
   lastPersistBucket = -1;
+  restoredForUrl = "";
 
   setState({
     sermon: null,
@@ -180,61 +193,46 @@ function resetAudioState() {
 }
 
 export async function unloadAudio() {
-  const sound = activeSound;
+  const player = activePlayer;
 
-  if (!sound) {
+  if (!player) {
     resetAudioState();
     return;
   }
 
   try {
-    sound.setOnPlaybackStatusUpdate(null);
-
-    const status = await sound.getStatusAsync().catch(() => null);
-
-    if (status?.isLoaded) {
-      await persistPlaybackStatus(status, { force: true }).catch(() => {});
-
-      if (status.isPlaying) {
-        await sound.pauseAsync().catch(() => {});
-      }
-
-      await sound.stopAsync().catch(() => {});
+    await persistPlaybackStatus(state.positionMs, state.durationMs, { force: true }).catch(() => {});
+    activeSubscription?.remove();
+    try {
+      player.pause();
+      player.clearLockScreenControls();
+    } catch {
+      // The player may already be released.
     }
-
-    await sound.unloadAsync().catch(() => {});
+    player.remove();
   } finally {
     resetAudioState();
-
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      staysActiveInBackground: false,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false
-    }).catch(() => {});
   }
 }
 
 export async function ensureAudio(sermon) {
-  const rawUrl = sermonMediaUrl(sermon);
-  const mediaUrl = resolveMediaUrl(rawUrl);
+  const mediaUrl = resolveMediaUrl(sermonMediaUrl(sermon));
 
   if (!mediaUrl) {
     throw new Error("No audio URL found.");
   }
 
-  if (activeSound && activeMediaUrl === mediaUrl) {
-    activeSound.setOnPlaybackStatusUpdate(handlePlaybackStatus);
-    return activeSound;
+  if (activePlayer && activeMediaUrl === mediaUrl) {
+    return activePlayer;
   }
 
-  if (activeSound && activeMediaUrl !== mediaUrl) {
+  if (activePlayer) {
     await unloadAudio();
   }
 
   activeSermon = sermon;
   activeMediaUrl = mediaUrl;
+  restoredForUrl = "";
 
   setState({
     sermon,
@@ -250,85 +248,67 @@ export async function ensureAudio(sermon) {
 
   await configureAudio();
 
-  const { sound } = await Audio.Sound.createAsync(
-    { uri: mediaUrl },
-    {
-      shouldPlay: false,
-      isLooping: repeatEnabled,
-      progressUpdateIntervalMillis: 500
-    },
-    handlePlaybackStatus
-  );
+  try {
+    const player = createAudioPlayer({ uri: mediaUrl }, { updateInterval: 500 });
+    player.loop = repeatEnabled;
+    activeSubscription = player.addListener("playbackStatusUpdate", handlePlaybackStatus);
+    activePlayer = player;
+    player.setActiveForLockScreen(true, lockScreenMetadata(sermon), {
+      showSeekForward: true,
+      showSeekBackward: true
+    });
+  } catch (error) {
+    setState({ loading: false, error: error?.message || "Could not load this audio." });
+    throw error;
+  }
 
-  activeSound = sound;
-
-  await restoreSavedPosition(sound, sermon).catch(() => {});
-
-  setState({
-    sermon: activeSermon,
-    mediaUrl: activeMediaUrl,
-    loaded: true,
-    loading: false
-  });
-
-  return sound;
+  return activePlayer;
 }
 
 export async function playAudio(sermon) {
-  const sound = await ensureAudio(sermon);
-  await sound.playAsync();
+  const player = await ensureAudio(sermon);
+  player.play();
 }
 
 export async function pauseAudio() {
-  if (!activeSound) return;
-  await activeSound.pauseAsync();
-  const status = await activeSound.getStatusAsync().catch(() => null);
-  if (status?.isLoaded) {
-    await persistPlaybackStatus(status, { force: true }).catch(() => {});
-  }
+  if (!activePlayer) return;
+  activePlayer.pause();
+  await persistPlaybackStatus(state.positionMs, state.durationMs, { force: true }).catch(() => {});
 }
 
 export async function toggleAudio(sermon) {
-  const sound = await ensureAudio(sermon);
-  const status = await sound.getStatusAsync();
+  const player = await ensureAudio(sermon);
 
-  if (status.isLoaded && status.isPlaying) {
-    await sound.pauseAsync();
-    const pausedStatus = await sound.getStatusAsync().catch(() => null);
-    if (pausedStatus?.isLoaded) {
-      await persistPlaybackStatus(pausedStatus, { force: true }).catch(() => {});
-    }
+  if (player.playing) {
+    player.pause();
+    await persistPlaybackStatus(state.positionMs, state.durationMs, { force: true }).catch(() => {});
     return;
   }
 
-  await sound.playAsync();
+  player.play();
 }
 
 export async function seekAudioBy(deltaMs) {
-  if (!activeSound) return;
+  if (!activePlayer) return;
 
-  const status = await activeSound.getStatusAsync();
-  if (!status.isLoaded) return;
+  const durationMs = state.durationMs || Math.round((activePlayer.duration || 0) * 1000);
+  const nextPosition = Math.max(0, Math.min(state.positionMs + deltaMs, durationMs || state.positionMs + deltaMs));
 
-  const nextPosition = Math.max(
-    0,
-    Math.min((status.positionMillis || 0) + deltaMs, status.durationMillis || 0)
-  );
-
-  await activeSound.setPositionAsync(nextPosition);
+  await activePlayer.seekTo(nextPosition / 1000);
+  setState({ positionMs: nextPosition });
 }
 
 export async function restartAudio(sermon) {
-  const sound = await ensureAudio(sermon);
-  await sound.setPositionAsync(0);
-  await sound.playAsync();
+  const player = await ensureAudio(sermon);
+  await player.seekTo(0);
+  player.play();
 }
 
 export async function setAudioRepeat(nextValue) {
   repeatEnabled = nextValue;
 
-  if (activeSound) {
-    await activeSound.setIsLoopingAsync(nextValue);
+  if (activePlayer) {
+    activePlayer.loop = nextValue;
   }
 
   setState({ repeatEnabled: nextValue });

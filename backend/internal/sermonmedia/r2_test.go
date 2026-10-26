@@ -36,7 +36,7 @@ func TestPresignVideoUpload(t *testing.T) {
 func TestPresignRejectsBadInput(t *testing.T) {
 	cases := []DirectUploadRequest{
 		{Kind: "video", FileName: "notes.pdf", SizeBytes: 10},
-		{Kind: "image", FileName: "a.jpg", SizeBytes: 10},
+		{Kind: "image", FileName: "a.gif", SizeBytes: 10},
 		{Kind: "audio", FileName: "a.mp3", SizeBytes: 0},
 		{Kind: "video", FileName: "a.mp4", SizeBytes: MaxDirectUploadBytes + 1},
 	}

@@ -61,9 +61,9 @@ import { TestimoniesScreen } from "../screens/TestimoniesScreen";
 import { UpdatesScreen } from "../screens/UpdatesScreen";
 import { VideoDetail } from "../screens/VideoDetail";
 
-// Known Expo Go limitations (remote push removed, expo-av deprecation). They
-// don't occur in the real APK, so keep them from covering the UI in dev.
-LogBox.ignoreLogs(["expo-notifications", "Expo AV has been deprecated", "`expo-notifications` functionality"]);
+// Expo Go no longer supports remote push; the real APK does. Keep the
+// warning from covering the UI during development.
+LogBox.ignoreLogs(["expo-notifications", "`expo-notifications` functionality"]);
 
 // Immersive screens (players, reading) hide the bottom bar, as Phaneroo does.
 const FULLSCREEN_SCREENS = new Set(["AudioPlayer", "VideoDetail", "DevotionDetail"]);

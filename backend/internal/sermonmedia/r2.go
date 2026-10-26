@@ -25,6 +25,7 @@ const MaxDirectUploadBytes int64 = 5 * 1024 * 1024 * 1024
 var directUploadTypes = map[string]map[string]string{
 	"video": {".mp4": "video/mp4", ".m4v": "video/x-m4v", ".mov": "video/quicktime", ".webm": "video/webm"},
 	"audio": {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac", ".wav": "audio/wav", ".ogg": "audio/ogg"},
+	"image": {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"},
 }
 
 // R2Presigner hands out short-lived PUT URLs so the admin dashboard sends
@@ -84,7 +85,7 @@ func (p R2Presigner) Presign(ctx context.Context, req DirectUploadRequest) (Dire
 	kind := strings.ToLower(strings.TrimSpace(req.Kind))
 	types, ok := directUploadTypes[kind]
 	if !ok {
-		return DirectUpload{}, fmt.Errorf("%w: kind must be video or audio", ErrInvalidUpload)
+		return DirectUpload{}, fmt.Errorf("%w: kind must be video, audio or image", ErrInvalidUpload)
 	}
 
 	ext := strings.ToLower(path.Ext(strings.TrimSpace(req.FileName)))
