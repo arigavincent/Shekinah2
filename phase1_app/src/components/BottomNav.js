@@ -12,8 +12,8 @@ import { useContent } from "../providers/ContentProvider";
 const TABS = [
   { key: "Home", icon: "home", match: [] },
   { key: "Sermons", icon: "play-circle", match: ["VideoDetail", "AudioPlayer"] },
-  { key: "Bible", icon: "book", match: [] },
-  { key: "Devotions", icon: "sunny", match: ["DevotionDetail"] },
+  { key: "Bible", icon: "bible", match: [] },
+  { key: "Devotions", icon: "book-open-text", match: ["DevotionDetail"] },
   { key: "Live", icon: "radio", match: [] }
 ];
 

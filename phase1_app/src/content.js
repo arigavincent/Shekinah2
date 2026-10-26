@@ -1,3 +1,8 @@
+import { Image } from "react-native";
+
+// Branded square artwork for audio sermons that have no image of their own.
+export const AUDIO_COVER = Image.resolveAssetSource(require("../assets/branding/audio-cover.jpg")).uri;
+
 export const PHASE1_IMAGES = {
   devotion: "https://images.unsplash.com/photo-1504052434569-70ad5836ab65?q=80&w=600",
   sermon: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?q=80&w=900",
@@ -141,6 +146,29 @@ export const YOUTUBE_SERMONS = [
   }
 ];
 
+// Offline sample audio so the audio layouts can be previewed without the
+// backend. The files are public test tracks, not real sermons.
+export const SAMPLE_AUDIO_SERMONS = [
+  ["S.14 Why Jesus Christ Came And Died", "June 1, 2026", 1],
+  ["S.13 Take Responsibility", "May 31, 2026", 2],
+  ["S.12 The Simplicity In Christ Jesus", "May 30, 2026", 3],
+  ["S.11 Two Days Of Light", "May 29, 2026", 4],
+  ["S.10 What You Are Made Of", "May 28, 2026", 5],
+  ["S.09 The Hope Of Our Calling", "May 27, 2026", 6]
+].map(([title, date, track]) => ({
+  id: `sample-audio-${track}`,
+  type: "audio",
+  title,
+  speaker: "Sir Joseph Mash",
+  date,
+  category: "Teachings",
+  live: false,
+  thumbnail: AUDIO_COVER,
+  duration: "",
+  mediaUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${track}.mp3`,
+  description: "Sample audio track for previewing the app offline."
+}));
+
 export const YOUTUBE_CLIPS = [
   {
     id: "clip-zXKCTnNFgwU",
@@ -270,7 +298,7 @@ export const DATA = {
     }
   ],
 
-  sermons: YOUTUBE_SERMONS,
+  sermons: [...YOUTUBE_SERMONS, ...SAMPLE_AUDIO_SERMONS],
 
   categories: [
     {

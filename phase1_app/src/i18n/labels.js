@@ -1,4 +1,8 @@
 const SWAHILI_LABELS = {
+  Recaps: "Muhtasari",
+  "Search recaps...": "Tafuta muhtasari...",
+  "No recaps found": "Hakuna muhtasari",
+  "Service recaps will appear here.": "Muhtasari wa ibada utaonekana hapa.",
   "TODAY'S VERSE": "MSTARI WA LEO",
   "GOLDEN NUGGET": "HAZINA YA DHAHABU",
   "FURTHER STUDY": "SOMO ZAIDI",

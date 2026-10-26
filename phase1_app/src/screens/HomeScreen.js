@@ -14,7 +14,7 @@ import { StyleSheet } from "react-native";
 import { Ionicons } from "../components/Icon";
 
 import { useContent } from "../providers/ContentProvider";
-import { PHASE1_IMAGES } from "../content";
+import { AUDIO_COVER, PHASE1_IMAGES } from "../content";
 import { C, makeThemedStyles } from "../constants/theme";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
@@ -287,7 +287,7 @@ function SquareTile({ item, width, onPress, progressEntry, downloadEntry, appLan
       accessibilityLabel={item.title}
     >
       <View>
-        <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={[home.squareArt, { width, height: width }]} />
+        <Image source={{ uri: sermonThumbnail(item, item.type === "audio" ? AUDIO_COVER : PHASE1_IMAGES.sermon) }} style={[home.squareArt, { width, height: width }]} />
         {badge ? (
           <View style={home.squareBadge}>
             <Ionicons name={badge} size={14} color={C.textOnAccent} />
@@ -460,7 +460,7 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
             <Rail itemWidth={squareWidth}>
               {continuingSermons.map(item =>
                 item.type === "audio" ? (
-                  <SquareTile key={item.id} width={squareWidth} badge="musical-notes" {...tileProps(item)} />
+                  <SquareTile key={item.id} width={squareWidth} {...tileProps(item)} />
                 ) : (
                   <VideoTile key={item.id} width={videoWidth} {...tileProps(item)} />
                 )
@@ -485,7 +485,7 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
             <SectionHeader title="Latest Audio Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
             <Rail itemWidth={squareWidth}>
               {audio.slice(0, 10).map(item => (
-                <SquareTile key={item.id} width={squareWidth} badge="musical-notes" {...tileProps(item)} />
+                <SquareTile key={item.id} width={squareWidth} {...tileProps(item)} />
               ))}
             </Rail>
           </>
@@ -493,7 +493,7 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
 
         {playableClips.length > 0 ? (
           <>
-            <SectionHeader title="Short Clips" onPress={() => go("Sermons")} appLanguage={appLanguage} />
+            <SectionHeader title="Recaps" onPress={() => go("Sermons")} appLanguage={appLanguage} />
             <Rail itemWidth={clipWidth}>
               {playableClips.slice(0, 10).map(item => (
                 <VideoTile key={item.id} width={clipWidth} {...tileProps(item)} />

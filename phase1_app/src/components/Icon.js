@@ -10,6 +10,8 @@ import { ArrowsDownUpIcon } from "phosphor-react-native/src/icons/ArrowsDownUp";
 import { ArticleIcon } from "phosphor-react-native/src/icons/Article";
 import { BellIcon } from "phosphor-react-native/src/icons/Bell";
 import { BookOpenIcon } from "phosphor-react-native/src/icons/BookOpen";
+import { BookOpenTextIcon } from "phosphor-react-native/src/icons/BookOpenText";
+import { BookBookmarkIcon } from "phosphor-react-native/src/icons/BookBookmark";
 import { BookmarkSimpleIcon } from "phosphor-react-native/src/icons/BookmarkSimple";
 import { BooksIcon } from "phosphor-react-native/src/icons/Books";
 import { BroadcastIcon } from "phosphor-react-native/src/icons/Broadcast";
@@ -87,6 +89,8 @@ const MAP = {
   "arrow-back": ArrowLeftIcon,
   "arrow-forward": ArrowRightIcon,
   book: BookOpenIcon,
+  bible: BookBookmarkIcon,
+  "book-open-text": BookOpenTextIcon,
   bookmark: BookmarkSimpleIcon,
   cafe: CoffeeIcon,
   calendar: CalendarBlankIcon,

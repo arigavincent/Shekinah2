@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "../components/Icon";
 import { useContent } from "../providers/ContentProvider";
 
-import { PHASE1_IMAGES } from "../content";
+import { AUDIO_COVER, PHASE1_IMAGES } from "../content";
 import { C, makeThemedStyles } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
@@ -127,7 +127,7 @@ function playableClipFromContent(item) {
   };
 }
 
-const SERMON_TABS = ["Video", "Audio", "Categories", "Clips"];
+const SERMON_TABS = ["Video", "Audio", "Categories", "Recaps"];
 
 function RowProgress({ progressEntry, downloadEntry, missingAudioFile, appLanguage }) {
   const showContinue = hasContinueProgress(progressEntry);
@@ -195,7 +195,7 @@ function AudioRow({ item, openSermon, progressEntry, downloadEntry, appLanguage 
       accessibilityRole="button"
       accessibilityLabel={`Audio sermon, ${item.title}`}
     >
-      <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={st.audioThumb} />
+      <Image source={{ uri: sermonThumbnail(item, AUDIO_COVER) }} style={st.audioThumb} />
 
       <View style={st.rowBody}>
         <Text style={st.rowTitle} numberOfLines={2}>{item.title}</Text>
@@ -291,7 +291,7 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab, appLang
       ? videos
       : activeTab === "Audio"
         ? audio
-        : activeTab === "Clips"
+        : activeTab === "Recaps"
           ? clips
           : selectedCategory
             ? selectedCategoryItems
@@ -329,8 +329,8 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab, appLang
       ? tr(appLanguage, "Search categories...")
       : activeTab === "Audio"
         ? tr(appLanguage, "Search all sermons...")
-        : activeTab === "Clips"
-          ? tr(appLanguage, "Search clips...")
+        : activeTab === "Recaps"
+          ? tr(appLanguage, "Search recaps...")
           : tr(appLanguage, "Search videos...");
 
   return (
@@ -434,9 +434,9 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab, appLang
               visible.map(renderRow)
             )}
           </>
-        ) : activeTab === "Clips" ? (
+        ) : activeTab === "Recaps" ? (
           visible.length === 0 ? (
-            <EmptyMessage icon="videocam-outline" title={tr(appLanguage, "No clips found")} text={tr(appLanguage, "Playable clips will appear here.")} />
+            <EmptyMessage icon="videocam-outline" title={tr(appLanguage, "No recaps found")} text={tr(appLanguage, "Service recaps will appear here.")} />
           ) : (
             <View style={st.grid}>
               {visible.map(item => (
