@@ -49,6 +49,7 @@ type Devotion struct {
 type Sermon struct {
 	ID          string `json:"id"`
 	Type        string `json:"type"`
+	Code        string `json:"code,omitempty"`
 	Title       string `json:"title"`
 	Speaker     string `json:"speaker"`
 	Date        string `json:"date"`
@@ -58,6 +59,8 @@ type Sermon struct {
 	Duration    string `json:"duration,omitempty"`
 	Description string `json:"description"`
 	MediaURL    string `json:"mediaUrl,omitempty"`
+	Source      string `json:"source,omitempty"`
+	StreamUID   string `json:"streamUid,omitempty"`
 }
 
 type Category struct {

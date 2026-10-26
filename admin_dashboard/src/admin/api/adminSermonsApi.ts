@@ -1,10 +1,14 @@
 import { apiRequest } from "./client";
 import { getToken } from "../auth/session";
 
+export type SermonSource = "manual" | "cloudflare_stream" | "live_recording" | "podcast";
+export type SermonStatus = "processing" | "ready" | "error";
+
 export type Sermon = {
   id: string;
   externalId: string;
   type: "video" | "audio";
+  code: string;
   title: string;
   speaker: string;
   sermonDate: string;
@@ -16,6 +20,9 @@ export type Sermon = {
   duration: string;
   description: string;
   mediaUrl: string;
+  source: SermonSource;
+  streamUid: string;
+  status: SermonStatus;
   createdAt: string;
   updatedAt: string;
 };
@@ -23,6 +30,7 @@ export type Sermon = {
 export type SermonPayload = {
   externalId?: string;
   type: "video" | "audio";
+  code: string;
   title: string;
   speaker: string;
   sermonDate: string;
@@ -83,6 +91,58 @@ export function updateSermon(id: string, payload: Partial<SermonPayload>) {
     method: "PATCH",
     token: adminToken(),
     body: payload
+  });
+}
+
+export type StreamUploadRequest = {
+  sizeBytes: number;
+  fileName: string;
+  code: string;
+  title: string;
+  speaker: string;
+  sermonDate: string;
+  publishedAt: string;
+  categoryId: string;
+  description: string;
+};
+
+// Reserves a Cloudflare Stream upload and creates the sermon as "processing".
+export function startStreamUpload(payload: StreamUploadRequest) {
+  return apiRequest<{ uploadUrl: string; sermon: Sermon }>("/api/v1/admin/sermons/stream-upload", {
+    method: "POST",
+    token: adminToken(),
+    body: payload
+  });
+}
+
+export type SermonSyncReport = {
+  ready: number;
+  failed: number;
+  stillProcessing: number;
+  recordingsAdded: number;
+  podcastAdded: number;
+  podcastUpdated: number;
+  errors?: string[];
+};
+
+export function syncSermonMedia() {
+  return apiRequest<{ report: SermonSyncReport }>("/api/v1/admin/sermons/sync", {
+    method: "POST",
+    token: adminToken()
+  });
+}
+
+export function getPodcastSettings() {
+  return apiRequest<{ feedUrl: string }>("/api/v1/admin/settings/podcast", {
+    token: adminToken()
+  });
+}
+
+export function updatePodcastSettings(feedUrl: string) {
+  return apiRequest<{ feedUrl: string; episodes: number }>("/api/v1/admin/settings/podcast", {
+    method: "PATCH",
+    token: adminToken(),
+    body: { feedUrl }
   });
 }
 

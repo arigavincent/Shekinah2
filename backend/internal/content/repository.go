@@ -138,10 +138,14 @@ func (r Repository) Sermons(ctx context.Context) ([]Sermon, error) {
 			s.thumbnail_url,
 			s.duration,
 			s.description,
-			s.media_url
+			s.media_url,
+			s.code,
+			s.source,
+			s.stream_uid
 		FROM sermons s
 		LEFT JOIN sermon_categories c ON c.id = s.category_id
 		WHERE s.published_at <= NOW()
+			AND s.status = 'ready'
 		ORDER BY s.sermon_date DESC
 	`
 
@@ -168,6 +172,9 @@ func (r Repository) Sermons(ctx context.Context) ([]Sermon, error) {
 			&item.Duration,
 			&item.Description,
 			&item.MediaURL,
+			&item.Code,
+			&item.Source,
+			&item.StreamUID,
 		); err != nil {
 			return nil, fmt.Errorf("scan sermon: %w", err)
 		}

@@ -37,7 +37,7 @@ func Load() Config {
 		CloudflareAccountID:                      getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
 		CloudflareStreamAPIToken:                 getEnv("CLOUDFLARE_STREAM_API_TOKEN", ""),
 		CloudflareStreamRecordingMode:            getEnv("CLOUDFLARE_STREAM_RECORDING_MODE", "automatic"),
-		CloudflareStreamDeleteRecordingAfterDays: getEnvInt("CLOUDFLARE_STREAM_DELETE_RECORDING_AFTER_DAYS", 45),
+		CloudflareStreamDeleteRecordingAfterDays: getEnvInt("CLOUDFLARE_STREAM_DELETE_RECORDING_AFTER_DAYS", 0),
 		AllowedOrigins: splitCSV(getEnv(
 			"ALLOWED_ORIGINS",
 			"http://localhost:5173,http://127.0.0.1:5173",

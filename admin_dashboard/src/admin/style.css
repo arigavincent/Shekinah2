@@ -2599,3 +2599,50 @@ header.page-header button svg { margin-right: 0.35rem; vertical-align: -2px; }
 .browser-live-actions button {
   flex: 1 1 150px;
 }
+
+/* Sermon media: podcast feed, Cloudflare upload progress, sermon codes */
+.podcast-card {
+  margin-bottom: 20px;
+}
+
+.podcast-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.podcast-row input {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.upload-progress {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  padding: 10px 12px;
+}
+
+.upload-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(212, 175, 55, 0.22);
+  transition: width 0.3s ease;
+}
+
+.upload-progress span {
+  position: relative;
+  font-size: 0.9rem;
+}
+
+.sermon-code {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: rgba(212, 175, 55, 0.16);
+  color: #d4af37;
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+}

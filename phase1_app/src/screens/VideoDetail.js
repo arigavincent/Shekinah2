@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -12,9 +12,7 @@ import {
   View
 } from "react-native";
 import { Ionicons } from "../components/Icon";
-import { ResizeMode, Video } from "expo-av";
-import YoutubePlayer from "react-native-youtube-iframe";
-import * as ScreenOrientation from "expo-screen-orientation";
+import { SermonVideoPlayer } from "../components/SermonVideoPlayer";
 import * as FileSystem from "expo-file-system/legacy";
 
 import { PHASE1_IMAGES } from "../content";
@@ -58,27 +56,9 @@ function youtubeWatchUrl(videoId) {
   return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
-async function lockLandscape() {
-  try {
-    await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-  } catch (error) {
-    console.warn("Failed to lock landscape", error);
-  }
-}
-
-async function lockPortrait() {
-  try {
-    await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-  } catch (error) {
-    console.warn("Failed to lock portrait", error);
-  }
-}
-
 export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLanguage = "en" }) {
   const { data } = useContent();
   const { width } = useWindowDimensions();
-  const videoRef = useRef(null);
-  const [youtubePlaying, setYoutubePlaying] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [downloadedUri, setDownloadedUri] = useState("");
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -94,17 +74,10 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
   const hasYouTubeVideo = Boolean(videoId);
   const hasDirectVideo = Boolean(rawUrl && !hasYouTubeVideo && isVideoUrl(rawUrl));
   const hasAudio = Boolean(rawUrl && isAudioUrl(rawUrl));
+  // Streams (HLS) play adaptively online; only single-file videos can be saved offline.
+  const canDownload = hasDirectVideo && !/\.m3u8(\?|$)/i.test(resolvedUrl);
 
   const thumbnail = sermonThumbnail(sermon, PHASE1_IMAGES.sermon);
-
-  const onFullScreenChange = useCallback(async isFullScreen => {
-    if (isFullScreen) {
-      await lockLandscape();
-      return;
-    }
-
-    await lockPortrait();
-  }, []);
 
   function openYoutubeExternal() {
     if (!videoId) return;
@@ -234,42 +207,27 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
       <TopBar title={sermon?.title || (hasAudio ? "Audio Sermon" : "Video Sermon")} go={go} back="Sermons" appLanguage={appLanguage} />
 
       <View style={[vd.player, { height: playerHeight }]}>
-        {hasYouTubeVideo ? (
-          <YoutubePlayer
+        {hasDirectVideo ? (
+          <SermonVideoPlayer
+            sermon={sermon}
+            source={downloadedUri || resolvedUrl}
+            poster={thumbnail}
             height={playerHeight}
-            width={width}
-            play={youtubePlaying}
-            videoId={videoId}
-            onChangeState={state => {
-              if (state === "ended") setYoutubePlaying(false);
-            }}
-            onFullScreenChange={onFullScreenChange}
-            initialPlayerParams={{ modestbranding: true, rel: false }}
-            webViewProps={{ allowsFullscreenVideo: true, mediaPlaybackRequiresUserAction: false }}
-          />
-        ) : hasDirectVideo ? (
-          <Video
-            ref={videoRef}
-            source={{ uri: downloadedUri || resolvedUrl }}
-            style={StyleSheet.absoluteFill}
-            resizeMode={ResizeMode.CONTAIN}
-            useNativeControls
-            shouldPlay
-            onFullscreenUpdate={async event => {
-              const update = event.fullscreenUpdate;
-              // 1 = player did present fullscreen, 3 = player did dismiss fullscreen
-              if (update === 1) await lockLandscape();
-              if (update === 3) await lockPortrait();
-            }}
           />
         ) : (
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => hasAudio && go("AudioPlayer", sermon)} accessibilityRole="button">
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => (hasAudio ? go("AudioPlayer", sermon) : hasYouTubeVideo ? openYoutubeExternal() : null)}
+            accessibilityRole="button"
+          >
             <Image source={{ uri: thumbnail }} style={StyleSheet.absoluteFill} />
             <View style={vd.overlay}>
               <View style={vd.bigPlay}>
-                <Ionicons name={hasAudio ? "musical-notes" : "play"} size={28} color={C.textOnAccent} />
+                <Ionicons name={hasAudio ? "musical-notes" : hasYouTubeVideo ? "logo-youtube" : "play"} size={28} color={C.textOnAccent} />
               </View>
-              {!hasAudio ? <Text style={vd.overlayText}>No playable media yet</Text> : null}
+              <Text style={vd.overlayText}>
+                {hasAudio ? "Listen to this sermon" : hasYouTubeVideo ? "Open in YouTube" : "No playable media yet"}
+              </Text>
             </View>
           </Pressable>
         )}
@@ -292,7 +250,7 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={vd.chips}>
           <ActionChip icon="share-social-outline" label="Share" onPress={() => Share.share({ message: `${sermon?.title}${videoId ? `\n${youtubeWatchUrl(videoId)}` : ""}` })} />
-          {hasDirectVideo ? (
+          {canDownload ? (
             <ActionChip
               icon={downloadedUri ? "checkmark-circle" : "download-outline"}
               label={downloadedUri ? "Downloaded" : downloadProgress > 0 && downloadProgress < 100 ? `${downloadProgress}%` : "Download"}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"github.com/ariga/shekinah-backend/internal/admin"
 	adminbranches "github.com/ariga/shekinah-backend/internal/admin/branches"
 	admindevotions "github.com/ariga/shekinah-backend/internal/admin/devotions"
@@ -27,12 +28,26 @@ import (
 	"github.com/ariga/shekinah-backend/internal/prayers"
 	"github.com/ariga/shekinah-backend/internal/privatechat"
 	"github.com/ariga/shekinah-backend/internal/readingplans"
+	"github.com/ariga/shekinah-backend/internal/sermonmedia"
 	"github.com/ariga/shekinah-backend/internal/serve"
 	"github.com/ariga/shekinah-backend/internal/settings"
 	"github.com/ariga/shekinah-backend/internal/testimonies"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"time"
 )
+
+// StartBackground runs scheduled jobs until ctx is cancelled.
+func StartBackground(ctx context.Context, cfg config.Config, db *pgxpool.Pool) {
+	repository := adminsermons.NewRepository(db)
+	media := sermonmedia.NewService(
+		sermonmedia.NewStreamClient(cfg.CloudflareAccountID, cfg.CloudflareStreamAPIToken),
+		adminsermons.NewService(repository),
+		repository,
+		db,
+	)
+	go media.Run(ctx, 2*time.Minute)
+}
 
 func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	if cfg.AppEnv == "production" {
@@ -62,6 +77,13 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	adminSermonRepository := adminsermons.NewRepository(db)
 	adminSermonService := adminsermons.NewService(adminSermonRepository)
 	adminSermonHandler := adminsermons.NewHandler(adminSermonService)
+	sermonMediaService := sermonmedia.NewService(
+		sermonmedia.NewStreamClient(cfg.CloudflareAccountID, cfg.CloudflareStreamAPIToken),
+		adminSermonService,
+		adminSermonRepository,
+		db,
+	)
+	sermonMediaHandler := sermonmedia.NewHandler(sermonMediaService)
 
 	adminEventRepository := adminevents.NewRepository(db)
 	adminEventService := adminevents.NewService(adminEventRepository)
@@ -180,6 +202,10 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.POST("/sermons", adminSermonHandler.Create)
 			adminGroup.POST("/sermons/import/preview", adminSermonHandler.PreviewImport)
 			adminGroup.POST("/sermons/import", adminSermonHandler.Import)
+			adminGroup.POST("/sermons/stream-upload", sermonMediaHandler.StartStreamUpload)
+			adminGroup.POST("/sermons/sync", sermonMediaHandler.SyncNow)
+			adminGroup.GET("/settings/podcast", sermonMediaHandler.GetPodcastSettings)
+			adminGroup.PATCH("/settings/podcast", sermonMediaHandler.UpdatePodcastSettings)
 			adminGroup.PATCH("/sermons/:id", adminSermonHandler.Update)
 			adminGroup.DELETE("/sermons/:id", adminSermonHandler.Delete)
 

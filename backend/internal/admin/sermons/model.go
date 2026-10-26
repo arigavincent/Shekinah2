@@ -6,6 +6,7 @@ type Sermon struct {
 	ID           string    `json:"id"`
 	ExternalID   string    `json:"externalId"`
 	Type         string    `json:"type"`
+	Code         string    `json:"code"`
 	Title        string    `json:"title"`
 	Speaker      string    `json:"speaker"`
 	SermonDate   string    `json:"sermonDate"`
@@ -17,6 +18,9 @@ type Sermon struct {
 	Duration     string    `json:"duration"`
 	Description  string    `json:"description"`
 	MediaURL     string    `json:"mediaUrl"`
+	Source       string    `json:"source"`
+	StreamUID    string    `json:"streamUid"`
+	Status       string    `json:"status"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
@@ -25,6 +29,7 @@ type CreateRequest struct {
 	ID           string `json:"id"`
 	ExternalID   string `json:"externalId"`
 	Type         string `json:"type"`
+	Code         string `json:"code"`
 	Title        string `json:"title"`
 	Speaker      string `json:"speaker"`
 	SermonDate   string `json:"sermonDate"`
@@ -35,11 +40,15 @@ type CreateRequest struct {
 	Duration     string `json:"duration"`
 	Description  string `json:"description"`
 	MediaURL     string `json:"mediaUrl"`
+	Source       string `json:"source"`
+	StreamUID    string `json:"streamUid"`
+	Status       string `json:"status"`
 }
 
 type UpdateRequest struct {
 	ExternalID   *string `json:"externalId"`
 	Type         *string `json:"type"`
+	Code         *string `json:"code"`
 	Title        *string `json:"title"`
 	Speaker      *string `json:"speaker"`
 	SermonDate   *string `json:"sermonDate"`
@@ -50,6 +59,9 @@ type UpdateRequest struct {
 	Duration     *string `json:"duration"`
 	Description  *string `json:"description"`
 	MediaURL     *string `json:"mediaUrl"`
+	Source       *string `json:"source"`
+	StreamUID    *string `json:"streamUid"`
+	Status       *string `json:"status"`
 }
 
 type ImportRequest struct {
@@ -90,6 +102,7 @@ type Command struct {
 	ID           string
 	ExternalID   string
 	Type         string
+	Code         string
 	Title        string
 	Speaker      string
 	SermonDate   time.Time
@@ -100,4 +113,7 @@ type Command struct {
 	Duration     string
 	Description  string
 	MediaURL     string
+	Source       string
+	StreamUID    string
+	Status       string
 }

@@ -30,9 +30,14 @@ func NewCloudflareStreamClient(cfg config.Config) CloudflareStreamClient {
 		mode = "automatic"
 	}
 
+	// Recordings become the sermon archive, so they are kept unless a
+	// retention period is explicitly configured (Cloudflare's minimum is 30).
 	days := cfg.CloudflareStreamDeleteRecordingAfterDays
-	if days < 30 {
-		days = 45
+	if days > 0 && days < 30 {
+		days = 30
+	}
+	if days < 0 {
+		days = 0
 	}
 
 	return CloudflareStreamClient{
@@ -51,7 +56,7 @@ func (c CloudflareStreamClient) configured() bool {
 type cloudflareCreateLiveInputRequest struct {
 	Meta                     map[string]string `json:"meta"`
 	Recording                map[string]any    `json:"recording"`
-	DeleteRecordingAfterDays int               `json:"deleteRecordingAfterDays"`
+	DeleteRecordingAfterDays int               `json:"deleteRecordingAfterDays,omitempty"`
 	Enabled                  bool              `json:"enabled"`
 }
 

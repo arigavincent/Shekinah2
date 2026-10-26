@@ -1,15 +1,21 @@
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
+import { Upload } from "tus-js-client";
+
 import {
   createSermon,
   deleteSermon,
+  getPodcastSettings,
   importSermons,
   listSermons,
   previewSermonImport,
+  startStreamUpload,
+  syncSermonMedia,
   type SermonImportPreview,
   type Sermon,
   type SermonPayload,
+  updatePodcastSettings,
   updateSermon
 } from "../api/adminSermonsApi";
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
@@ -30,20 +36,41 @@ const categories = [
   { id: "cat-4", name: "Revival" }
 ];
 
-const emptyForm: SermonPayload = {
-  externalId: "",
-  type: "video",
-  title: "",
-  speaker: "Shekinah Sons Global",
-  sermonDate: "2026-06-10",
-  publishedAt: "2026-06-10T06:00",
-  categoryId: "cat-1",
-  isLive: false,
-  thumbnailUrl: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?q=80&w=900",
-  duration: "",
-  description: "",
-  mediaUrl: ""
+function todayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Thumbnail is left empty on purpose: video sermons get Cloudflare's frame
+// and audio sermons get the app's branded template built from the code.
+function makeEmptyForm(): SermonPayload {
+  return {
+    externalId: "",
+    type: "video",
+    code: "",
+    title: "",
+    speaker: "Shekinah Sons Global",
+    sermonDate: todayDate(),
+    publishedAt: publishNowValue(),
+    categoryId: "cat-1",
+    isLive: false,
+    thumbnailUrl: "",
+    duration: "",
+    description: "",
+    mediaUrl: ""
+  };
+}
+
+const emptyForm: SermonPayload = makeEmptyForm();
+
+const SOURCE_LABELS: Record<string, string> = {
+  manual: "Manual",
+  cloudflare_stream: "Cloudflare upload",
+  live_recording: "Live recording",
+  podcast: "Podcast feed"
 };
+
+// Cloudflare needs tus chunks of at least 5 MB in multiples of 256 KiB.
+const STREAM_CHUNK_BYTES = 50 * 1024 * 1024;
 
 function publishTimeZoneLabel() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || PUBLISH_TIME_ZONE;
@@ -106,6 +133,11 @@ export function SermonsPage() {
   const [wizardPreview, setWizardPreview] = useState<SermonImportPreview | null>(null);
   const [error, setError] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
+  const [streamProgress, setStreamProgress] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [podcastUrl, setPodcastUrl] = useState("");
+  const [podcastSaving, setPodcastSaving] = useState(false);
+  const [podcastNote, setPodcastNote] = useState("");
   const sermonItems = Array.isArray(sermons) ? sermons : [];
 
   const filtered = useMemo(() => {
@@ -445,7 +477,110 @@ export function SermonsPage() {
 
   function resetForm() {
     setEditingId(null);
-    setForm({ ...emptyForm });
+    setForm(makeEmptyForm());
+  }
+
+  useEffect(() => {
+    getPodcastSettings()
+      .then(result => setPodcastUrl(result.feedUrl || ""))
+      .catch(() => {});
+  }, []);
+
+  async function savePodcastFeed(event: FormEvent) {
+    event.preventDefault();
+    setPodcastSaving(true);
+    setPodcastNote("");
+    setError("");
+    try {
+      const result = await updatePodcastSettings(podcastUrl.trim());
+      setPodcastNote(
+        result.feedUrl
+          ? `Feed connected: ${result.episodes} episode${result.episodes === 1 ? "" : "s"} found. New episodes sync every few minutes.`
+          : "Podcast sync is off."
+      );
+      if (result.feedUrl) await runSync();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save the podcast feed");
+    } finally {
+      setPodcastSaving(false);
+    }
+  }
+
+  async function runSync() {
+    setSyncing(true);
+    try {
+      const { report } = await syncSermonMedia();
+      await load();
+      const changes = [
+        report.ready ? `${report.ready} upload${report.ready === 1 ? "" : "s"} ready` : "",
+        report.recordingsAdded ? `${report.recordingsAdded} live recording${report.recordingsAdded === 1 ? "" : "s"} added` : "",
+        report.podcastAdded ? `${report.podcastAdded} podcast episode${report.podcastAdded === 1 ? "" : "s"} added` : "",
+        report.stillProcessing ? `${report.stillProcessing} still processing` : ""
+      ].filter(Boolean);
+      showToast({
+        title: "Media synced",
+        message: changes.length ? changes.join(" · ") : "Everything is up to date.",
+        tone: report.errors?.length ? "info" : "success"
+      });
+      if (report.errors?.length) setError(report.errors.join(" · "));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  // Creates the sermon, then sends the file straight to Cloudflare Stream
+  // with a resumable upload. Cloudflare encodes it; sync marks it ready.
+  async function uploadToCloudflare(file: File | null) {
+    if (!file) return;
+
+    if (!form.title.trim() || !form.speaker.trim() || !form.description.trim() || !isValidDateString(form.sermonDate)) {
+      setError("Fill in the title, speaker, date and description before choosing the video file.");
+      return;
+    }
+
+    setError("");
+    setStreamProgress(0);
+
+    try {
+      const { uploadUrl, sermon } = await startStreamUpload({
+        sizeBytes: file.size,
+        fileName: file.name,
+        code: form.code,
+        title: form.title,
+        speaker: form.speaker,
+        sermonDate: form.sermonDate,
+        publishedAt: form.publishedAt,
+        categoryId: form.categoryId,
+        description: form.description
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        const upload = new Upload(file, {
+          uploadUrl,
+          chunkSize: STREAM_CHUNK_BYTES,
+          retryDelays: [0, 3000, 10000, 30000],
+          metadata: { name: sermon.title, filetype: file.type },
+          onProgress: (sent, total) => setStreamProgress(total ? Math.round((sent / total) * 100) : 0),
+          onError: reject,
+          onSuccess: () => resolve()
+        });
+        upload.start();
+      });
+
+      resetForm();
+      await load();
+      showToast({
+        title: "Video uploaded",
+        message: `${sermon.title} is uploaded. Cloudflare is preparing it; it appears in the app when ready.`,
+        tone: "success"
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Video upload failed");
+    } finally {
+      setStreamProgress(null);
+    }
   }
 
   function startEdit(sermon: Sermon) {
@@ -453,6 +588,7 @@ export function SermonsPage() {
     setForm({
       type: sermon.type,
       externalId: sermon.externalId || "",
+      code: sermon.code || "",
       title: sermon.title,
       speaker: sermon.speaker,
       sermonDate: sermon.sermonDate,
@@ -671,6 +807,9 @@ export function SermonsPage() {
         </div>
 
         <div className="row-actions">
+          <button type="button" className="secondary" onClick={runSync} disabled={syncing}>
+            {syncing ? "Syncing..." : "Sync media now"}
+          </button>
           <button type="button" onClick={() => setBatchOpen(true)}>
             Batch Upload
           </button>
@@ -681,6 +820,30 @@ export function SermonsPage() {
       </header>
 
       {error ? <InlineAlert title="Sermons could not be updated" message={error} /> : null}
+
+      <form className="editor-card podcast-card" onSubmit={savePodcastFeed}>
+        <div className="section-title-row">
+          <div>
+            <h2>Audio sermons from your podcast</h2>
+            <p className="small-muted">
+              Paste the show's RSS feed (Spotify for Creators: Settings → Availability → RSS feed). Episodes are added as
+              audio sermons automatically and play in the app's own player.
+            </p>
+          </div>
+        </div>
+        <div className="podcast-row">
+          <input
+            value={podcastUrl}
+            onChange={event => setPodcastUrl(event.target.value)}
+            placeholder="https://anchor.fm/s/xxxxxxx/podcast/rss"
+            inputMode="url"
+          />
+          <button type="submit" disabled={podcastSaving}>
+            {podcastSaving ? "Checking feed..." : "Save feed"}
+          </button>
+        </div>
+        {podcastNote ? <p className="small-muted">{podcastNote}</p> : null}
+      </form>
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>
@@ -730,14 +893,27 @@ export function SermonsPage() {
             />
           </label>
 
-          <label>
-            Title
-            <input
-              value={form.title}
-              onChange={event => updateField("title", event.target.value)}
-              placeholder="Sermon title"
-            />
-          </label>
+          <div className="two-col code-title-row">
+            <label>
+              Sermon code
+              <input
+                value={form.code}
+                onChange={event => updateField("code", event.target.value)}
+                placeholder="S.14"
+                maxLength={12}
+              />
+              <span className="small-muted">Printed on the artwork, e.g. S.14 or P.582.</span>
+            </label>
+
+            <label>
+              Title
+              <input
+                value={form.title}
+                onChange={event => updateField("title", event.target.value)}
+                placeholder="Sermon title"
+              />
+            </label>
+          </div>
 
           <div className="two-col">
             <label>
@@ -844,16 +1020,21 @@ export function SermonsPage() {
 
           <div className="two-col">
             <label>
-              Upload Video
+              Upload video to Cloudflare
               <input
                 type="file"
-                accept="video/mp4,video/webm,video/quicktime"
-                disabled={Boolean(uploading)}
+                accept="video/mp4,video/webm,video/quicktime,video/x-matroska"
+                disabled={Boolean(uploading) || streamProgress !== null || Boolean(editingId)}
                 onChange={async event => {
-                  await uploadFile("video", event.target.files?.[0] || null);
+                  await uploadToCloudflare(event.target.files?.[0] || null);
                   event.target.value = "";
                 }}
               />
+              <span className="small-muted">
+                {editingId
+                  ? "To replace a video, create a new sermon."
+                  : "Creates the sermon and streams it in the app once Cloudflare finishes processing."}
+              </span>
             </label>
 
             <label>
@@ -872,6 +1053,13 @@ export function SermonsPage() {
 
           {uploading ? (
             <p className="muted">Uploading {uploading}...</p>
+          ) : null}
+
+          {streamProgress !== null ? (
+            <div className="upload-progress" role="progressbar" aria-valuenow={streamProgress} aria-valuemin={0} aria-valuemax={100}>
+              <div className="upload-progress-bar" style={{ width: `${streamProgress}%` }} />
+              <span>Uploading to Cloudflare… {streamProgress}%. Keep this tab open.</span>
+            </div>
           ) : null}
 
           {isValidAssetReference(form.mediaUrl) ? (
@@ -1026,13 +1214,23 @@ export function SermonsPage() {
                 <article key={sermon.id} className="sermon-row">
                   <div>
                     <div className="section-title-row compact">
-                      <h3>{sermon.title}</h3>
-                      <span className={`status-chip ${getPublishState(sermon.publishedAt).tone}`}>
-                        {getPublishState(sermon.publishedAt).label}
-                      </span>
+                      <h3>
+                        {sermon.code ? <span className="sermon-code">{sermon.code}</span> : null}
+                        {sermon.title}
+                      </h3>
+                      {sermon.status === "processing" ? (
+                        <span className="status-chip warning">Processing</span>
+                      ) : sermon.status === "error" ? (
+                        <span className="status-chip danger">Upload failed</span>
+                      ) : (
+                        <span className={`status-chip ${getPublishState(sermon.publishedAt).tone}`}>
+                          {getPublishState(sermon.publishedAt).label}
+                        </span>
+                      )}
                     </div>
                     <p>
-                      {sermon.type} · {sermon.sermonDate} · {sermon.category || "No category"}
+                      {sermon.type} · {sermon.sermonDate} · {sermon.category || "No category"} ·{" "}
+                      {SOURCE_LABELS[sermon.source] || "Manual"}
                     </p>
                     <p className="small-muted">Publishes {formatPublishAt(sermon.publishedAt)}</p>
                     <p className="small-muted">{sermon.description}</p>
@@ -1439,6 +1637,7 @@ export function SermonsPage() {
           await createSermon({
             externalId: batchSermonExternalId(v, ctx.publishAt),
             type: (v.type as "video" | "audio") || "video",
+            code: "",
             title: v.title.trim(),
             speaker: v.speaker.trim() || "Shekinah Sons Global",
             sermonDate: (v.sermonDate || ctx.publishAt).slice(0, 10),

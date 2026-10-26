@@ -25,6 +25,7 @@ func (r Repository) List(ctx context.Context) ([]Sermon, error) {
 			s.id,
 			s.external_id,
 			s.type,
+			s.code,
 			s.title,
 			s.speaker,
 			s.sermon_date::text,
@@ -36,6 +37,9 @@ func (r Repository) List(ctx context.Context) ([]Sermon, error) {
 			s.duration,
 			s.description,
 			s.media_url,
+			s.source,
+			s.stream_uid,
+			s.status,
 			s.created_at,
 			s.updated_at
 		FROM sermons s
@@ -73,6 +77,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (Sermon, error) {
 			s.id,
 			s.external_id,
 			s.type,
+			s.code,
 			s.title,
 			s.speaker,
 			s.sermon_date::text,
@@ -84,6 +89,9 @@ func (r Repository) FindByID(ctx context.Context, id string) (Sermon, error) {
 			s.duration,
 			s.description,
 			s.media_url,
+			s.source,
+			s.stream_uid,
+			s.status,
 			s.created_at,
 			s.updated_at
 		FROM sermons s
@@ -121,13 +129,18 @@ func (r Repository) Create(ctx context.Context, command Command) (Sermon, error)
 			thumbnail_url,
 			duration,
 			description,
-			media_url
+			media_url,
+			code,
+			source,
+			stream_uid,
+			status
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10, $11, $12, $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		RETURNING
 			id,
 			external_id,
 			type,
+			code,
 			title,
 			speaker,
 			sermon_date::text,
@@ -139,6 +152,9 @@ func (r Repository) Create(ctx context.Context, command Command) (Sermon, error)
 			duration,
 			description,
 			media_url,
+			source,
+			stream_uid,
+			status,
 			created_at,
 			updated_at
 	`
@@ -159,6 +175,10 @@ func (r Repository) Create(ctx context.Context, command Command) (Sermon, error)
 		command.Duration,
 		command.Description,
 		command.MediaURL,
+		command.Code,
+		command.Source,
+		command.StreamUID,
+		command.Status,
 	)
 
 	item, err := scanSermon(row)
@@ -185,12 +205,17 @@ func (r Repository) Update(ctx context.Context, command Command) (Sermon, error)
 			duration = $11,
 			description = $12,
 			media_url = $13,
+			code = $14,
+			source = $15,
+			stream_uid = $16,
+			status = $17,
 			updated_at = now()
 		WHERE id = $1
 		RETURNING
 			id,
 			external_id,
 			type,
+			code,
 			title,
 			speaker,
 			sermon_date::text,
@@ -202,6 +227,9 @@ func (r Repository) Update(ctx context.Context, command Command) (Sermon, error)
 			duration,
 			description,
 			media_url,
+			source,
+			stream_uid,
+			status,
 			created_at,
 			updated_at
 	`
@@ -222,6 +250,10 @@ func (r Repository) Update(ctx context.Context, command Command) (Sermon, error)
 		command.Duration,
 		command.Description,
 		command.MediaURL,
+		command.Code,
+		command.Source,
+		command.StreamUID,
+		command.Status,
 	)
 
 	item, err := scanSermon(row)
@@ -242,6 +274,7 @@ func (r Repository) FindByExternalID(ctx context.Context, externalID string) (Se
 			s.id,
 			s.external_id,
 			s.type,
+			s.code,
 			s.title,
 			s.speaker,
 			s.sermon_date::text,
@@ -253,6 +286,9 @@ func (r Repository) FindByExternalID(ctx context.Context, externalID string) (Se
 			s.duration,
 			s.description,
 			s.media_url,
+			s.source,
+			s.stream_uid,
+			s.status,
 			s.created_at,
 			s.updated_at
 		FROM sermons s
@@ -270,6 +306,97 @@ func (r Repository) FindByExternalID(ctx context.Context, externalID string) (Se
 		return Sermon{}, fmt.Errorf("find sermon by external id: %w", err)
 	}
 	return item, nil
+}
+
+func (r Repository) FindByStreamUID(ctx context.Context, streamUID string) (Sermon, error) {
+	const query = `
+		SELECT
+			s.id,
+			s.external_id,
+			s.type,
+			s.code,
+			s.title,
+			s.speaker,
+			s.sermon_date::text,
+			to_char(s.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+			COALESCE(s.category_id, ''),
+			COALESCE(c.name, ''),
+			s.is_live,
+			s.thumbnail_url,
+			s.duration,
+			s.description,
+			s.media_url,
+			s.source,
+			s.stream_uid,
+			s.status,
+			s.created_at,
+			s.updated_at
+		FROM sermons s
+		LEFT JOIN sermon_categories c ON c.id = s.category_id
+		WHERE s.stream_uid = $1
+		LIMIT 1
+	`
+
+	item, err := scanSermon(r.db.QueryRow(ctx, query, streamUID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Sermon{}, ErrNotFound
+		}
+		return Sermon{}, fmt.Errorf("find sermon by stream uid: %w", err)
+	}
+	return item, nil
+}
+
+// ListByStatus returns sermons in one processing state, oldest first.
+func (r Repository) ListByStatus(ctx context.Context, status string) ([]Sermon, error) {
+	const query = `
+		SELECT
+			s.id,
+			s.external_id,
+			s.type,
+			s.code,
+			s.title,
+			s.speaker,
+			s.sermon_date::text,
+			to_char(s.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+			COALESCE(s.category_id, ''),
+			COALESCE(c.name, ''),
+			s.is_live,
+			s.thumbnail_url,
+			s.duration,
+			s.description,
+			s.media_url,
+			s.source,
+			s.stream_uid,
+			s.status,
+			s.created_at,
+			s.updated_at
+		FROM sermons s
+		LEFT JOIN sermon_categories c ON c.id = s.category_id
+		WHERE s.status = $1
+		ORDER BY s.created_at ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, status)
+	if err != nil {
+		return nil, fmt.Errorf("query sermons by status: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]Sermon, 0)
+	for rows.Next() {
+		item, err := scanSermon(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sermons by status: %w", err)
+	}
+
+	return items, nil
 }
 
 func (r Repository) Delete(ctx context.Context, id string) error {
@@ -301,6 +428,7 @@ func scanSermon(row sermonScanner) (Sermon, error) {
 		&item.ID,
 		&item.ExternalID,
 		&item.Type,
+		&item.Code,
 		&item.Title,
 		&item.Speaker,
 		&item.SermonDate,
@@ -312,6 +440,9 @@ func scanSermon(row sermonScanner) (Sermon, error) {
 		&item.Duration,
 		&item.Description,
 		&item.MediaURL,
+		&item.Source,
+		&item.StreamUID,
+		&item.Status,
 		&item.CreatedAt,
 		&item.UpdatedAt,
 	); err != nil {

@@ -88,7 +88,11 @@ export function AudioArt({ item, size, variant = "card", radius = 14 }) {
   const nowPlaying = useNowPlaying();
   const playing = Boolean(nowPlaying.playing && nowPlaying.sermon?.id && nowPlaying.sermon.id === item?.id);
   const photo = useMemo(() => hasOwnPhoto(item), [item?.image, item?.imageUrl, item?.thumbnail]);
-  const { code, title } = useMemo(() => splitTitle(item?.title), [item?.title]);
+  const { code, title } = useMemo(() => {
+    const parsed = splitTitle(item?.title);
+    // The admin-entered code wins; titles like "S.14 ..." are a fallback.
+    return item?.code ? { code: item.code, title: parsed.code ? parsed.title : item.title } : parsed;
+  }, [item?.code, item?.title]);
   const compact = variant === "thumb";
   const titleSize = compact ? Math.round(size * 0.13) : Math.round(size * 0.105);
 

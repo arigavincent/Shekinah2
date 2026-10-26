@@ -145,6 +145,7 @@ func (s Service) Update(ctx context.Context, id string, req UpdateRequest) (Serm
 		ID:           current.ID,
 		ExternalID:   current.ExternalID,
 		Type:         current.Type,
+		Code:         current.Code,
 		Title:        current.Title,
 		Speaker:      current.Speaker,
 		SermonDate:   sermonDate,
@@ -155,6 +156,9 @@ func (s Service) Update(ctx context.Context, id string, req UpdateRequest) (Serm
 		Duration:     current.Duration,
 		Description:  current.Description,
 		MediaURL:     current.MediaURL,
+		Source:       current.Source,
+		StreamUID:    current.StreamUID,
+		Status:       current.Status,
 	}
 
 	if req.ExternalID != nil {
@@ -163,6 +167,10 @@ func (s Service) Update(ctx context.Context, id string, req UpdateRequest) (Serm
 
 	if req.Type != nil {
 		command.Type = normalize(*req.Type)
+	}
+
+	if req.Code != nil {
+		command.Code = normalizeCode(*req.Code)
 	}
 
 	if req.Title != nil {
@@ -211,6 +219,18 @@ func (s Service) Update(ctx context.Context, id string, req UpdateRequest) (Serm
 
 	if req.MediaURL != nil {
 		command.MediaURL = strings.TrimSpace(*req.MediaURL)
+	}
+
+	if req.Source != nil {
+		command.Source = normalize(*req.Source)
+	}
+
+	if req.StreamUID != nil {
+		command.StreamUID = strings.TrimSpace(*req.StreamUID)
+	}
+
+	if req.Status != nil {
+		command.Status = normalize(*req.Status)
 	}
 
 	if err := validateCommand(command); err != nil {
@@ -294,6 +314,7 @@ func (s Service) buildImportPlans(ctx context.Context, csvPayload string) ([]imp
 		req := CreateRequest{
 			ExternalID:   csvValue(record, indexByName, "externalid"),
 			Type:         csvValue(record, indexByName, "type"),
+			Code:         csvValue(record, indexByName, "code"),
 			Title:        csvValue(record, indexByName, "title"),
 			Speaker:      csvValue(record, indexByName, "speaker"),
 			SermonDate:   csvValue(record, indexByName, "sermondate"),
@@ -376,6 +397,7 @@ func createCommandFromRequest(req CreateRequest) (Command, error) {
 		ID:           id,
 		ExternalID:   externalID,
 		Type:         normalize(req.Type),
+		Code:         normalizeCode(req.Code),
 		Title:        strings.TrimSpace(req.Title),
 		Speaker:      strings.TrimSpace(req.Speaker),
 		SermonDate:   sermonDate,
@@ -386,6 +408,9 @@ func createCommandFromRequest(req CreateRequest) (Command, error) {
 		Duration:     strings.TrimSpace(req.Duration),
 		Description:  strings.TrimSpace(req.Description),
 		MediaURL:     strings.TrimSpace(req.MediaURL),
+		Source:       defaultString(normalize(req.Source), SourceManual),
+		StreamUID:    strings.TrimSpace(req.StreamUID),
+		Status:       defaultString(normalize(req.Status), StatusReady),
 	}
 
 	if err := validateCommand(command); err != nil {
@@ -408,11 +433,19 @@ func validateCommand(command Command) error {
 		return ErrInvalidInput
 	}
 
+	if !validSources[command.Source] || !validStatuses[command.Status] {
+		return ErrInvalidInput
+	}
+
+	streamBacked := command.Source == SourceCloudflareStream || command.Source == SourceLiveRecording
+	if streamBacked && command.StreamUID == "" {
+		return ErrInvalidInput
+	}
+
+	// A Stream upload that is still encoding has no playable URL yet.
 	mediaURL := strings.ToLower(strings.TrimSpace(command.MediaURL))
-	if mediaURL == "" ||
-		mediaURL == "none" ||
-		mediaURL == "null" ||
-		mediaURL == "undefined" {
+	missingMedia := mediaURL == "" || mediaURL == "none" || mediaURL == "null" || mediaURL == "undefined"
+	if missingMedia && !(streamBacked && command.Status != StatusReady) {
 		return ErrInvalidInput
 	}
 
@@ -460,6 +493,53 @@ func parsePublishedAtWithFallback(value string, sermonDate time.Time) (time.Time
 	}
 
 	return parsePublishedAt(value)
+}
+
+const (
+	SourceManual           = "manual"
+	SourceCloudflareStream = "cloudflare_stream"
+	SourceLiveRecording    = "live_recording"
+	SourcePodcast          = "podcast"
+
+	StatusProcessing = "processing"
+	StatusReady      = "ready"
+	StatusError      = "error"
+)
+
+var validSources = map[string]bool{
+	SourceManual:           true,
+	SourceCloudflareStream: true,
+	SourceLiveRecording:    true,
+	SourcePodcast:          true,
+}
+
+var validStatuses = map[string]bool{
+	StatusProcessing: true,
+	StatusReady:      true,
+	StatusError:      true,
+}
+
+func defaultString(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+// normalizeCode tidies a sermon code such as "s 14" or "S14" into "S.14".
+func normalizeCode(value string) string {
+	code := strings.ToUpper(strings.Join(strings.Fields(value), ""))
+	if code == "" {
+		return ""
+	}
+
+	split := strings.IndexFunc(code, func(r rune) bool { return r >= '0' && r <= '9' })
+	if split <= 0 {
+		return code
+	}
+
+	prefix := strings.TrimRight(code[:split], ".")
+	return prefix + "." + code[split:]
 }
 
 func normalize(value string) string {

@@ -32,6 +32,7 @@ func main() {
 	}
 
 	app := server.New(cfg, db)
+	server.StartBackground(ctx, cfg, db)
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
