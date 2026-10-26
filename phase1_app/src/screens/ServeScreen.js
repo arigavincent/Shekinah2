@@ -9,7 +9,7 @@ import {
   View
 } from "react-native";
 import * as Print from "expo-print";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "../components/Icon";
 
 import { C } from "../constants/theme";
 import { s } from "../styles/appStyles";

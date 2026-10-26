@@ -9,7 +9,7 @@ import {
   TextInput,
   View
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "../components/Icon";
 import { useContent } from "../providers/ContentProvider";
 
 import { PHASE1_IMAGES } from "../content";

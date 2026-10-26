@@ -8,7 +8,7 @@ import {
   TextInput,
   View
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "../components/Icon";
 
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";

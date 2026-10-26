@@ -36,3 +36,6 @@ backend/uploads/
 .DS_Store
 .vscode/
 .idea/
+
+# local design references (client-supplied screenshots)
+design/

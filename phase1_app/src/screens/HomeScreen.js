@@ -9,11 +9,12 @@ import {
   Text,
   View
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "../components/Icon";
 
 import { useContent } from "../providers/ContentProvider";
 import { PHASE1_IMAGES } from "../content";
-import { C } from "../constants/theme";
+import { C, makeThemedStyles } from "../constants/theme";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
@@ -125,140 +126,132 @@ function HomeHero({ live, featuredVideo, go, appLanguage }) {
   const heroImage = featuredVideo
     ? sermonThumbnail(featuredVideo, PHASE1_IMAGES.sermon)
     : PHASE1_IMAGES.crowd;
-  const liveViewerCount = live?.isLive ? cleanViewerCount(live?.viewers) : "";
-  const heroTitle = live?.isLive
-    ? cleanText(live?.title) || "Live Stream"
-    : tr(appLanguage, "NEXT SERVICE");
-  const heroSubtitle = live?.isLive
+  const isLive = Boolean(live?.isLive);
+  const liveViewerCount = isLive ? cleanViewerCount(live?.viewers) : "";
+  const heroTitle = isLive
+    ? cleanText(live?.title) || tr(appLanguage, "Live Stream")
+    : featuredVideo?.title || tr(appLanguage, "Stay connected to the word, worship, and prayer.");
+  const heroSubtitle = isLive
     ? tr(appLanguage, "Join the service now.")
     : cleanText(live?.nextService)
       ? `${tr(appLanguage, "Next service:")} ${cleanText(live?.nextService)}`
-      : tr(appLanguage, "Stay connected to the word, worship, and prayer.");
+      : featuredVideo?.speaker || "";
 
   return (
-    <ImageBackground
-      source={{ uri: heroImage }}
-      style={{
-        minHeight: 250,
-        borderRadius: 22,
-        overflow: "hidden",
-        justifyContent: "space-between",
-        backgroundColor: C.surface,
-        marginBottom: 18
-      }}
-      imageStyle={{ opacity: 0.88 }}
+    <Pressable
+      onPress={() => (isLive || !featuredVideo ? go("Live") : go("VideoDetail", featuredVideo))}
+      style={({ pressed }) => [home.hero, pressed && { opacity: 0.92 }]}
+      accessibilityRole="button"
+      accessibilityLabel={heroTitle}
     >
-      <View style={{ ...fill, backgroundColor: "rgba(0,0,0,0.48)" }} />
+      <ImageBackground source={{ uri: heroImage }} style={home.heroImage} resizeMode="cover">
+        <LinearGradient
+          colors={["rgba(7,8,10,0.05)", "rgba(7,8,10,0.35)", "rgba(7,8,10,0.94)"]}
+          locations={[0, 0.45, 1]}
+          style={fill}
+        />
 
-      <View style={{ padding: 16, flexDirection: "row", justifyContent: "space-between" }}>
-        <View
-          style={{
-            backgroundColor: live?.isLive ? C.red : "rgba(0,0,0,0.65)",
-            borderRadius: 999,
-            paddingHorizontal: 12,
-            paddingVertical: 7
-          }}
-        >
-          <Text style={{ color: C.textOnBrand, fontWeight: "900", fontSize: 12 }}>
-            {tr(appLanguage, live?.isLive ? "LIVE NOW" : "NEXT SERVICE")}
-          </Text>
+        <View style={home.heroTop}>
+          {isLive ? (
+            <View style={[home.chip, { backgroundColor: C.red }]}>
+              <View style={home.liveDot} />
+              <Text style={home.chipTextLight}>{tr(appLanguage, "LIVE NOW")}</Text>
+            </View>
+          ) : (
+            <View style={[home.chip, home.chipGlass]}>
+              <Text style={home.chipTextGold}>{tr(appLanguage, featuredVideo ? "LATEST MESSAGE" : "NEXT SERVICE")}</Text>
+            </View>
+          )}
+
+          {liveViewerCount ? (
+            <View style={[home.chip, home.chipGlass]}>
+              <Ionicons name="eye-outline" size={13} color="#FFFFFF" />
+              <Text style={home.chipTextLight}>{liveViewerCount}</Text>
+            </View>
+          ) : null}
         </View>
 
-        {liveViewerCount ? (
-          <View
-            style={{
-              backgroundColor: "rgba(0,0,0,0.65)",
-              borderRadius: 999,
-              paddingHorizontal: 12,
-              paddingVertical: 7
-            }}
-          >
-            <Text style={{ color: C.gold, fontWeight: "900", fontSize: 12 }}>
-              {liveViewerCount}
-            </Text>
+        <View style={home.heroBottom}>
+          <Text style={home.heroTitle} numberOfLines={2}>{heroTitle}</Text>
+          {heroSubtitle ? (
+            <Text style={home.heroSubtitle} numberOfLines={1}>{heroSubtitle}</Text>
+          ) : null}
+
+          <View style={home.heroActions}>
+            <Pressable
+              style={({ pressed }) => [home.btnPrimary, pressed && { backgroundColor: C.accentPressed }]}
+              onPress={() => (isLive || !featuredVideo ? go("Live") : go("VideoDetail", featuredVideo))}
+              accessibilityRole="button"
+            >
+              <Ionicons name="play" size={16} color="#FFFFFF" />
+              <Text style={home.btnPrimaryText}>
+                {tr(appLanguage, isLive ? "Watch Live" : featuredVideo ? "Watch Now" : "Open Live")}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [home.btnGhost, pressed && { backgroundColor: "rgba(255,255,255,0.16)" }]}
+              onPress={() => go("Sermons")}
+              accessibilityRole="button"
+            >
+              <Text style={home.btnGhostText}>{tr(appLanguage, "Sermons")}</Text>
+            </Pressable>
           </View>
-        ) : (
-          <View />
-        )}
-      </View>
-
-      <View style={{ padding: 16 }}>
-        <Text style={{ color: C.textOnBrand, fontSize: 28, fontWeight: "900" }}>
-          {heroTitle}
-        </Text>
-
-        <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 14, fontWeight: "800", marginTop: 8 }}>
-          {heroSubtitle}
-        </Text>
-
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: C.gold,
-              borderRadius: 999,
-              paddingVertical: 12,
-              alignItems: "center"
-            }}
-            onPress={() => go("Live")}
-          >
-            <Text style={{ color: C.black, fontWeight: "900" }}>
-              {tr(appLanguage, live?.isLive ? "Watch Live" : "Open Live")}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(255,255,255,0.12)",
-              borderRadius: 999,
-              paddingVertical: 12,
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.16)"
-            }}
-            onPress={() => go("Sermons")}
-          >
-            <Text style={{ color: C.textOnBrand, fontWeight: "900" }}>{tr(appLanguage, "Sermons")}</Text>
-          </Pressable>
         </View>
-      </View>
-    </ImageBackground>
+      </ImageBackground>
+    </Pressable>
   );
 }
 
 function QuickActions({ go, appLanguage }) {
   const actions = [
     { label: "Give", icon: "heart-outline", screen: "Giving" },
-    { label: "Prayer", icon: "flame-outline", screen: "Prayer" },
-    { label: "Branches", icon: "location-outline", screen: "Branches" },
-    { label: "Bible", icon: "book-outline", screen: "Bible" }
+    { label: "Prayer", icon: "hand-left-outline", screen: "Prayer" },
+    { label: "Events", icon: "calendar-outline", screen: "Events" },
+    { label: "Branches", icon: "location-outline", screen: "Branches" }
   ];
 
   return (
-    <View style={{ flexDirection: "row", gap: 10, marginBottom: 8 }}>
+    <View style={home.quickRow}>
       {actions.map(action => (
         <Pressable
           key={action.label}
           onPress={() => go(action.screen)}
-          style={{
-            flex: 1,
-            backgroundColor: C.surface,
-            borderWidth: 1,
-            borderColor: C.line,
-            borderRadius: 16,
-            paddingVertical: 14,
-            alignItems: "center",
-            gap: 6
-          }}
+          style={({ pressed }) => [home.quickItem, pressed && { opacity: 0.7 }]}
+          accessibilityRole="button"
+          accessibilityLabel={tr(appLanguage, action.label)}
         >
-          <Ionicons name={action.icon} size={21} color={C.gold} />
-          <Text style={{ color: C.white, fontSize: 12, fontWeight: "900" }}>
-            {tr(appLanguage, action.label)}
-          </Text>
+          <View style={home.quickIcon}>
+            <Ionicons name={action.icon} size={22} color={C.gold} />
+          </View>
+          <Text style={home.quickLabel} numberOfLines={1}>{tr(appLanguage, action.label)}</Text>
         </Pressable>
       ))}
     </View>
+  );
+}
+
+function MediaBadges({ downloaded, showContinue, progressEntry, progressPercent, appLanguage }) {
+  return (
+    <>
+      {downloaded ? (
+        <View style={home.metaRow}>
+          <Ionicons name="checkmark-circle" size={13} color={C.green} />
+          <Text style={home.metaOk}>{tr(appLanguage, "Downloaded")}</Text>
+        </View>
+      ) : null}
+
+      {showContinue ? (
+        <>
+          <Text style={home.continueText}>
+            {tr(appLanguage, "Continue")} · {formatPlaybackTime(progressEntry.positionMs)} / {formatPlaybackTime(progressEntry.durationMs)}
+          </Text>
+          <View style={home.progressTrack}>
+            <View style={[home.progressFill, { width: `${progressPercent}%` }]} />
+          </View>
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -270,103 +263,50 @@ function FeaturedMediaCard({ item, onPress, progressEntry, downloadEntry, appLan
   const showContinue = hasContinueProgress(progressEntry);
   const progressPercent = Math.max(4, Math.round(progressRatio(progressEntry) * 100));
   const downloaded = Boolean(downloadEntry?.localUri);
+  const meta = [item.speaker || item.category, item.date || item.sermonDate].filter(Boolean).join(" · ");
+
+  if (isAudio) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [home.audioCard, pressed && { opacity: 0.8 }]}
+        accessibilityRole="button"
+        accessibilityLabel={`Audio sermon, ${item.title}`}
+      >
+        <View>
+          <Image source={{ uri: thumbnail }} style={home.audioArt} />
+          <View style={home.audioBadge}>
+            <Ionicons name="musical-notes" size={13} color="#FFFFFF" />
+          </View>
+        </View>
+        <Text style={home.cardTitle} numberOfLines={2}>{item.title}</Text>
+        {meta ? <Text style={home.cardMeta} numberOfLines={1}>{meta}</Text> : null}
+        <MediaBadges {...{ downloaded, showContinue, progressEntry, progressPercent, appLanguage }} />
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
       onPress={onPress}
-      style={{
-        width: 245,
-        minHeight: 180,
-        borderRadius: 20,
-        overflow: "hidden",
-        backgroundColor: C.surface,
-        borderWidth: 1,
-        borderColor: C.line,
-        marginRight: 12
-      }}
+      style={({ pressed }) => [home.videoCard, pressed && { opacity: 0.8 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Video sermon, ${item.title}`}
     >
-      <ImageBackground
-        source={{ uri: thumbnail }}
-        style={{ flex: 1, justifyContent: "space-between" }}
-        imageStyle={{ opacity: 0.9 }}
-      >
-        <View style={{ ...fill, backgroundColor: "rgba(0,0,0,0.38)" }} />
-
-        <View style={{ padding: 12, flexDirection: "row", justifyContent: "space-between" }}>
-          <View
-            style={{
-              backgroundColor: C.gold,
-              borderRadius: 999,
-              paddingHorizontal: 9,
-              paddingVertical: 5
-            }}
-          >
-            <Text style={{ color: C.black, fontSize: 11, fontWeight: "900" }}>
-              {isAudio ? "AUDIO" : extractYouTubeId(sermonMediaUrl(item)) ? "YOUTUBE" : "VIDEO"}
-            </Text>
-          </View>
-
-          <View
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: "rgba(0,0,0,0.68)",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-          >
-            <Ionicons
-              name={isAudio ? "musical-notes-outline" : "play-outline"}
-              size={20}
-              color={C.textOnBrand}
-            />
-          </View>
+      <View style={home.videoThumbWrap}>
+        <Image source={{ uri: thumbnail }} style={home.videoThumb} />
+        <View style={home.playBadge}>
+          <Ionicons name="play" size={16} color="#FFFFFF" />
         </View>
-
-        <View style={{ padding: 12 }}>
-          <Text style={{ color: C.textOnBrand, fontSize: 17, fontWeight: "900" }} numberOfLines={2}>
-            {item.title}
-          </Text>
-
-          <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, fontWeight: "800", marginTop: 5 }} numberOfLines={1}>
-            {item.speaker || item.category || "Sermon"} · {item.date || item.sermonDate || ""}
-          </Text>
-
-          {downloaded ? (
-            <Text style={{ color: C.gold, fontSize: 12, fontWeight: "900", marginTop: 8 }}>
-              Downloaded for offline use
-            </Text>
-          ) : null}
-
-          {showContinue ? (
-            <>
-              <Text style={{ color: C.gold, fontSize: 12, fontWeight: "900", marginTop: 8 }}>
-                {tr(appLanguage, "Continue")} · {formatPlaybackTime(progressEntry.positionMs)} / {formatPlaybackTime(progressEntry.durationMs)}
-              </Text>
-
-              <View
-                style={{
-                  marginTop: 8,
-                  height: 4,
-                  borderRadius: 999,
-                  backgroundColor: "rgba(255,255,255,0.15)",
-                  overflow: "hidden"
-                }}
-              >
-                <View
-                  style={{
-                    width: `${progressPercent}%`,
-                    height: "100%",
-                    borderRadius: 999,
-                    backgroundColor: C.gold
-                  }}
-                />
-              </View>
-            </>
-          ) : null}
-        </View>
-      </ImageBackground>
+        {extractYouTubeId(sermonMediaUrl(item)) ? (
+          <View style={home.sourceTag}>
+            <Ionicons name="logo-youtube" size={12} color="#FFFFFF" />
+          </View>
+        ) : null}
+      </View>
+      <Text style={home.cardTitle} numberOfLines={2}>{item.title}</Text>
+      {meta ? <Text style={home.cardMeta} numberOfLines={1}>{meta}</Text> : null}
+      <MediaBadges {...{ downloaded, showContinue, progressEntry, progressPercent, appLanguage }} />
     </Pressable>
   );
 }
@@ -376,25 +316,28 @@ function DevotionPreview({ devotion, go, appLanguage }) {
 
   return (
     <Pressable
-      style={s.devotionHero}
+      style={({ pressed }) => [s.devotionHero, pressed && { opacity: 0.85 }]}
       onPress={() => go("DevotionDetail", devotion)}
+      accessibilityRole="button"
+      accessibilityLabel={`${tr(appLanguage, "Today's Devotion")}, ${devotion.title}`}
     >
       <View>
         <Image source={{ uri: devotionImage(devotion) }} style={s.devotionThumb} />
-
         <View style={s.badgeOnImage}>
           <Text style={s.badgeText}>{tr(appLanguage, "Today")}</Text>
         </View>
       </View>
 
       <View style={s.devotionBody}>
-        <Text style={s.cardTitle}>{devotion.title}</Text>
-
+        <Text style={home.eyebrow}>{tr(appLanguage, "Today's Devotion")}</Text>
+        <Text style={s.cardTitle} numberOfLines={2}>{devotion.title}</Text>
         <Text style={s.mutedText} numberOfLines={3}>
           {devotion.excerpt || devotion.body || tr(appLanguage, "Read today's devotion.")}
         </Text>
-
-        <Text style={s.goldSmall}>{devotion.date || devotion.devotionDate || ""}</Text>
+        <View style={[home.metaRow, { marginTop: 8 }]}>
+          <Ionicons name="calendar-outline" size={13} color={C.muted} />
+          <Text style={home.cardMeta}>{devotion.date || devotion.devotionDate || ""}</Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -404,13 +347,17 @@ function UpdateRow({ item, go }) {
   if (!item) return null;
 
   return (
-    <Pressable style={s.listRow} onPress={() => go("Updates")}>
-      <Image source={{ uri: contentImage(item, PHASE1_IMAGES.event) }} style={s.rowImage} />
+    <Pressable
+      style={({ pressed }) => [s.listRow, pressed && { opacity: 0.7 }]}
+      onPress={() => go("Updates")}
+      accessibilityRole="button"
+    >
+      <Image source={{ uri: contentImage(item, PHASE1_IMAGES.event) }} style={home.updateImage} />
 
       <View style={s.rowBody}>
-        <Text style={s.rowTitle}>{item.title}</Text>
+        <Text style={s.rowTitle} numberOfLines={2}>{item.title}</Text>
         <Text style={s.mutedText} numberOfLines={2}>{item.excerpt || item.date}</Text>
-        <Text style={s.goldSmall}>{item.date}</Text>
+        {item.date ? <Text style={home.cardMeta}>{item.date}</Text> : null}
       </View>
     </Pressable>
   );
@@ -436,7 +383,6 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       return Boolean(extractYouTubeId(mediaUrl) || isVideoUrl(mediaUrl));
     });
   const featuredVideo = videos[0] || null;
-  const featuredAudio = audio[0] || null;
   const todayDevotion = devotions[0] || null;
   const continuingSermons = useMemo(() => {
     return sermons
@@ -455,7 +401,7 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
         go={go}
         onMenu={openDrawer}
         appLanguage={appLanguage}
-        right={<IconButton name="search-outline" onPress={() => go("Search")} />}
+        right={<IconButton name="search-outline" accessibilityLabel="Search" onPress={() => go("Search")} />}
       />
 
       <ScrollView
@@ -464,8 +410,8 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
           <RefreshControl
             refreshing={loading}
             onRefresh={reload}
-            tintColor={C.gold}
-            colors={[C.gold]}
+            tintColor={C.accent}
+            colors={[C.accent]}
             progressBackgroundColor={C.surface2}
           />
         }
@@ -475,8 +421,6 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
         <QuickActions go={go} appLanguage={appLanguage} />
 
         <DevotionPreview devotion={todayDevotion} go={go} appLanguage={appLanguage} />
-
-        <ScriptureCard scripture={data.scripture} appLanguage={appLanguage} />
 
         {continuingSermons.length > 0 ? (
           <>
@@ -496,39 +440,43 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
           </>
         ) : null}
 
-        <SectionHeader title="Featured Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
-        <Horizontal>
-          {featuredVideo ? (
-            <FeaturedMediaCard
-              item={featuredVideo}
-              downloadEntry={downloads.bySermonId[featuredVideo.id]}
-              progressEntry={progressMap[featuredVideo.id]}
-              appLanguage={appLanguage}
-              onPress={() => openSermon(featuredVideo)}
-            />
-          ) : null}
+        {videos.length > 0 ? (
+          <>
+            <SectionHeader title="Latest Video Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
+            <Horizontal>
+              {videos.slice(0, 8).map(item => (
+                <FeaturedMediaCard
+                  key={item.id}
+                  item={item}
+                  downloadEntry={downloads.bySermonId[item.id]}
+                  progressEntry={progressMap[item.id]}
+                  appLanguage={appLanguage}
+                  onPress={() => openSermon(item)}
+                />
+              ))}
+            </Horizontal>
+          </>
+        ) : null}
 
-          {featuredAudio ? (
-            <FeaturedMediaCard
-              item={featuredAudio}
-              downloadEntry={downloads.bySermonId[featuredAudio.id]}
-              progressEntry={progressMap[featuredAudio.id]}
-              appLanguage={appLanguage}
-              onPress={() => openSermon(featuredAudio)}
-            />
-          ) : null}
+        {audio.length > 0 ? (
+          <>
+            <SectionHeader title="Latest Audio Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
+            <Horizontal>
+              {audio.slice(0, 8).map(item => (
+                <FeaturedMediaCard
+                  key={item.id}
+                  item={item}
+                  downloadEntry={downloads.bySermonId[item.id]}
+                  progressEntry={progressMap[item.id]}
+                  appLanguage={appLanguage}
+                  onPress={() => openSermon(item)}
+                />
+              ))}
+            </Horizontal>
+          </>
+        ) : null}
 
-          {videos.slice(1, 4).map(item => (
-            <FeaturedMediaCard
-              key={item.id}
-              item={item}
-              downloadEntry={downloads.bySermonId[item.id]}
-              progressEntry={progressMap[item.id]}
-              appLanguage={appLanguage}
-              onPress={() => openSermon(item)}
-            />
-          ))}
-        </Horizontal>
+        <ScriptureCard scripture={data.scripture} appLanguage={appLanguage} />
 
         {playableClips.length > 0 ? (
           <>
@@ -585,16 +533,74 @@ function ScriptureCard({ scripture, appLanguage }) {
 
   return (
     <View style={s.scriptureCard}>
+      <Text style={home.quoteMark} accessibilityElementsHidden importantForAccessibility="no">“</Text>
       <View style={s.scriptureHead}>
-        <Text style={s.goldSmall}>{item.title || tr(appLanguage, "Scripture of the Day")}</Text>
+        <Text style={home.eyebrow}>{item.title || tr(appLanguage, "Scripture of the Day")}</Text>
 
-        <Pressable onPress={share} style={s.smallCircle}>
-          <Ionicons name="share-social-outline" size={18} color={C.white} />
+        <Pressable
+          onPress={share}
+          style={({ pressed }) => [home.shareBtn, pressed && { opacity: 0.6 }]}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel="Share scripture"
+        >
+          <Ionicons name="share-social-outline" size={18} color="#FFFFFF" />
         </Pressable>
       </View>
 
       <Text style={s.verseText}>{item.verse || tr(appLanguage, "The word of God is life.")}</Text>
-      <Text style={s.mutedText}>{item.reference || ""}</Text>
+      {item.reference ? <Text style={home.reference}>— {item.reference}</Text> : null}
     </View>
   );
 }
+
+const home = makeThemedStyles(C => ({
+  hero: {
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: C.surface,
+    marginTop: 4,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: C.line
+  },
+  heroImage: { minHeight: 300, justifyContent: "space-between" },
+  heroTop: { padding: 14, flexDirection: "row", justifyContent: "space-between" },
+  heroBottom: { padding: 18, paddingTop: 0 },
+  heroTitle: { color: "#FFFFFF", fontSize: 24, lineHeight: 30, fontFamily: C.fontDisplay, letterSpacing: -0.3 },
+  heroSubtitle: { color: "rgba(255,255,255,0.78)", fontSize: 14, fontFamily: C.fontMedium, marginTop: 6 },
+  heroActions: { flexDirection: "row", gap: 10, marginTop: 16 },
+  chip: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 6 },
+  chipGlass: { backgroundColor: "rgba(7,8,10,0.62)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  chipTextLight: { color: "#FFFFFF", fontSize: 11, fontFamily: C.fontBold, letterSpacing: 0.8 },
+  chipTextGold: { color: "#F1D48A", fontSize: 11, fontFamily: C.fontBold, letterSpacing: 1 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#FFFFFF" },
+  btnPrimary: { flex: 1, minHeight: 48, borderRadius: 999, backgroundColor: C.accent, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  btnPrimaryText: { color: "#FFFFFF", fontSize: 15, fontFamily: C.fontBold },
+  btnGhost: { flex: 1, minHeight: 48, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
+  btnGhostText: { color: "#FFFFFF", fontSize: 15, fontFamily: C.fontBold },
+  quickRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 18 },
+  quickItem: { flex: 1, alignItems: "center", gap: 8, paddingVertical: 4 },
+  quickIcon: { width: 56, height: 56, borderRadius: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, alignItems: "center", justifyContent: "center" },
+  quickLabel: { color: C.white, fontSize: 12.5, fontFamily: C.fontMedium },
+  eyebrow: { color: C.gold, fontSize: 11, fontFamily: C.fontBold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 6 },
+  videoCard: { width: 248 },
+  videoThumbWrap: { borderRadius: 12, overflow: "hidden", backgroundColor: C.surface2 },
+  videoThumb: { width: "100%", aspectRatio: 16 / 9 },
+  playBadge: { position: "absolute", left: 10, bottom: 10, width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(7,8,10,0.72)", alignItems: "center", justifyContent: "center" },
+  sourceTag: { position: "absolute", right: 8, top: 8, backgroundColor: "rgba(7,8,10,0.72)", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4 },
+  audioCard: { width: 148 },
+  audioArt: { width: 148, height: 148, borderRadius: 12, backgroundColor: C.surface2 },
+  audioBadge: { position: "absolute", right: 8, bottom: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
+  cardTitle: { color: C.white, fontSize: 14, lineHeight: 19, fontFamily: C.fontBold, marginTop: 10 },
+  cardMeta: { color: C.muted, fontSize: 12, fontFamily: C.fontBody, marginTop: 3 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 },
+  metaOk: { color: C.green, fontSize: 12, fontFamily: C.fontMedium },
+  continueText: { color: C.accentText, fontSize: 12, fontFamily: C.fontBold, marginTop: 6 },
+  progressTrack: { marginTop: 6, height: 3, borderRadius: 999, backgroundColor: C.surface3, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 999, backgroundColor: C.accent },
+  updateImage: { width: 72, height: 72, borderRadius: 12, backgroundColor: C.surface2 },
+  quoteMark: { position: "absolute", right: 14, bottom: -40, fontSize: 160, lineHeight: 160, color: "rgba(212,165,55,0.12)", fontFamily: C.fontBrand },
+  shareBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.10)", alignItems: "center", justifyContent: "center" },
+  reference: { color: "#F1D48A", fontSize: 13, fontFamily: C.fontBold, marginTop: 12, letterSpacing: 0.4 }
+}));

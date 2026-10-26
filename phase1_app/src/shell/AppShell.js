@@ -1,19 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   BackHandler,
-  SafeAreaView,
-  StatusBar
+  StatusBar,
+  View
 } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { useFonts } from "expo-font";
 
-import {
-  Roboto_400Regular,
-  Roboto_500Medium,
-  Roboto_700Bold,
-  Roboto_900Black
-} from "@expo-google-fonts/roboto";
+import { NavContext } from "../navigation/NavContext";
 
 import { AuthProfileScreen } from "../features/profile/AuthProfileScreen";
 import { loadSavedSession } from "../features/auth/authSession";
@@ -113,10 +109,12 @@ function notificationTargetScreen(data) {
 
 function App() {
   const [fontsLoaded] = useFonts({
-    Roboto_400Regular,
-    Roboto_500Medium,
-    Roboto_700Bold,
-    Roboto_900Black
+    Inter_400Regular: require("@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf"),
+    Inter_500Medium: require("@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf"),
+    Inter_600SemiBold: require("@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf"),
+    Inter_700Bold: require("@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf"),
+    Cinzel_600SemiBold: require("@expo-google-fonts/cinzel/600SemiBold/Cinzel_600SemiBold.ttf"),
+    Cinzel_700Bold: require("@expo-google-fonts/cinzel/700Bold/Cinzel_700Bold.ttf")
   });
   const [screen, setScreen] = useState("Home");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -373,6 +371,20 @@ useEffect(() => {
   setDrawerOpen(false);
 };
 
+const goBack = fallback => {
+  if (history.length > 0) {
+    const previous = history[history.length - 1];
+    setHistory(current => current.slice(0, -1));
+    setScreen(previous.screen);
+    setDetail(previous.detail);
+    return;
+  }
+
+  go(fallback || "Home", null, { replace: true });
+};
+
+const navContextValue = useMemo(() => ({ goBack }), [history, screen, detail]);
+
 const openDrawer = () => {
   setDrawerOpen(true);
 };
@@ -570,17 +582,19 @@ useEffect(() => {
 
   if (!appThemeLoaded || !fontsLoaded) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
-        <StatusBar barStyle={appTheme === "light" ? "dark-content" : "light-content"} backgroundColor={C.background} />
-      </SafeAreaView>
+      <View style={{ flex: 1, backgroundColor: C.background }}>
+        <StatusBar barStyle={appTheme === "light" ? "dark-content" : "light-content"} backgroundColor="transparent" translucent />
+      </View>
     );
   }
 
   return (
+  <SafeAreaProvider>
   <ThemeContext.Provider value={memoizedThemeContextValue}>
+  <NavContext.Provider value={navContextValue}>
   <ContentProvider>
-    <SafeAreaView key={appTheme} style={s.app}>
-      <StatusBar barStyle={appTheme === "light" ? "dark-content" : "light-content"} backgroundColor={C.background} />
+    <View key={appTheme} style={s.app}>
+      <StatusBar barStyle={appTheme === "light" ? "dark-content" : "light-content"} backgroundColor="transparent" translucent />
       {renderScreen()}
 
       {miniPlayer && screen !== "AudioPlayer" ? (
@@ -597,9 +611,11 @@ useEffect(() => {
 
       <BottomNav current={screen} go={go} appLanguage={appLanguage} />
       <Drawer visible={drawerOpen} close={() => setDrawerOpen(false)} go={go} appLanguage={appLanguage} />
-    </SafeAreaView>
+    </View>
   </ContentProvider>
+  </NavContext.Provider>
   </ThemeContext.Provider>
+  </SafeAreaProvider>
 );
 }
 

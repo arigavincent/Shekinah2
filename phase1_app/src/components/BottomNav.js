@@ -1,50 +1,65 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
+import { Ionicons } from "./Icon";
 
 import { C } from "../constants/theme";
 import { tr } from "../i18n/labels";
-import { s } from "../styles/appStyles";
+import { s, NAV_BAR_HEIGHT } from "../styles/appStyles";
 import { useContent } from "../providers/ContentProvider";
+
+const TABS = [
+  { key: "Home", icon: "home", match: [] },
+  { key: "Sermons", icon: "play-circle", match: ["VideoDetail", "AudioPlayer"] },
+  { key: "Bible", icon: "book", match: [] },
+  { key: "Devotions", icon: "sunny", match: ["DevotionDetail"] },
+  { key: "Live", icon: "radio", match: [] }
+];
+
+export function useNavBarHeight() {
+  const insets = useSafeAreaInsets();
+  return NAV_BAR_HEIGHT + insets.bottom;
+}
 
 export function BottomNav({ current, go, appLanguage = "en" }) {
   const { data } = useContent();
-  const tabs = ["Home", "Sermons", "Devotions", "Live"];
+  const insets = useSafeAreaInsets();
+  const isLive = Boolean(data?.live?.isLive);
 
   return (
-    <View style={s.bottomNav}>
-      {tabs.map(tab => {
-        const active =
-          current === tab ||
-          (tab === "Sermons" && ["VideoDetail", "AudioPlayer"].includes(current)) ||
-          (tab === "Devotions" && current === "DevotionDetail");
+    <View style={[s.bottomNav, { height: NAV_BAR_HEIGHT + insets.bottom, paddingBottom: insets.bottom }]}>
+      {TABS.map(tab => {
+        const active = current === tab.key || tab.match.includes(current);
+        const label = tr(appLanguage, tab.key);
 
         return (
-          <Pressable key={tab} style={s.navItem} onPress={() => go(tab)}>
-            <Ionicons
-              name={navIconFor(tab, active)}
-              size={22}
-              color={active ? C.gold : C.muted}
-            />
-
-            <View style={s.navLabelRow}>
-              <Text style={[s.navLabel, active && s.navActive]}>{tr(appLanguage, tab)}</Text>
-              {tab === "Live" && data.live.isLive ? <View style={s.redBadge} /> : null}
+          <Pressable
+            key={tab.key}
+            style={s.navItem}
+            onPress={() => {
+              if (!active) Haptics.selectionAsync().catch(() => {});
+              go(tab.key);
+            }}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={tab.key === "Live" && isLive ? `${label}, live now` : label}
+          >
+            <View style={[s.navPill, active && s.navPillActive]}>
+              <Ionicons
+                name={active ? tab.icon : `${tab.icon}-outline`}
+                size={22}
+                color={active ? C.accent : C.muted}
+              />
+              {tab.key === "Live" && isLive ? <View style={s.liveDot} /> : null}
             </View>
+
+            <Text style={[s.navLabel, active && s.navActive]} numberOfLines={1}>
+              {label}
+            </Text>
           </Pressable>
         );
       })}
     </View>
   );
-}
-
-function navIconFor(tab, active) {
-  const icons = {
-    Home: active ? "home" : "home-outline",
-    Sermons: active ? "play-circle" : "play-circle-outline",
-    Devotions: active ? "book" : "book-outline",
-    Live: active ? "radio" : "radio-outline"
-  };
-
-  return icons[tab];
 }

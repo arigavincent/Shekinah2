@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
   View
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "../components/Icon";
 import { VideoView, useVideoPlayer } from "expo-video";
 import YoutubePlayer from "react-native-youtube-iframe";
 import { WebView } from "react-native-webview";

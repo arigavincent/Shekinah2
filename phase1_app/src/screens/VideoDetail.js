@@ -9,7 +9,7 @@ import {
   Text,
   View
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "../components/Icon";
 import { ResizeMode, Video } from "expo-av";
 import YoutubePlayer from "react-native-youtube-iframe";
 import * as ScreenOrientation from "expo-screen-orientation";

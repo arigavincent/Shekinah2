@@ -9,7 +9,7 @@ import {
   TextInput,
   View
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "../components/Icon";
 
 import { Screen } from "../components/Screen";
 import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles } from "../constants/theme";

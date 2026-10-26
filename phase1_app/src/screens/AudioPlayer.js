@@ -7,7 +7,7 @@ import {
   View
 } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "../components/Icon";
 
 import { C } from "../constants/theme";
 import { s } from "../styles/appStyles";

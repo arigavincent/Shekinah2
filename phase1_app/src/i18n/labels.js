@@ -1,4 +1,11 @@
 const SWAHILI_LABELS = {
+  "Latest Video Sermons": "Mahubiri Mapya ya Video",
+  "Latest Audio Sermons": "Mahubiri Mapya ya Sauti",
+  "LATEST MESSAGE": "UJUMBE MPYA",
+  "Watch Now": "Tazama Sasa",
+  "Today's Devotion": "Ibada ya Leo",
+  "Reading Plans": "Mipango ya Kusoma",
+  "QR Check-In": "Kuingia kwa QR",
   Home: "Nyumbani",
   Sermons: "Mahubiri",
   Devotions: "Ibada za Kila Siku",

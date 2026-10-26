@@ -8,7 +8,7 @@ export const STORAGE_KEYS = {
 
 export const DEFAULT_APP_LANGUAGE = "en";
 export const DEFAULT_APP_THEME = "dark";
-export const DEFAULT_APP_THEME_PALETTE = "memorial";
+export const DEFAULT_APP_THEME_PALETTE = "shekinah";
 
 export const DEFAULT_NOTIFICATION_PREFS = {
   newSermons: true,
