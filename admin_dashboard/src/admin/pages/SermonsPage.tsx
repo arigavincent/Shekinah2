@@ -7,6 +7,9 @@ import {
   createSermon,
   deleteSermon,
   getPodcastSettings,
+  getStorageStatus,
+  putFileToStorage,
+  startDirectUpload,
   importSermons,
   listSermons,
   previewSermonImport,
@@ -138,6 +141,8 @@ export function SermonsPage() {
   const [podcastUrl, setPodcastUrl] = useState("");
   const [podcastSaving, setPodcastSaving] = useState(false);
   const [podcastNote, setPodcastNote] = useState("");
+  const [storage, setStorage] = useState<{ r2: boolean; stream: boolean } | null>(null);
+  const [directProgress, setDirectProgress] = useState<{ kind: "video" | "audio"; percent: number } | null>(null);
   const sermonItems = Array.isArray(sermons) ? sermons : [];
 
   const filtered = useMemo(() => {
@@ -478,6 +483,34 @@ export function SermonsPage() {
   function resetForm() {
     setEditingId(null);
     setForm(makeEmptyForm());
+  }
+
+  useEffect(() => {
+    getStorageStatus()
+      .then(setStorage)
+      .catch(() => setStorage({ r2: false, stream: false }));
+  }, []);
+
+  // Free path: upload the file straight to R2, then fill in the media URL.
+  async function uploadDirect(kind: "video" | "audio", file: File | null) {
+    if (!file) return;
+    setError("");
+    setDirectProgress({ kind, percent: 0 });
+    try {
+      const upload = await startDirectUpload(kind, file);
+      await putFileToStorage(upload, file, percent => setDirectProgress({ kind, percent }));
+      updateField("type", kind);
+      updateField("mediaUrl", upload.publicUrl);
+      showToast({
+        title: `${kind === "video" ? "Video" : "Audio"} uploaded`,
+        message: "The media link is filled in. Finish the details and save the sermon.",
+        tone: "success"
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setDirectProgress(null);
+    }
   }
 
   useEffect(() => {
@@ -1019,40 +1052,68 @@ export function SermonsPage() {
           </label>
 
           <div className="two-col">
-            <label>
-              Upload video to Cloudflare
-              <input
-                type="file"
-                accept="video/mp4,video/webm,video/quicktime,video/x-matroska"
-                disabled={Boolean(uploading) || streamProgress !== null || Boolean(editingId)}
-                onChange={async event => {
-                  await uploadToCloudflare(event.target.files?.[0] || null);
-                  event.target.value = "";
-                }}
-              />
-              <span className="small-muted">
-                {editingId
-                  ? "To replace a video, create a new sermon."
-                  : "Creates the sermon and streams it in the app once Cloudflare finishes processing."}
-              </span>
-            </label>
+            {storage?.stream ? (
+              <label>
+                Upload video to Cloudflare Stream
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime,video/x-matroska"
+                  disabled={Boolean(uploading) || streamProgress !== null || Boolean(editingId)}
+                  onChange={async event => {
+                    await uploadToCloudflare(event.target.files?.[0] || null);
+                    event.target.value = "";
+                  }}
+                />
+                <span className="small-muted">
+                  {editingId
+                    ? "To replace a video, create a new sermon."
+                    : "Creates the sermon and streams it in the app once Cloudflare finishes processing."}
+                </span>
+              </label>
+            ) : (
+              <label>
+                Upload video
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime,video/x-m4v"
+                  disabled={!storage?.r2 || directProgress !== null}
+                  onChange={async event => {
+                    await uploadDirect("video", event.target.files?.[0] || null);
+                    event.target.value = "";
+                  }}
+                />
+                <span className="small-muted">
+                  {storage?.r2
+                    ? "MP4 at 720p keeps sermons small (about 0.7 GB per hour). Up to 5 GB."
+                    : "Video storage isn't configured on the server yet."}
+                </span>
+              </label>
+            )}
 
             <label>
-              Upload Audio
+              Upload audio
               <input
                 type="file"
                 accept="audio/mpeg,audio/mp3,audio/mp4,audio/aac,audio/wav,audio/ogg"
-                disabled={Boolean(uploading)}
+                disabled={!storage?.r2 || directProgress !== null}
                 onChange={async event => {
-                  await uploadFile("audio", event.target.files?.[0] || null);
+                  await uploadDirect("audio", event.target.files?.[0] || null);
                   event.target.value = "";
                 }}
               />
+              <span className="small-muted">Most audio arrives from the podcast feed; use this for one-off files.</span>
             </label>
           </div>
 
           {uploading ? (
             <p className="muted">Uploading {uploading}...</p>
+          ) : null}
+
+          {directProgress !== null ? (
+            <div className="upload-progress" role="progressbar" aria-valuenow={directProgress.percent} aria-valuemin={0} aria-valuemax={100}>
+              <div className="upload-progress-bar" style={{ width: `${directProgress.percent}%` }} />
+              <span>Uploading {directProgress.kind}… {directProgress.percent}%. Keep this tab open.</span>
+            </div>
           ) : null}
 
           {streamProgress !== null ? (

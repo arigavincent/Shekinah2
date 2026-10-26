@@ -203,6 +203,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.POST("/sermons/import/preview", adminSermonHandler.PreviewImport)
 			adminGroup.POST("/sermons/import", adminSermonHandler.Import)
 			adminGroup.POST("/sermons/stream-upload", sermonMediaHandler.StartStreamUpload)
+			adminGroup.POST("/sermons/direct-upload", sermonMediaHandler.StartDirectUpload)
+			adminGroup.GET("/sermons/storage", sermonMediaHandler.StorageStatus)
 			adminGroup.POST("/sermons/sync", sermonMediaHandler.SyncNow)
 			adminGroup.GET("/settings/podcast", sermonMediaHandler.GetPodcastSettings)
 			adminGroup.PATCH("/settings/podcast", sermonMediaHandler.UpdatePodcastSettings)

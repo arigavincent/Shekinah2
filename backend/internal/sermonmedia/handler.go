@@ -16,10 +16,44 @@ import (
 
 type Handler struct {
 	service Service
+	r2      R2Presigner
 }
 
 func NewHandler(service Service) Handler {
-	return Handler{service: service}
+	return Handler{service: service, r2: NewR2PresignerFromEnv()}
+}
+
+// StartDirectUpload returns a short-lived URL the dashboard PUTs a sermon
+// file to in R2, and the public URL to save as the sermon's media.
+func (h Handler) StartDirectUpload(c *gin.Context) {
+	var req DirectUploadRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
+	}
+
+	upload, err := h.r2.Presign(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrR2NotConfigured):
+			httpx.Error(c, http.StatusServiceUnavailable, "r2_not_configured", "R2 storage is not configured on the server")
+		case errors.Is(err, ErrInvalidUpload):
+			httpx.Error(c, http.StatusBadRequest, "invalid_upload", err.Error())
+		default:
+			httpx.Error(c, http.StatusInternalServerError, "presign_failed", "could not prepare the upload")
+		}
+		return
+	}
+
+	httpx.OK(c, upload)
+}
+
+// StorageStatus tells the dashboard which upload paths are available.
+func (h Handler) StorageStatus(c *gin.Context) {
+	httpx.OK(c, gin.H{
+		"r2":     h.r2.Configured(),
+		"stream": h.service.stream.Configured(),
+	})
 }
 
 // StartStreamUpload reserves a Cloudflare Stream upload for a new video sermon.

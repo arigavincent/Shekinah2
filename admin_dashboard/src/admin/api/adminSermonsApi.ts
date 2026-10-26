@@ -115,6 +115,46 @@ export function startStreamUpload(payload: StreamUploadRequest) {
   });
 }
 
+export function getStorageStatus() {
+  return apiRequest<{ r2: boolean; stream: boolean }>("/api/v1/admin/sermons/storage", {
+    token: adminToken()
+  });
+}
+
+export type DirectUpload = {
+  uploadUrl: string;
+  publicUrl: string;
+  objectKey: string;
+  contentType: string;
+  expiresAt: string;
+};
+
+export function startDirectUpload(kind: "video" | "audio", file: File) {
+  return apiRequest<DirectUpload>("/api/v1/admin/sermons/direct-upload", {
+    method: "POST",
+    token: adminToken(),
+    body: { kind, fileName: file.name, sizeBytes: file.size }
+  });
+}
+
+// PUTs the file straight to R2 with the presigned URL, reporting progress.
+export function putFileToStorage(upload: DirectUpload, file: File, onProgress: (percent: number) => void) {
+  return new Promise<void>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", upload.uploadUrl);
+    request.setRequestHeader("Content-Type", upload.contentType);
+    request.upload.onprogress = event => {
+      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+    request.onload = () =>
+      request.status >= 200 && request.status < 300
+        ? resolve()
+        : reject(new Error(`Storage rejected the upload (${request.status}).`));
+    request.onerror = () => reject(new Error("Upload failed. Check your connection and try again."));
+    request.send(file);
+  });
+}
+
 export type SermonSyncReport = {
   ready: number;
   failed: number;
