@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { getHomeContent } from "../api/contentApi";
 import { DATA } from "../content";
@@ -8,7 +8,6 @@ const EMPTY_LIVE = {
   title: "",
   viewers: "",
   nextService: "",
-  youtubeId: ""
 };
 
 const LOCAL_FALLBACK = {
@@ -38,24 +37,6 @@ function normalizeHomeContent(payload) {
     downloads: Array.isArray(payload.downloads) ? payload.downloads : DATA.downloads,
     prayers: Array.isArray(payload.prayers) ? payload.prayers : DATA.prayers,
     about: payload.about || DATA.about
-  };
-}
-
-// Design preview only: EXPO_PUBLIC_PREVIEW_LIVE_YOUTUBE_ID forces a live
-// service so the live layouts can be reviewed without a real broadcast.
-const PREVIEW_LIVE_ID = String(process.env.EXPO_PUBLIC_PREVIEW_LIVE_YOUTUBE_ID || "").trim();
-
-function withPreviewLive(content) {
-  if (!PREVIEW_LIVE_ID) return content;
-  return {
-    ...content,
-    live: {
-      ...content.live,
-      isLive: true,
-      title: content.live?.title || "Sunday Service · Live",
-      viewers: content.live?.viewers || "248",
-      youtubeId: PREVIEW_LIVE_ID
-    }
   };
 }
 
@@ -137,7 +118,7 @@ export function useHomeContent({ enabled = false } = {}) {
   }, [enabled]);
 
   return {
-    data: useMemo(() => withPreviewLive(data), [data]),
+    data,
     source,
     loading,
     error,

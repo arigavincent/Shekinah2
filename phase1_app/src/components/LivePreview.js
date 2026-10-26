@@ -2,12 +2,10 @@ import React, { useEffect, useRef } from "react";
 import { Animated, Easing, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { VideoView, useVideoPlayer } from "expo-video";
-import { WebView } from "react-native-webview";
 
 import { C, makeThemedStyles } from "../constants/theme";
 import { PHASE1_IMAGES } from "../content";
 import { tr } from "../i18n/labels";
-import { extractYouTubeId } from "../utils/mediaUrl";
 import { Ionicons } from "./Icon";
 
 export function PulsingDot({ size = 8, color = "#FFFFFF" }) {
@@ -52,31 +50,6 @@ function HlsPreview({ source }) {
   return <VideoView style={StyleSheet.absoluteFill} player={player} nativeControls={false} contentFit="cover" />;
 }
 
-// Plain YouTube iframe with muted autoplay. Scaled up slightly so YouTube's
-// own title bar and branding fall outside the clipped card.
-function YouTubeMutedEmbed({ videoId }) {
-  const params = `autoplay=1&mute=1&controls=0&playsinline=1&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&loop=1&playlist=${videoId}`;
-  const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-    html,body{margin:0;padding:0;background:#000;overflow:hidden;height:100%}
-    .wrap{position:absolute;inset:-18% -8%;}
-    iframe{width:100%;height:100%;border:0;pointer-events:none}
-  </style></head><body><div class="wrap"><iframe src="https://www.youtube.com/embed/${videoId}?${params}" allow="autoplay; encrypted-media" allowfullscreen></iframe></div></body></html>`;
-
-  return (
-    <WebView
-      source={{ html, baseUrl: "https://shekinahsons.app" }}
-      style={StyleSheet.absoluteFill}
-      originWhitelist={["*"]}
-      mediaPlaybackRequiresUserAction={false}
-      allowsInlineMediaPlayback
-      javaScriptEnabled
-      scrollEnabled={false}
-      androidLayerType="hardware"
-      pointerEvents="none"
-    />
-  );
-}
-
 // Muted, auto-playing mini player shown at the top of Home while a service
 // is live. Tapping anywhere opens the full Live screen with sound and chat.
 export function LivePreview({ live, onOpen, appLanguage = "en", fallbackImage }) {
@@ -84,7 +57,6 @@ export function LivePreview({ live, onOpen, appLanguage = "en", fallbackImage })
   const playerWidth = width - 32;
   const playerHeight = Math.round((playerWidth * 9) / 16);
 
-  const videoId = extractYouTubeId(live?.youtubeId || live?.youtubeUrl || "");
   const provider = String(live?.provider || "").trim().toLowerCase();
   const hls = String(live?.playbackHlsUrl || "").trim();
   const useHls = provider === "cloudflare_stream" && Boolean(hls);
@@ -101,8 +73,6 @@ export function LivePreview({ live, onOpen, appLanguage = "en", fallbackImage })
       <View style={{ height: playerHeight, backgroundColor: "#000" }} pointerEvents="none">
         {useHls ? (
           <HlsPreview source={hls} />
-        ) : videoId ? (
-          <YouTubeMutedEmbed videoId={videoId} />
         ) : (
           <Image source={{ uri: fallbackImage || PHASE1_IMAGES.crowd }} style={StyleSheet.absoluteFill} />
         )}

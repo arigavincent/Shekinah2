@@ -2,13 +2,16 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useEvent } from "expo";
 import { VideoView, useVideoPlayer } from "expo-video";
-import * as ScreenOrientation from "expo-screen-orientation";
 
 import { C, makeThemedStyles } from "../constants/theme";
 import { getPlaybackProgress, savePlaybackProgress } from "../services/playbackProgressStore";
 import { Ionicons } from "./Icon";
 
 const SAVE_EVERY_SECONDS = 5;
+
+// Full screen opens in its own window on Android, so the orientation has to
+// be set here rather than by locking the app's screen.
+export const FULLSCREEN_LANDSCAPE = { enable: true, orientation: "landscape", autoExitOnRotate: false };
 
 // Our own sermon video player for Cloudflare Stream (HLS) and uploaded MP4s.
 // Resumes from the last saved position and keeps it updated while playing.
@@ -71,11 +74,9 @@ export function SermonVideoPlayer({ sermon, source, poster, height }) {
         style={StyleSheet.absoluteFill}
         player={player}
         nativeControls
-        allowsFullscreen
         allowsPictureInPicture
         contentFit="contain"
-        onFullscreenEnter={() => ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {})}
-        onFullscreenExit={() => ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})}
+        fullscreenOptions={FULLSCREEN_LANDSCAPE}
       />
 
       {loading && !isPlaying ? (

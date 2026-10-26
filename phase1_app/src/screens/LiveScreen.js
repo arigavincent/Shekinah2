@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import { Ionicons } from "../components/Icon";
 import { VideoView, useVideoPlayer } from "expo-video";
-import YoutubePlayer from "react-native-youtube-iframe";
 import { WebView } from "react-native-webview";
 
 import { PHASE1_IMAGES } from "../content";
@@ -30,9 +29,10 @@ import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { LinearGradient } from "expo-linear-gradient";
+import * as ScreenOrientation from "expo-screen-orientation";
+import { FULLSCREEN_LANDSCAPE } from "../components/SermonVideoPlayer";
 import { SectionHeader } from "../components/SectionHeader";
 import {
-  extractYouTubeId,
   isVideoUrl,
   sermonMediaUrl,
   sermonThumbnail
@@ -114,12 +114,17 @@ const lv = makeThemedStyles(C => ({
   rowMeta: { color: C.muted, fontSize: 12.5, fontFamily: C.fontBody, marginTop: 5 }
 }));
 
-function youtubeWatchUrl(videoId) {
-  return `https://www.youtube.com/watch?v=${videoId}`;
-}
-
 function CloudflareWhepPlayer({ source, height }) {
   const [fullscreen, setFullscreen] = useState(false);
+
+  // This full screen is a modal in the app's own window, so rotate the app.
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, [fullscreen]);
   const whepUrl = JSON.stringify(source);
 
   const html = `
@@ -421,7 +426,7 @@ function CloudflareLivePlayer({ source, height, playing }) {
     <VideoView
       style={{ width: "100%", height }}
       player={player}
-      allowsFullscreen
+      fullscreenOptions={FULLSCREEN_LANDSCAPE}
       allowsPictureInPicture
       nativeControls
     />
@@ -430,7 +435,7 @@ function CloudflareLivePlayer({ source, height, playing }) {
 
 function playablePastService(item) {
   const mediaUrl = sermonMediaUrl(item);
-  return item?.type === "video" && Boolean(extractYouTubeId(mediaUrl) || isVideoUrl(mediaUrl));
+  return item?.type === "video" && isVideoUrl(mediaUrl);
 }
 
 function mergeUniqueMessages(existing, incoming) {
@@ -482,7 +487,6 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const [chatExpanded, setChatExpanded] = useState(true);
   const [socketState, setSocketState] = useState("disconnected");
   const live = data.live;
-  const liveVideoId = extractYouTubeId(live.youtubeId || live.youtubeUrl || "");
   const liveProvider = String(live.provider || "").trim().toLowerCase();
   const livePlaybackHlsUrl = String(live.playbackHlsUrl || "").trim();
   const liveWebRtcPlaybackUrl = String(live.webRtcPlaybackUrl || "").trim();
@@ -496,11 +500,6 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       ...item,
       thumbnail: sermonThumbnail(item, PHASE1_IMAGES.sermon)
     }));
-
-  function openLiveOnYouTube() {
-    if (!liveVideoId) return;
-    Linking.openURL(youtubeWatchUrl(liveVideoId));
-  }
 
   useEffect(() => {
     let active = true;
@@ -833,16 +832,10 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                     height={liveStageHeight}
                     playing={playing}
                   />
-                ) : liveVideoId ? (
-                  <YoutubePlayer
-                    height={liveStageHeight}
-                    width={playerWidth}
-                    play={playing}
-                    videoId={liveVideoId}
-                  />
                 ) : (
                   <View style={[s.videoOverlay, { height: liveStageHeight }]}>
                     <Text style={s.liveNow}>LIVE NOW</Text>
+                    <Text style={[s.liveStageMeta, { marginTop: 10 }]}>{tr(appLanguage, "The live video will appear here shortly.")}</Text>
                   </View>
                 )}
 
@@ -872,11 +865,6 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
                           color={C.textOnBrand}
                         />
                       </Pressable>
-                      {liveVideoId ? (
-                        <Pressable style={s.liveStageActionBtn} onPress={openLiveOnYouTube}>
-                          <Ionicons name="logo-youtube" size={18} color={C.textOnBrand} />
-                        </Pressable>
-                      ) : null}
                     </View>
                   </View>
 

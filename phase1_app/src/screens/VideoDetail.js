@@ -26,7 +26,6 @@ import {
   registerDownload
 } from "../services/downloadsStore";
 import {
-  extractYouTubeId,
   isAudioUrl,
   isVideoUrl,
   resolveMediaUrl,
@@ -52,9 +51,6 @@ function safeVideoFileName(sermon, url) {
   return `${sermon?.id || slug}-${slug}${extension}`;
 }
 
-function youtubeWatchUrl(videoId) {
-  return `https://www.youtube.com/watch?v=${videoId}`;
-}
 
 export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLanguage = "en" }) {
   const { data } = useContent();
@@ -70,19 +66,13 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
   const rawUrl = sermonMediaUrl(sermon);
   const resolvedUrl = resolveMediaUrl(rawUrl);
 
-  const videoId = extractYouTubeId(rawUrl);
-  const hasYouTubeVideo = Boolean(videoId);
-  const hasDirectVideo = Boolean(rawUrl && !hasYouTubeVideo && isVideoUrl(rawUrl));
+  const hasDirectVideo = Boolean(rawUrl && isVideoUrl(rawUrl));
   const hasAudio = Boolean(rawUrl && isAudioUrl(rawUrl));
   // Streams (HLS) play adaptively online; only single-file videos can be saved offline.
   const canDownload = hasDirectVideo && !/\.m3u8(\?|$)/i.test(resolvedUrl);
 
   const thumbnail = sermonThumbnail(sermon, PHASE1_IMAGES.sermon);
 
-  function openYoutubeExternal() {
-    if (!videoId) return;
-    Linking.openURL(youtubeWatchUrl(videoId));
-  }
 
   useEffect(() => {
     async function hydrateDownloadedVideo() {
@@ -217,16 +207,16 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
         ) : (
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => (hasAudio ? go("AudioPlayer", sermon) : hasYouTubeVideo ? openYoutubeExternal() : null)}
+            onPress={() => (hasAudio ? go("AudioPlayer", sermon) : null)}
             accessibilityRole="button"
           >
             <Image source={{ uri: thumbnail }} style={StyleSheet.absoluteFill} />
             <View style={vd.overlay}>
               <View style={vd.bigPlay}>
-                <Ionicons name={hasAudio ? "musical-notes" : hasYouTubeVideo ? "logo-youtube" : "play"} size={28} color={C.textOnAccent} />
+                <Ionicons name={hasAudio ? "musical-notes" : "play"} size={28} color={C.textOnAccent} />
               </View>
               <Text style={vd.overlayText}>
-                {hasAudio ? "Listen to this sermon" : hasYouTubeVideo ? "Open in YouTube" : "No playable media yet"}
+                {hasAudio ? "Listen to this sermon" : "This sermon isn't available yet"}
               </Text>
             </View>
           </Pressable>
@@ -249,7 +239,7 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
         </Pressable>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={vd.chips}>
-          <ActionChip icon="share-social-outline" label="Share" onPress={() => Share.share({ message: `${sermon?.title}${videoId ? `\n${youtubeWatchUrl(videoId)}` : ""}` })} />
+          <ActionChip icon="share-social-outline" label="Share" onPress={() => Share.share({ message: `${sermon?.title}${sermon?.speaker ? ` · ${sermon.speaker}` : ""}` })} />
           {canDownload ? (
             <ActionChip
               icon={downloadedUri ? "checkmark-circle" : "download-outline"}
@@ -258,7 +248,6 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
               onPress={downloadVideo}
             />
           ) : null}
-          {hasYouTubeVideo ? <ActionChip icon="logo-youtube" label="Watch on YouTube" onPress={openYoutubeExternal} /> : null}
           {hasAudio ? <ActionChip icon="musical-notes-outline" label="Listen" onPress={() => go("AudioPlayer", sermon)} /> : null}
         </ScrollView>
 
@@ -270,7 +259,6 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
           <View style={vd.details}>
             {sermon?.category ? <Text style={vd.category}>{sermon.category}</Text> : null}
             <Text style={vd.description}>{sermon?.description || "No description for this sermon yet."}</Text>
-            {hasYouTubeVideo ? <Text style={vd.hint}>Downloads aren't available for YouTube videos.</Text> : null}
           </View>
         ) : null}
 

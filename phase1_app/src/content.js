@@ -13,7 +13,7 @@ export const PHASE1_IMAGES = {
   clip: "https://images.unsplash.com/photo-1445232867465-97891f9b5294?q=80&w=700"
 };
 
-export const YOUTUBE_SERMONS = [
+export const SAMPLE_VIDEO_SERMONS = [
   {
     id: "yt-asQFM1unI8Q",
     type: "video",
@@ -22,10 +22,10 @@ export const YOUTUBE_SERMONS = [
     date: "June 1, 2026",
     category: "Teachings",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/asQFM1unI8Q/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/6c7cf9b3c3a29f6b.jpg",
     duration: "22:47",
-    mediaUrl: "https://www.youtube.com/watch?v=asQFM1unI8Q",
-    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/83bed1f201aab1c9.mp4",
+    description: "A Shekinah Sons Global teaching from Shekinah Sons Global."
   },
   {
     id: "yt-zQvxJFkFXC8",
@@ -35,10 +35,10 @@ export const YOUTUBE_SERMONS = [
     date: "May 31, 2026",
     category: "Teachings",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/zQvxJFkFXC8/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/2d22a93c6197a90c.jpg",
     duration: "20:52",
-    mediaUrl: "https://www.youtube.com/watch?v=zQvxJFkFXC8",
-    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/4896fad72f1623c8.mp4",
+    description: "A Shekinah Sons Global teaching from Shekinah Sons Global."
   },
   {
     id: "yt-AFIkyeAcRwE",
@@ -48,10 +48,10 @@ export const YOUTUBE_SERMONS = [
     date: "May 30, 2026",
     category: "Teachings",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/AFIkyeAcRwE/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/d39f98f7edeafa4e.jpg",
     duration: "12:11",
-    mediaUrl: "https://www.youtube.com/watch?v=AFIkyeAcRwE",
-    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/c0b161a88669d50b.mp4",
+    description: "A Shekinah Sons Global teaching from Shekinah Sons Global."
   },
   {
     id: "yt-NDC2E4YkHEM",
@@ -61,10 +61,10 @@ export const YOUTUBE_SERMONS = [
     date: "May 29, 2026",
     category: "Teachings",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/NDC2E4YkHEM/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/fb357218c781a667.jpg",
     duration: "11:21",
-    mediaUrl: "https://www.youtube.com/watch?v=NDC2E4YkHEM",
-    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/7ff05120be0bac35.mp4",
+    description: "A Shekinah Sons Global teaching from Shekinah Sons Global."
   },
   {
     id: "yt-kyUeStQaaRM",
@@ -74,10 +74,10 @@ export const YOUTUBE_SERMONS = [
     date: "May 28, 2026",
     category: "Teachings",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/kyUeStQaaRM/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/459545fb9f908beb.jpg",
     duration: "21:18",
-    mediaUrl: "https://www.youtube.com/watch?v=kyUeStQaaRM",
-    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/27e162ba543d52f0.mp4",
+    description: "A Shekinah Sons Global teaching from Shekinah Sons Global."
   },
   {
     id: "yt-LKZTLv7VEwo",
@@ -87,10 +87,10 @@ export const YOUTUBE_SERMONS = [
     date: "May 27, 2026",
     category: "Teachings",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/LKZTLv7VEwo/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/7d069effea285d7a.jpg",
     duration: "21:00",
-    mediaUrl: "https://www.youtube.com/watch?v=LKZTLv7VEwo",
-    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/bd2bac42428e5ba6.mp4",
+    description: "A Shekinah Sons Global teaching from Shekinah Sons Global."
   },
   {
     id: "yt-CjddPxMCCDk",
@@ -100,10 +100,10 @@ export const YOUTUBE_SERMONS = [
     date: "May 26, 2026",
     category: "Faith",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/CjddPxMCCDk/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/04e5bfecfe8c084a.jpg",
     duration: "11:01",
-    mediaUrl: "https://www.youtube.com/watch?v=CjddPxMCCDk",
-    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/c26b3e0a22593ada.mp4",
+    description: "A Shekinah Sons Global teaching from Shekinah Sons Global."
   },
   {
     id: "yt-IN_seTRPh9o",
@@ -113,10 +113,10 @@ export const YOUTUBE_SERMONS = [
     date: "May 25, 2026",
     category: "Sonship",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/IN_seTRPh9o/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/647a5d352755617b.jpg",
     duration: "19:05",
-    mediaUrl: "https://www.youtube.com/watch?v=IN_seTRPh9o",
-    description: "A Shekinah Sons Global teaching from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/e9829008fdad1e00.mp4",
+    description: "A Shekinah Sons Global teaching from Shekinah Sons Global."
   },
   {
     id: "yt-xndGDMTco7U",
@@ -126,10 +126,10 @@ export const YOUTUBE_SERMONS = [
     date: "May 24, 2026",
     category: "Sonship",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/xndGDMTco7U/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/e40699aa131200ae.jpg",
     duration: "8:21",
-    mediaUrl: "https://www.youtube.com/watch?v=xndGDMTco7U",
-    description: "A Shekinah Sons Global teaching recap from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/f4086c681b60eb28.mp4",
+    description: "A Shekinah Sons Global teaching recap from Shekinah Sons Global."
   },
   {
     id: "yt-jxRTo57d4zY",
@@ -139,10 +139,10 @@ export const YOUTUBE_SERMONS = [
     date: "November 6, 2025",
     category: "Teachings",
     live: false,
-    thumbnail: "https://i.ytimg.com/vi/jxRTo57d4zY/hqdefault.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/c74f43009d9695a3.jpg",
     duration: "9:57",
-    mediaUrl: "https://www.youtube.com/watch?v=jxRTo57d4zY",
-    description: "A Shekinah Sons Global teaching recap from the official YouTube channel."
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/d3eac397e92e152e.mp4",
+    description: "A Shekinah Sons Global teaching recap from Shekinah Sons Global."
   }
 ];
 
@@ -169,85 +169,85 @@ export const SAMPLE_AUDIO_SERMONS = [
   description: "Sample audio track for previewing the app offline."
 }));
 
-export const YOUTUBE_CLIPS = [
+export const SAMPLE_RECAPS = [
   {
     id: "clip-zXKCTnNFgwU",
     title: "2025 Highlight",
-    image: "https://i.ytimg.com/vi/zXKCTnNFgwU/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/zXKCTnNFgwU/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=zXKCTnNFgwU",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/1404c6ceeae3f82d.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/1404c6ceeae3f82d.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/65df628b0e2f51ae.mp4",
     duration: "1:15"
   },
   {
     id: "clip-zMKSJPNeIdc",
     title: "Generation Gather - November Edition",
-    image: "https://i.ytimg.com/vi/zMKSJPNeIdc/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/zMKSJPNeIdc/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=zMKSJPNeIdc",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/72f76cce1ff7db05.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/72f76cce1ff7db05.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/fe0e27fa76dde8b1.mp4",
     duration: "1:31"
   },
   {
     id: "clip-xndGDMTco7U",
     title: "Life As A Son Of God Recap",
-    image: "https://i.ytimg.com/vi/xndGDMTco7U/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/xndGDMTco7U/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=xndGDMTco7U",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/e40699aa131200ae.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/e40699aa131200ae.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/f4086c681b60eb28.mp4",
     duration: "8:21"
   },
   {
     id: "clip-5aPZqmTNCAU",
     title: "November Endmonth Event Invitation",
-    image: "https://i.ytimg.com/vi/5aPZqmTNCAU/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/5aPZqmTNCAU/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=5aPZqmTNCAU",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/abe84c4adcc9cc26.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/abe84c4adcc9cc26.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/791c838693abe6d2.mp4",
     duration: "1:13"
   },
   {
     id: "clip-jxRTo57d4zY",
     title: "Small Things Matters Recap",
-    image: "https://i.ytimg.com/vi/jxRTo57d4zY/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/jxRTo57d4zY/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=jxRTo57d4zY",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/c74f43009d9695a3.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/c74f43009d9695a3.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/d3eac397e92e152e.mp4",
     duration: "9:57"
   },
   {
     id: "clip-ax6Qu4Ok2uY",
     title: "Jesus 006 - The Person Of The Holy Spirit",
-    image: "https://i.ytimg.com/vi/ax6Qu4Ok2uY/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/ax6Qu4Ok2uY/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=ax6Qu4Ok2uY",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/38be23469cd76a41.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/38be23469cd76a41.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/282941c288729a5e.mp4",
     duration: "13:50"
   },
   {
     id: "clip--3pSs4zM8u4",
     title: "Shekinah Sons 6th Anniversary Recap",
-    image: "https://i.ytimg.com/vi/-3pSs4zM8u4/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/-3pSs4zM8u4/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=-3pSs4zM8u4",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/4ceb86e4da718bda.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/4ceb86e4da718bda.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/b72e50062744f1b8.mp4",
     duration: "11:33"
   },
   {
     id: "clip-L0Df46lo8mI",
     title: "Redeemed Future Highlights",
-    image: "https://i.ytimg.com/vi/L0Df46lo8mI/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/L0Df46lo8mI/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=L0Df46lo8mI",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/9034096899cf3606.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/9034096899cf3606.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/d956828cfeb64414.mp4",
     duration: "1:38"
   },
   {
     id: "clip-Pb2UWuJfiWE",
     title: "Being Committed To Become",
-    image: "https://i.ytimg.com/vi/Pb2UWuJfiWE/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/Pb2UWuJfiWE/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=Pb2UWuJfiWE",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/80c4cf0c4335d7bb.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/80c4cf0c4335d7bb.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/4d02e3468405d830.mp4",
     duration: "8:21"
   },
   {
     id: "clip-XMlKSE-07Ak",
     title: "The Message Of Sonship Of 2025",
-    image: "https://i.ytimg.com/vi/XMlKSE-07Ak/hqdefault.jpg",
-    thumbnail: "https://i.ytimg.com/vi/XMlKSE-07Ak/hqdefault.jpg",
-    mediaUrl: "https://www.youtube.com/watch?v=XMlKSE-07Ak",
+    image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/3cf267ba81c2b1ee.jpg",
+    thumbnail: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/3cf267ba81c2b1ee.jpg",
+    mediaUrl: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/video/2026/10/cd5a3ab1455c0e31.mp4",
     duration: "11:47"
   }
 ];
@@ -265,7 +265,6 @@ export const DATA = {
     title: "Live Stream",
     viewers: "",
     nextService: "Sunday, 9:00 AM",
-    youtubeId: ""
   },
 
   devotions: [
@@ -298,30 +297,30 @@ export const DATA = {
     }
   ],
 
-  sermons: [...YOUTUBE_SERMONS, ...SAMPLE_AUDIO_SERMONS],
+  sermons: [...SAMPLE_VIDEO_SERMONS, ...SAMPLE_AUDIO_SERMONS],
 
   categories: [
     {
-      id: "cat-youtube-teachings",
+      id: "cat-teachings",
       name: "Teachings",
       count: 7,
-      image: "https://i.ytimg.com/vi/asQFM1unI8Q/hqdefault.jpg"
+      image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/6c7cf9b3c3a29f6b.jpg"
     },
     {
-      id: "cat-youtube-sonship",
+      id: "cat-sonship",
       name: "Sonship",
       count: 2,
-      image: "https://i.ytimg.com/vi/xndGDMTco7U/hqdefault.jpg"
+      image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/e40699aa131200ae.jpg"
     },
     {
       id: "cat-1",
       name: "Faith",
       count: 1,
-      image: "https://i.ytimg.com/vi/CjddPxMCCDk/hqdefault.jpg"
+      image: "https://pub-2b8b5f3f73a14e80bf09b789a9f1b87c.r2.dev/sermons/image/2026/10/04e5bfecfe8c084a.jpg"
     }
   ],
 
-  clips: YOUTUBE_CLIPS,
+  clips: SAMPLE_RECAPS,
 
   events: [
     {

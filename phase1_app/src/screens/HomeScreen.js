@@ -32,7 +32,6 @@ import {
   progressRatio
 } from "../services/playbackProgressStore";
 import {
-  extractYouTubeId,
   isAudioUrl,
   isVideoUrl,
   resolveMediaUrl,
@@ -67,7 +66,7 @@ function isPlayableVideoSermon(item) {
 
   const mediaUrl = sermonMediaUrl(item);
 
-  return Boolean(isVideoUrl(mediaUrl) || extractYouTubeId(mediaUrl));
+  return isVideoUrl(mediaUrl);
 }
 
 function isPlayableAudioSermon(item) {
@@ -100,7 +99,7 @@ function playableClipFromContent(item) {
     type: "video",
     speaker: item?.speaker || "Shekinah Sons Global",
     category: item?.category || "Clips",
-    date: item?.date || item?.duration || "YouTube Clip",
+    date: item?.date || item?.duration || "Recap",
     thumbnail: item?.thumbnail || item?.image,
     image: item?.image || item?.thumbnail,
     description: item?.description || "Short clip from Shekinah Sons Global.",
@@ -380,7 +379,7 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
     .map(playableClipFromContent)
     .filter(item => {
       const mediaUrl = sermonMediaUrl(item);
-      return Boolean(extractYouTubeId(mediaUrl) || isVideoUrl(mediaUrl));
+      return isVideoUrl(mediaUrl);
     });
   const continuingSermons = useMemo(() => {
     return sermons

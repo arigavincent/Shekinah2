@@ -1,4 +1,5 @@
 const SWAHILI_LABELS = {
+  "The live video will appear here shortly.": "Video ya moja kwa moja itaonekana hapa hivi karibuni.",
   "Nothing listed yet": "Bado hakuna kilichoorodheshwa",
   "Raising sons who carry the presence of God to the nations.": "Kuinua wana wanaobeba uwepo wa Mungu kwa mataifa.",
   "Tap to watch": "Gusa kutazama",
@@ -102,7 +103,6 @@ const SWAHILI_LABELS = {
   "Past Services": "Ibada Zilizopita",
   "No past services found": "Hakuna ibada zilizopita zilizopatikana",
   "Past services will appear here.": "Ibada zilizopita zitaonekana hapa.",
-  "Open YouTube": "Fungua YouTube",
   Pause: "Simamisha",
   Play: "Cheza",
   Amen: "Amina",
