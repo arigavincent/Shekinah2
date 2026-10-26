@@ -1,4 +1,7 @@
 const SWAHILI_LABELS = {
+  "Tap to watch": "Gusa kutazama",
+  "Tap to watch with sound and join the chat": "Gusa kutazama kwa sauti na ujiunge na mazungumzo",
+  Watch: "Tazama",
   Recaps: "Muhtasari",
   "Search recaps...": "Tafuta muhtasari...",
   "No recaps found": "Hakuna muhtasari",

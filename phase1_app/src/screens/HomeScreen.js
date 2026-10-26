@@ -14,13 +14,15 @@ import { StyleSheet } from "react-native";
 import { Ionicons } from "../components/Icon";
 
 import { useContent } from "../providers/ContentProvider";
-import { AUDIO_COVER, PHASE1_IMAGES } from "../content";
+import { PHASE1_IMAGES } from "../content";
 import { C, makeThemedStyles } from "../constants/theme";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { IconButton } from "../components/IconButton";
 import { SectionHeader } from "../components/SectionHeader";
+import { LivePreview } from "../components/LivePreview";
+import { AudioArt } from "../components/AudioArt";
 import { useDownloadsMap } from "../hooks/useDownloadsMap";
 import { tr } from "../i18n/labels";
 import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
@@ -134,34 +136,6 @@ function Rail({ children, itemWidth, gap = 10 }) {
     >
       {children}
     </ScrollView>
-  );
-}
-
-function LiveBanner({ live, go, appLanguage }) {
-  if (!live?.isLive) return null;
-  const viewers = cleanViewerCount(live?.viewers);
-
-  return (
-    <Pressable
-      onPress={() => go("Live")}
-      style={({ pressed }) => [home.liveBanner, pressed && { opacity: 0.85 }]}
-      accessibilityRole="button"
-      accessibilityLabel={`${tr(appLanguage, "LIVE NOW")}: ${cleanText(live?.title)}`}
-    >
-      <View style={home.livePill}>
-        <View style={home.liveDot} />
-        <Text style={home.livePillText}>{tr(appLanguage, "LIVE")}</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={home.liveTitle} numberOfLines={1}>
-          {cleanText(live?.title) || tr(appLanguage, "Live Stream")}
-        </Text>
-        <Text style={home.liveMeta} numberOfLines={1}>
-          {viewers ? `${viewers} ${tr(appLanguage, "watching")} · ` : ""}{tr(appLanguage, "Join the service now.")}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={C.white} />
-    </Pressable>
   );
 }
 
@@ -287,7 +261,11 @@ function SquareTile({ item, width, onPress, progressEntry, downloadEntry, appLan
       accessibilityLabel={item.title}
     >
       <View>
-        <Image source={{ uri: sermonThumbnail(item, item.type === "audio" ? AUDIO_COVER : PHASE1_IMAGES.sermon) }} style={[home.squareArt, { width, height: width }]} />
+        {item.type === "audio" ? (
+          <AudioArt item={item} size={width} />
+        ) : (
+          <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={[home.squareArt, { width, height: width }]} />
+        )}
         {badge ? (
           <View style={home.squareBadge}>
             <Ionicons name={badge} size={14} color={C.textOnAccent} />
@@ -450,7 +428,14 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
           />
         }
       >
-        <LiveBanner live={data.live} go={go} appLanguage={appLanguage} />
+        {data.live?.isLive ? (
+          <LivePreview
+            live={data.live}
+            onOpen={() => go("Live")}
+            appLanguage={appLanguage}
+            fallbackImage={videos[0] ? sermonThumbnail(videos[0], PHASE1_IMAGES.sermon) : undefined}
+          />
+        ) : null}
 
         <DevotionCarousel devotions={devotions} go={go} appLanguage={appLanguage} />
 

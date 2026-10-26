@@ -66,6 +66,7 @@ import { SkipForwardIcon } from "phosphor-react-native/src/icons/SkipForward";
 import { SmileyIcon } from "phosphor-react-native/src/icons/Smiley";
 import { StackIcon } from "phosphor-react-native/src/icons/Stack";
 import { SpeakerHighIcon } from "phosphor-react-native/src/icons/SpeakerHigh";
+import { SpeakerSlashIcon } from "phosphor-react-native/src/icons/SpeakerSlash";
 import { SunHorizonIcon } from "phosphor-react-native/src/icons/SunHorizon";
 import { TextAaIcon } from "phosphor-react-native/src/icons/TextAa";
 import { TrashIcon } from "phosphor-react-native/src/icons/Trash";
@@ -151,6 +152,7 @@ const MAP = {
   search: MagnifyingGlassIcon,
   sunny: SunHorizonIcon,
   "volume-high": SpeakerHighIcon,
+  "volume-mute": SpeakerSlashIcon,
   send: PaperPlaneRightIcon,
   settings: GearSixIcon,
   "share-social": ShareNetworkIcon,

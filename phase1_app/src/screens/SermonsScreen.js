@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "../components/Icon";
 import { useContent } from "../providers/ContentProvider";
 
-import { AUDIO_COVER, PHASE1_IMAGES } from "../content";
+import { PHASE1_IMAGES } from "../content";
 import { C, makeThemedStyles } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
@@ -21,6 +21,7 @@ import { TopBar } from "../components/TopBar";
 import { IconButton } from "../components/IconButton";
 import { Tabs } from "../components/Tabs";
 import { SearchBar } from "../components/SearchBar";
+import { AudioArt } from "../components/AudioArt";
 import { useDownloadsMap } from "../hooks/useDownloadsMap";
 import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
 import {
@@ -195,7 +196,7 @@ function AudioRow({ item, openSermon, progressEntry, downloadEntry, appLanguage 
       accessibilityRole="button"
       accessibilityLabel={`Audio sermon, ${item.title}`}
     >
-      <Image source={{ uri: sermonThumbnail(item, AUDIO_COVER) }} style={st.audioThumb} />
+      <AudioArt item={item} size={88} variant="thumb" radius={12} />
 
       <View style={st.rowBody}>
         <Text style={st.rowTitle} numberOfLines={2}>{item.title}</Text>
