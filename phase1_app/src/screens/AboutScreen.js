@@ -1,23 +1,24 @@
 import React, { useMemo } from "react";
 import {
-  ImageBackground,
+  Image,
   Linking,
   Pressable,
   RefreshControl,
   ScrollView,
+  StyleSheet,
   Text,
   View
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "../components/Icon";
 
-import { PHASE1_IMAGES } from "../content";
-import { C } from "../constants/theme";
+import { ANDROID_STATUS_BAR_HEIGHT, C, GOLD_GRADIENT, makeThemedStyles } from "../constants/theme";
+import { brandMark } from "../constants/assets";
+import { useNav } from "../navigation/NavContext";
+import { tr } from "../i18n/labels";
 import { useContent } from "../providers/ContentProvider";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
-import { TopBar } from "../components/TopBar";
-import { SectionHeader } from "../components/SectionHeader";
-import { Horizontal } from "../components/Horizontal";
 
 function cleanPhone(value) {
   return String(value || "").replace(/\s+/g, "");
@@ -59,349 +60,212 @@ function openUrl(url) {
   Linking.openURL(url).catch(() => {});
 }
 
-function ContactButton({ icon, label, disabled, onPress }) {
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      style={{
-        flex: 1,
-        minHeight: 44,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: disabled ? C.line : C.gold,
-        backgroundColor: disabled ? C.surface2 : C.goldSoft,
-        alignItems: "center",
-        justifyContent: "center",
-        flexDirection: "row",
-        gap: 6,
-        opacity: disabled ? 0.45 : 1,
-        paddingHorizontal: 8
-      }}
-    >
-      <Ionicons name={icon} size={16} color={disabled ? C.muted : C.gold} />
-      <Text
-        style={{
-          color: disabled ? C.muted : C.gold,
-          fontSize: 12,
-          fontWeight: "900"
-        }}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+const MARBLE = require("../../assets/branding/marble.jpg");
 
-function InfoCard({ icon, title, body }) {
+function Eyebrow({ label, title }) {
   return (
-    <View style={s.plainCard}>
-      <View style={s.rowTight}>
-        <View
-          style={{
-            width: 42,
-            height: 42,
-            borderRadius: 21,
-            backgroundColor: C.goldSoft,
-            borderWidth: 1,
-            borderColor: C.gold,
-            alignItems: "center",
-            justifyContent: "center"
-          }}
-        >
-          <Ionicons name={icon} size={20} color={C.gold} />
-        </View>
-
-        <View style={{ flex: 1 }}>
-          <Text style={[s.rowTitle, { color: C.white }]}>{title}</Text>
-          <Text style={[s.mutedText, { color: C.muted }]}>{body}</Text>
-        </View>
+    <View style={ab.eyebrowWrap}>
+      <View style={ab.eyebrowRow}>
+        <View style={ab.eyebrowLine} />
+        <Text style={ab.eyebrow}>{label}</Text>
       </View>
+      <Text style={ab.sectionTitle} accessibilityRole="header">{title}</Text>
     </View>
   );
 }
 
-function BranchContactCard({ branch }) {
+function IconTile({ icon }) {
+  return (
+    <View style={ab.iconTile}>
+      <Ionicons name={icon} size={20} color={C.gold} />
+    </View>
+  );
+}
+
+function BranchCard({ branch }) {
   const call = callUrl(branch.phone);
   const whatsapp = whatsappUrl(branch.phone);
-  const directions = mapUrl(branch);
 
   return (
-    <View
-      style={[
-        s.contactCard,
-        {
-          width: 290,
-          backgroundColor: C.surface,
-          borderWidth: 1,
-          borderColor: C.line
-        }
-      ]}
-    >
-      <Text style={[s.cardTitle, { color: C.white }]}>{branch.name}</Text>
-
-      <View style={[s.rowTight, { marginTop: 10 }]}>
-        <Ionicons name="location-outline" size={17} color={C.gold} />
-        <Text style={[s.mutedText, { color: C.muted, flex: 1 }]}>{branch.address}</Text>
-      </View>
-
-      <View style={[s.rowTight, { marginTop: 10 }]}>
-        <Ionicons name="time-outline" size={17} color={C.gold} />
-        <Text style={[s.mutedText, { color: C.muted, flex: 1 }]}>{branch.services}</Text>
-      </View>
-
-      <View style={[s.rowTight, { marginTop: 10 }]}>
-        <Ionicons name="call-outline" size={17} color={C.gold} />
-        <Text style={[s.goldSmall, { color: C.gold, flex: 1 }]}>{branch.phone}</Text>
-      </View>
-
-      <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
-        <ContactButton
-          icon="navigate-outline"
-          label="Map"
-          onPress={() => openUrl(directions)}
-        />
-
-        <ContactButton
-          icon="call-outline"
-          label="Call"
-          disabled={!call}
-          onPress={() => openUrl(call)}
-        />
-
-        <ContactButton
-          icon="logo-whatsapp"
-          label="WhatsApp"
-          disabled={!whatsapp}
-          onPress={() => openUrl(whatsapp)}
-        />
+    <View style={ab.card}>
+      <View style={ab.cardRow}>
+        <IconTile icon="location-outline" />
+        <View style={{ flex: 1 }}>
+          <Text style={ab.cardTitle}>{branch.name}</Text>
+          {branch.address ? <Text style={ab.cardText}>{branch.address}</Text> : null}
+          {branch.services ? (
+            <View style={ab.timeChip}>
+              <Ionicons name="time-outline" size={13} color={C.accentText} />
+              <Text style={ab.timeChipText}>{branch.services}</Text>
+            </View>
+          ) : null}
+          <View style={ab.linkRow}>
+            <Pressable onPress={() => openUrl(mapUrl(branch))} hitSlop={8} style={ab.link} accessibilityRole="link">
+              <Ionicons name="navigate-outline" size={14} color={C.gold} />
+              <Text style={ab.linkText}>Get directions</Text>
+            </Pressable>
+            {call ? (
+              <Pressable onPress={() => openUrl(call)} hitSlop={8} style={ab.link} accessibilityRole="link">
+                <Ionicons name="call-outline" size={14} color={C.gold} />
+                <Text style={ab.linkText}>Call</Text>
+              </Pressable>
+            ) : null}
+            {whatsapp ? (
+              <Pressable onPress={() => openUrl(whatsapp)} hitSlop={8} style={ab.link} accessibilityRole="link">
+                <Ionicons name="logo-whatsapp" size={14} color={C.gold} />
+                <Text style={ab.linkText}>WhatsApp</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
       </View>
     </View>
   );
 }
 
-function PlatformCard({ item }) {
-  const url = item?.url || item?.link || "";
-  const title = item?.title || item?.name || "Platform";
-  const description = item?.description || item?.handle || url;
-
+function ContactRow({ icon, title, value, onPress, disabled }) {
   return (
     <Pressable
-      style={[
-        s.plainCard,
-        {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12
-        }
-      ]}
-      onPress={() => openUrl(url)}
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [ab.card, ab.contactRow, disabled && { opacity: 0.45 }, pressed && { backgroundColor: C.surface2 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}${value ? `, ${value}` : ""}`}
     >
-      <View
-        style={{
-          width: 42,
-          height: 42,
-          borderRadius: 21,
-          backgroundColor: C.goldSoft,
-          borderWidth: 1,
-          borderColor: C.gold,
-          alignItems: "center",
-          justifyContent: "center"
-        }}
-      >
-        <Ionicons name="globe-outline" size={20} color={C.gold} />
-      </View>
-
+      <IconTile icon={icon} />
       <View style={{ flex: 1 }}>
-        <Text style={[s.rowTitle, { color: C.white }]}>{title}</Text>
-        <Text style={[s.mutedText, { color: C.muted }]} numberOfLines={2}>
-          {description}
-        </Text>
+        <Text style={ab.cardTitle}>{title}</Text>
+        {value ? <Text style={ab.cardText} numberOfLines={1}>{value}</Text> : null}
       </View>
-
-      <Ionicons name="open-outline" size={18} color={C.muted} />
+      <Ionicons name="open-outline" size={18} color={C.faint} />
     </Pressable>
   );
 }
 
 export function AboutScreen({ go, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
+  const { goBack } = useNav();
 
   const branches = Array.isArray(data.branches) ? data.branches : [];
-  const platforms = Array.isArray(data.platforms) ? data.platforms : [];
   const about = data.about || {};
-
-  const primaryBranch = branches[0] || {};
-  const primaryPhone = primaryBranch.phone || "";
-  const primaryEmail =
-    about.email ||
-    data.contactEmail ||
-    "info@shekinahsonsglobal.org";
-
-  const contactSummary = useMemo(() => {
-    return (
-      about.contactSummary ||
-      "Visit one of our branches, follow our platforms, or connect with the church through the contact details provided in the app."
-    );
-  }, [about]);
+  const primaryPhone = branches[0]?.phone || "";
+  const primaryEmail = about.email || data.contactEmail || "info@shekinahsonsglobal.org";
 
   return (
     <Screen>
-      <TopBar title="About & Contact" go={go} back="Home" appLanguage={appLanguage} />
-
       <ScrollView
-        contentContainerStyle={s.scrollPad}
+        contentContainerStyle={{ paddingBottom: 150 }}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={loading}
-            onRefresh={reload}
-            tintColor={C.gold}
-            colors={[C.gold]}
-            progressBackgroundColor={C.surface2}
-          />
+          <RefreshControl refreshing={loading} onRefresh={reload} tintColor={C.gold} colors={[C.gold]} progressBackgroundColor={C.surface2} />
         }
       >
-        <ImageBackground
-          source={{ uri: PHASE1_IMAGES.crowd }}
-          style={{
-            minHeight: 250,
-            borderRadius: 22,
-            overflow: "hidden",
-            justifyContent: "flex-end",
-            backgroundColor: C.surface,
-            marginBottom: 16
-          }}
-          imageStyle={{ opacity: 0.78 }}
-        >
-          <View
-            style={{
-              position: "absolute",
-              top: 0,
-              right: 0,
-              bottom: 0,
-              left: 0,
-              backgroundColor: "rgba(0,0,0,0.52)"
-            }}
+        <View style={ab.hero}>
+          <Image source={MARBLE} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <LinearGradient
+            colors={["rgba(212,175,55,0.22)", "rgba(0,0,0,0.2)", C.background]}
+            locations={[0, 0.55, 1]}
+            style={StyleSheet.absoluteFill}
           />
+          <Image source={brandMark} style={ab.heroWatermark} />
 
-          <View style={{ padding: 18 }}>
-            <Text style={{ color: C.gold, fontSize: 12, fontWeight: "900" }}>
-              SHEKINAH SONS GLOBAL
-            </Text>
+          <Pressable
+            onPress={() => goBack("Home")}
+            style={({ pressed }) => [ab.backBtn, pressed && { opacity: 0.6 }]}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+          </Pressable>
 
-            <Text style={{ color: C.textOnBrand, fontSize: 30, fontWeight: "900", marginTop: 8 }}>
-              Stay connected to the house.
-            </Text>
-
-            <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 14, fontWeight: "700", marginTop: 10 }}>
-              {contactSummary}
-            </Text>
-
-            <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
-              <Pressable
-                style={{
-                  flex: 1,
-                  backgroundColor: C.gold,
-                  borderRadius: 999,
-                  paddingVertical: 12,
-                  alignItems: "center"
-                }}
-                onPress={() => openUrl(callUrl(primaryPhone))}
-              >
-                <Text style={{ color: C.black, fontWeight: "900" }}>Call Church</Text>
-              </Pressable>
-
-              <Pressable
-                style={{
-                  flex: 1,
-                  backgroundColor: "rgba(255,255,255,0.12)",
-                  borderRadius: 999,
-                  paddingVertical: 12,
-                  alignItems: "center",
-                  borderWidth: 1,
-                  borderColor: "rgba(255,255,255,0.16)"
-                }}
-                onPress={() => openUrl(whatsappUrl(primaryPhone))}
-              >
-                <Text style={{ color: C.textOnBrand, fontWeight: "900" }}>WhatsApp</Text>
-              </Pressable>
+          <View style={ab.heroBody}>
+            <View style={ab.pill}>
+              <Text style={ab.pillText}>ABOUT US</Text>
             </View>
-          </View>
-        </ImageBackground>
-
-        <InfoCard
-          icon="eye-outline"
-          title="Our Vision"
-          body={about.vision || "To raise a generation that walks in the presence of God."}
-        />
-
-        <InfoCard
-          icon="information-circle-outline"
-          title="About The Ministry"
-          body={
-            about.description ||
-            "Shekinah Sons Global is a Christ-centered ministry devoted to worship, prayer, discipleship, and the teaching of God’s word."
-          }
-        />
-
-        <SectionHeader title="Main Contact" />
-
-        <View style={s.plainCard}>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <ContactButton
-              icon="call-outline"
-              label="Call"
-              disabled={!primaryPhone}
-              onPress={() => openUrl(callUrl(primaryPhone))}
-            />
-
-            <ContactButton
-              icon="logo-whatsapp"
-              label="WhatsApp"
-              disabled={!primaryPhone}
-              onPress={() => openUrl(whatsappUrl(primaryPhone))}
-            />
-
-            <ContactButton
-              icon="mail-outline"
-              label="Email"
-              disabled={!primaryEmail}
-              onPress={() => openUrl(mailUrl(primaryEmail))}
-            />
+            <Text style={ab.heroTitle}>SHEKINAH</Text>
+            <Text style={ab.heroSub}>SONS GLOBAL</Text>
+            <Text style={ab.heroLine}>{tr(appLanguage, "Raising sons who carry the presence of God to the nations.")}</Text>
           </View>
         </View>
 
-        {branches.length > 0 ? (
-          <>
-            <SectionHeader title="Branches" onPress={() => go("Branches")} />
+        <View style={ab.content}>
+          <LinearGradient colors={[GOLD_GRADIENT[0], GOLD_GRADIENT[1], GOLD_GRADIENT[2]]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={ab.defCard}>
+            <Text style={ab.defQuote}>”</Text>
+            <View style={ab.defHead}>
+              <Text style={ab.defWord}>shekinah</Text>
+              <View style={ab.defTag}>
+                <Text style={ab.defTagText}>HEBREW · NOUN</Text>
+              </View>
+            </View>
+            <Text style={ab.defSay}>/shə-ˈkī-nə/</Text>
+            <View style={ab.defRule} />
+            <Text style={ab.defMeaning}>The glory of God dwelling among His people; His manifest, abiding presence.</Text>
+          </LinearGradient>
 
-            <Horizontal>
-              {branches.map(branch => (
-                <BranchContactCard key={branch.id} branch={branch} />
-              ))}
-            </Horizontal>
-          </>
-        ) : null}
-
-        {platforms.length > 0 ? (
-          <>
-            <SectionHeader title="Platforms" onPress={() => go("Platforms")} />
-
-            {platforms.slice(0, 4).map(item => (
-              <PlatformCard key={item.id || item.title || item.name} item={item} />
-            ))}
-          </>
-        ) : null}
-
-        <View style={s.formNote}>
-          <Ionicons name="information-circle-outline" size={20} color={C.gold} />
-          <Text style={s.formNoteText}>
-            Branch contact actions use your phone,
-            WhatsApp, email, and maps apps installed on this device.
+          <Eyebrow label="WHO WE ARE" title="Our Vision" />
+          <Text style={ab.body}>{about.vision || "To raise a generation that walks in the presence of God."}</Text>
+          <Text style={[ab.body, { marginTop: 12 }]}>
+            {about.description || "Shekinah Sons Global is a Christ-centered ministry devoted to worship, prayer, discipleship, and the teaching of God’s word."}
           </Text>
+
+          {branches.length > 0 ? (
+            <>
+              <Eyebrow label="FIND US" title="Visit Us" />
+              {branches.map(branch => (
+                <BranchCard key={branch.id || branch.name} branch={branch} />
+              ))}
+            </>
+          ) : null}
+
+          <Eyebrow label="SAY HELLO" title="Get In Touch" />
+          <ContactRow icon="call-outline" title="Call us" value={primaryPhone} disabled={!primaryPhone} onPress={() => openUrl(callUrl(primaryPhone))} />
+          <ContactRow icon="logo-whatsapp" title="WhatsApp" value={primaryPhone} disabled={!primaryPhone} onPress={() => openUrl(whatsappUrl(primaryPhone))} />
+          <ContactRow icon="mail-outline" title="Email us" value={primaryEmail} disabled={!primaryEmail} onPress={() => openUrl(mailUrl(primaryEmail))} />
+          <ContactRow icon="globe-outline" title="Our platforms" value="YouTube, social media and more" onPress={() => go("Platforms")} />
         </View>
       </ScrollView>
+      <LinearGradient colors={["rgba(0,0,0,0.92)", "rgba(0,0,0,0)"]} style={ab.statusScrim} pointerEvents="none" />
     </Screen>
   );
 }
+
+const ab = makeThemedStyles(C => ({
+  hero: { height: 340, justifyContent: "flex-end", overflow: "hidden" },
+  heroWatermark: { position: "absolute", width: 260, height: 260, right: -50, top: ANDROID_STATUS_BAR_HEIGHT + 10, opacity: 0.16 },
+  backBtn: { position: "absolute", top: ANDROID_STATUS_BAR_HEIGHT + 8, left: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center" },
+  heroBody: { paddingHorizontal: 18, paddingBottom: 18 },
+  pill: { alignSelf: "flex-start", backgroundColor: C.accentPressed, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, marginBottom: 12 },
+  pillText: { color: "#FFFFFF", fontSize: 11, fontFamily: C.fontBold, letterSpacing: 1.2 },
+  heroTitle: { color: C.gold, fontSize: 38, fontFamily: C.fontBrand, letterSpacing: 4, lineHeight: 44 },
+  heroSub: { color: C.gold2, fontSize: 18, fontFamily: C.fontBrand, letterSpacing: 7 },
+  heroLine: { color: "rgba(255,255,255,0.78)", fontSize: 14.5, lineHeight: 21, fontFamily: C.fontBody, marginTop: 12 },
+  content: { paddingHorizontal: 16 },
+  defCard: { borderRadius: 20, padding: 20, marginTop: 8, overflow: "hidden" },
+  defQuote: { position: "absolute", right: 16, top: -18, fontSize: 120, color: "rgba(0,0,0,0.12)", fontFamily: C.fontBrand },
+  defHead: { flexDirection: "row", alignItems: "center", gap: 10 },
+  defWord: { color: "#1A1405", fontSize: 28, fontFamily: C.fontScripture },
+  defTag: { backgroundColor: "rgba(0,0,0,0.12)", borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 },
+  defTagText: { color: "#1A1405", fontSize: 10, fontFamily: C.fontBold, letterSpacing: 1 },
+  defSay: { color: "rgba(26,20,5,0.7)", fontSize: 13, fontFamily: C.fontScripture, marginTop: 2 },
+  defRule: { width: 42, height: 2, backgroundColor: "rgba(26,20,5,0.35)", marginVertical: 12 },
+  defMeaning: { color: "#1A1405", fontSize: 15.5, lineHeight: 22, fontFamily: C.fontBold },
+  eyebrowWrap: { marginTop: 32, marginBottom: 12 },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  eyebrowLine: { width: 18, height: 2, backgroundColor: C.gold },
+  eyebrow: { color: C.gold, fontSize: 11, fontFamily: C.fontBold, letterSpacing: 1.6 },
+  sectionTitle: { color: C.white, fontSize: 22, fontFamily: C.fontBold, marginTop: 6 },
+  body: { color: C.white, opacity: 0.82, fontSize: 15, lineHeight: 23, fontFamily: C.fontBody },
+  card: { backgroundColor: C.surface, borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: C.lineStrong },
+  cardRow: { flexDirection: "row", gap: 14 },
+  contactRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  iconTile: { width: 44, height: 44, borderRadius: 12, backgroundColor: C.goldSoft, alignItems: "center", justifyContent: "center" },
+  cardTitle: { color: C.white, fontSize: 15.5, fontFamily: C.fontBold },
+  cardText: { color: C.muted, fontSize: 13.5, lineHeight: 19, fontFamily: C.fontBody, marginTop: 3 },
+  timeChip: { alignSelf: "flex-start", maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.accentSoft, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, marginTop: 8 },
+  timeChipText: { color: C.accentText, fontSize: 12, lineHeight: 17, fontFamily: C.fontMedium, flexShrink: 1 },
+  statusScrim: { position: "absolute", top: 0, left: 0, right: 0, height: ANDROID_STATUS_BAR_HEIGHT + 18 },
+  linkRow: { flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 10 },
+  link: { flexDirection: "row", alignItems: "center", gap: 5 },
+  linkText: { color: C.gold, fontSize: 13, fontFamily: C.fontBold }
+}));
