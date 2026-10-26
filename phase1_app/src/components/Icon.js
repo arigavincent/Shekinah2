@@ -80,6 +80,13 @@ import { WhatsappLogoIcon } from "phosphor-react-native/src/icons/WhatsappLogo";
 import { XCircleIcon } from "phosphor-react-native/src/icons/XCircle";
 import { XIcon } from "phosphor-react-native/src/icons/X";
 import { YoutubeLogoIcon } from "phosphor-react-native/src/icons/YoutubeLogo";
+import { FacebookLogoIcon } from "phosphor-react-native/src/icons/FacebookLogo";
+import { InstagramLogoIcon } from "phosphor-react-native/src/icons/InstagramLogo";
+import { XLogoIcon } from "phosphor-react-native/src/icons/XLogo";
+import { TiktokLogoIcon } from "phosphor-react-native/src/icons/TiktokLogo";
+import { TelevisionIcon } from "phosphor-react-native/src/icons/Television";
+import { RadioIcon } from "phosphor-react-native/src/icons/Radio";
+import { LinkSimpleIcon } from "phosphor-react-native/src/icons/LinkSimple";
 
 // Ionicons base name -> Phosphor icon. "-outline" names render the regular
 // (stroked) weight, plain names render the filled weight, matching how the
@@ -127,6 +134,13 @@ const MAP = {
   location: MapPinIcon,
   "logo-whatsapp": WhatsappLogoIcon,
   "logo-youtube": YoutubeLogoIcon,
+  "logo-facebook": FacebookLogoIcon,
+  "logo-instagram": InstagramLogoIcon,
+  "logo-twitter": XLogoIcon,
+  "logo-tiktok": TiktokLogoIcon,
+  tv: TelevisionIcon,
+  "radio-set": RadioIcon,
+  link: LinkSimpleIcon,
   mail: EnvelopeIcon,
   megaphone: MegaphoneIcon,
   menu: ListIcon,

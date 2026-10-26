@@ -1,4 +1,5 @@
 const SWAHILI_LABELS = {
+  "Nothing listed yet": "Bado hakuna kilichoorodheshwa",
   "Raising sons who carry the presence of God to the nations.": "Kuinua wana wanaobeba uwepo wa Mungu kwa mataifa.",
   "Tap to watch": "Gusa kutazama",
   "Tap to watch with sound and join the chat": "Gusa kutazama kwa sauti na ujiunge na mazungumzo",
