@@ -79,6 +79,13 @@ function handlePlaybackStatus(status) {
   if (restoredForUrl !== activeMediaUrl) {
     restoredForUrl = activeMediaUrl;
     restoreSavedPosition(durationMs).catch(() => {});
+    // Once loaded, the file's own ID3 tags replace the lock-screen text;
+    // put the sermon's title, speaker and artwork back.
+    try {
+      activePlayer?.updateLockScreenMetadata(lockScreenMetadata(activeSermon));
+    } catch {
+      // Lock screen controls are best-effort.
+    }
   }
 
   if (activeSermon) {

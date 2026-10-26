@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Image,
   Pressable,
@@ -463,7 +464,11 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
             accessibilityRole="button"
             accessibilityLabel={playing ? "Pause" : "Play"}
           >
-            <Ionicons name={loading ? "hourglass-outline" : playing ? "pause" : "play"} size={32} color={C.textOnAccent} />
+            {loading ? (
+              <ActivityIndicator size="large" color={C.textOnAccent} />
+            ) : (
+              <Ionicons name={playing ? "pause" : "play"} size={32} color={C.textOnAccent} />
+            )}
           </Pressable>
           <ControlButton icon="play-forward" label="Forward 15 seconds" onPress={() => seekBy(15000)} />
           <ControlButton icon="play-skip-forward" label="Next" onPress={nextTrack} />
