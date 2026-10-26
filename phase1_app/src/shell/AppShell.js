@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   BackHandler,
+  LogBox,
   StatusBar,
   View
 } from "react-native";
@@ -60,6 +61,10 @@ import { TestimoniesScreen } from "../screens/TestimoniesScreen";
 import { UpdatesScreen } from "../screens/UpdatesScreen";
 import { VideoDetail } from "../screens/VideoDetail";
 
+// Known Expo Go limitations (remote push removed, expo-av deprecation). They
+// don't occur in the real APK, so keep them from covering the UI in dev.
+LogBox.ignoreLogs(["expo-notifications", "Expo AV has been deprecated", "`expo-notifications` functionality"]);
+
 const NOTIFICATION_SCREENS = new Set([
   "Home",
   "Sermons",
@@ -114,7 +119,8 @@ function App() {
     Inter_600SemiBold: require("@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf"),
     Inter_700Bold: require("@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf"),
     Cinzel_600SemiBold: require("@expo-google-fonts/cinzel/600SemiBold/Cinzel_600SemiBold.ttf"),
-    Cinzel_700Bold: require("@expo-google-fonts/cinzel/700Bold/Cinzel_700Bold.ttf")
+    Cinzel_700Bold: require("@expo-google-fonts/cinzel/700Bold/Cinzel_700Bold.ttf"),
+    PlayfairDisplay_500Medium_Italic: require("@expo-google-fonts/playfair-display/500Medium_Italic/PlayfairDisplay_500Medium_Italic.ttf")
   });
   const [screen, setScreen] = useState("Home");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -532,7 +538,7 @@ useEffect(() => {
           />
         );
       case "Bible":
-        return <BibleScreen go={go} appLanguage={appLanguage} />;
+        return <BibleScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
       case "ReadingPlans":
         return <ReadingPlansScreen go={go} openDrawer={openDrawer} appLanguage={appLanguage} />;
       case "CheckIn":

@@ -25,7 +25,7 @@ export function SectionHeader({ title, onPress, appLanguage = "en" }) {
           accessibilityLabel={`${tr(appLanguage, "View All")} ${tr(appLanguage, title)}`}
         >
           <Text style={s.viewAllText}>{tr(appLanguage, "View All")}</Text>
-          <Ionicons name="chevron-forward" size={14} color={C.accentText} />
+          <Ionicons name="chevron-forward" size={14} color={C.gold} />
         </Pressable>
       ) : null}
     </View>

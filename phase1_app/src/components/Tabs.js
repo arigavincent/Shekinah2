@@ -4,17 +4,18 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { tr } from "../i18n/labels";
 import { s } from "../styles/appStyles";
 
-// Segmented top tabs. Up to 3 tabs share the width; more than that scroll
-// horizontally so long labels (e.g. Kiswahili) never truncate.
+// Two tabs split the width (Latest / Favourites). Three or four sit centred at
+// their natural width with the underline under the label, like Phaneroo's
+// sermon tabs. Five or more scroll so long Kiswahili labels never truncate.
 export function Tabs({ tabs, active, setActive, appLanguage = "en" }) {
-  const scrollable = tabs.length > 3;
+  const mode = tabs.length <= 2 ? "split" : tabs.length <= 4 ? "compact" : "scroll";
 
   const items = tabs.map(tab => {
     const selected = active === tab;
     return (
       <Pressable
         key={tab}
-        style={[s.tabBtn, scrollable && s.tabBtnScroll]}
+        style={[s.tabBtn, mode !== "split" && s.tabBtnCompact]}
         onPress={() => setActive(tab)}
         accessibilityRole="tab"
         accessibilityState={{ selected }}
@@ -27,7 +28,7 @@ export function Tabs({ tabs, active, setActive, appLanguage = "en" }) {
     );
   });
 
-  if (scrollable) {
+  if (mode === "scroll") {
     return (
       <View style={s.tabs}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabsScroll}>

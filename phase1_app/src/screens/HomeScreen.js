@@ -1,15 +1,16 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Image,
-  ImageBackground,
   Pressable,
   RefreshControl,
   ScrollView,
   Share,
   Text,
+  useWindowDimensions,
   View
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { StyleSheet } from "react-native";
 import { Ionicons } from "../components/Icon";
 
 import { useContent } from "../providers/ContentProvider";
@@ -20,11 +21,6 @@ import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { IconButton } from "../components/IconButton";
 import { SectionHeader } from "../components/SectionHeader";
-import { Horizontal } from "../components/Horizontal";
-import {
-  ClipCard,
-  EventMiniCard
-} from "../components/Cards";
 import { useDownloadsMap } from "../hooks/useDownloadsMap";
 import { tr } from "../i18n/labels";
 import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
@@ -122,222 +118,203 @@ function cleanViewerCount(value) {
   return raw;
 }
 
-function HomeHero({ live, featuredVideo, go, appLanguage }) {
-  const heroImage = featuredVideo
-    ? sermonThumbnail(featuredVideo, PHASE1_IMAGES.sermon)
-    : PHASE1_IMAGES.crowd;
-  const isLive = Boolean(live?.isLive);
-  const liveViewerCount = isLive ? cleanViewerCount(live?.viewers) : "";
-  const heroTitle = isLive
-    ? cleanText(live?.title) || tr(appLanguage, "Live Stream")
-    : featuredVideo?.title || tr(appLanguage, "Stay connected to the word, worship, and prayer.");
-  const heroSubtitle = isLive
-    ? tr(appLanguage, "Join the service now.")
-    : cleanText(live?.nextService)
-      ? `${tr(appLanguage, "Next service:")} ${cleanText(live?.nextService)}`
-      : featuredVideo?.speaker || "";
+// Content gutter shared by every rail so cards line up with section titles.
+const GUTTER = 16;
+
+function Rail({ children, itemWidth, gap = 10 }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      decelerationRate="fast"
+      snapToInterval={itemWidth + gap}
+      snapToAlignment="start"
+      contentContainerStyle={{ paddingHorizontal: GUTTER, gap }}
+      style={{ marginHorizontal: -GUTTER }}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+function LiveBanner({ live, go, appLanguage }) {
+  if (!live?.isLive) return null;
+  const viewers = cleanViewerCount(live?.viewers);
 
   return (
     <Pressable
-      onPress={() => (isLive || !featuredVideo ? go("Live") : go("VideoDetail", featuredVideo))}
-      style={({ pressed }) => [home.hero, pressed && { opacity: 0.92 }]}
+      onPress={() => go("Live")}
+      style={({ pressed }) => [home.liveBanner, pressed && { opacity: 0.85 }]}
       accessibilityRole="button"
-      accessibilityLabel={heroTitle}
+      accessibilityLabel={`${tr(appLanguage, "LIVE NOW")}: ${cleanText(live?.title)}`}
     >
-      <ImageBackground source={{ uri: heroImage }} style={home.heroImage} resizeMode="cover">
-        <LinearGradient
-          colors={["rgba(7,8,10,0.05)", "rgba(7,8,10,0.35)", "rgba(7,8,10,0.94)"]}
-          locations={[0, 0.45, 1]}
-          style={fill}
-        />
-
-        <View style={home.heroTop}>
-          {isLive ? (
-            <View style={[home.chip, { backgroundColor: C.red }]}>
-              <View style={home.liveDot} />
-              <Text style={home.chipTextLight}>{tr(appLanguage, "LIVE NOW")}</Text>
-            </View>
-          ) : (
-            <View style={[home.chip, home.chipGlass]}>
-              <Text style={home.chipTextGold}>{tr(appLanguage, featuredVideo ? "LATEST MESSAGE" : "NEXT SERVICE")}</Text>
-            </View>
-          )}
-
-          {liveViewerCount ? (
-            <View style={[home.chip, home.chipGlass]}>
-              <Ionicons name="eye-outline" size={13} color="#FFFFFF" />
-              <Text style={home.chipTextLight}>{liveViewerCount}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={home.heroBottom}>
-          <Text style={home.heroTitle} numberOfLines={2}>{heroTitle}</Text>
-          {heroSubtitle ? (
-            <Text style={home.heroSubtitle} numberOfLines={1}>{heroSubtitle}</Text>
-          ) : null}
-
-          <View style={home.heroActions}>
-            <Pressable
-              style={({ pressed }) => [home.btnPrimary, pressed && { backgroundColor: C.accentPressed }]}
-              onPress={() => (isLive || !featuredVideo ? go("Live") : go("VideoDetail", featuredVideo))}
-              accessibilityRole="button"
-            >
-              <Ionicons name="play" size={16} color="#FFFFFF" />
-              <Text style={home.btnPrimaryText}>
-                {tr(appLanguage, isLive ? "Watch Live" : featuredVideo ? "Watch Now" : "Open Live")}
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [home.btnGhost, pressed && { backgroundColor: "rgba(255,255,255,0.16)" }]}
-              onPress={() => go("Sermons")}
-              accessibilityRole="button"
-            >
-              <Text style={home.btnGhostText}>{tr(appLanguage, "Sermons")}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </ImageBackground>
+      <View style={home.livePill}>
+        <View style={home.liveDot} />
+        <Text style={home.livePillText}>{tr(appLanguage, "LIVE")}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={home.liveTitle} numberOfLines={1}>
+          {cleanText(live?.title) || tr(appLanguage, "Live Stream")}
+        </Text>
+        <Text style={home.liveMeta} numberOfLines={1}>
+          {viewers ? `${viewers} ${tr(appLanguage, "watching")} · ` : ""}{tr(appLanguage, "Join the service now.")}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={C.white} />
     </Pressable>
   );
 }
 
-function QuickActions({ go, appLanguage }) {
-  const actions = [
-    { label: "Give", icon: "heart-outline", screen: "Giving" },
-    { label: "Prayer", icon: "hand-left-outline", screen: "Prayer" },
-    { label: "Events", icon: "calendar-outline", screen: "Events" },
-    { label: "Branches", icon: "location-outline", screen: "Branches" }
-  ];
+function DevotionCarousel({ devotions, go, appLanguage }) {
+  const { width } = useWindowDimensions();
+  const [index, setIndex] = useState(0);
+  const cardWidth = width - GUTTER * 2;
+  const items = devotions.slice(0, 5);
+
+  if (items.length === 0) return null;
 
   return (
-    <View style={home.quickRow}>
-      {actions.map(action => (
-        <Pressable
-          key={action.label}
-          onPress={() => go(action.screen)}
-          style={({ pressed }) => [home.quickItem, pressed && { opacity: 0.7 }]}
-          accessibilityRole="button"
-          accessibilityLabel={tr(appLanguage, action.label)}
-        >
-          <View style={home.quickIcon}>
-            <Ionicons name={action.icon} size={22} color={C.gold} />
+    <View style={{ marginTop: 6 }}>
+      <ScrollView
+        horizontal
+        pagingEnabled={false}
+        snapToInterval={cardWidth + 12}
+        decelerationRate="fast"
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: GUTTER, gap: 12 }}
+        style={{ marginHorizontal: -GUTTER }}
+        onMomentumScrollEnd={event => {
+          const next = Math.round(event.nativeEvent.contentOffset.x / (cardWidth + 12));
+          setIndex(Math.max(0, Math.min(items.length - 1, next)));
+        }}
+      >
+        {items.map((devotion, position) => (
+          <View key={devotion.id || position} style={{ width: cardWidth }}>
+            <View style={home.devStack} />
+            <Pressable
+              style={({ pressed }) => [home.devCard, pressed && { opacity: 0.9 }]}
+              onPress={() => go("DevotionDetail", devotion)}
+              accessibilityRole="button"
+              accessibilityLabel={`${tr(appLanguage, position === 0 ? "Today's Devotional" : "Devotional")}: ${devotion.title}`}
+            >
+              <Image source={{ uri: devotionImage(devotion) }} style={home.devImage} />
+              <View style={home.devBody}>
+                <View style={home.devPill}>
+                  <Text style={home.devPillText}>
+                    {tr(appLanguage, position === 0 ? "Today's Devotional" : "Devotional")}
+                  </Text>
+                </View>
+                <Text style={home.devTitle} numberOfLines={2}>{devotion.title}</Text>
+                <Text style={home.devExcerpt} numberOfLines={4}>
+                  {devotion.excerpt || devotion.body || tr(appLanguage, "Read today's devotion.")}
+                </Text>
+                {devotion.date || devotion.devotionDate ? (
+                  <View style={home.dateChip}>
+                    <Ionicons name="calendar-outline" size={13} color={C.accentText} />
+                    <Text style={home.dateChipText}>{devotion.date || devotion.devotionDate}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </Pressable>
           </View>
-          <Text style={home.quickLabel} numberOfLines={1}>{tr(appLanguage, action.label)}</Text>
-        </Pressable>
-      ))}
+        ))}
+      </ScrollView>
+
+      {items.length > 1 ? (
+        <View style={home.dots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {items.map((item, position) => (
+            <View key={item.id || position} style={[home.dot, position === index && home.dotActive]} />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function MediaBadges({ downloaded, showContinue, progressEntry, progressPercent, appLanguage }) {
+function ProgressBits({ progressEntry, downloadEntry, appLanguage }) {
+  const showContinue = hasContinueProgress(progressEntry);
+  const downloaded = Boolean(downloadEntry?.localUri);
+
+  if (!showContinue && !downloaded) return null;
+
   return (
     <>
-      {downloaded ? (
-        <View style={home.metaRow}>
-          <Ionicons name="checkmark-circle" size={13} color={C.green} />
-          <Text style={home.metaOk}>{tr(appLanguage, "Downloaded")}</Text>
+      {showContinue ? (
+        <View style={home.progressTrack}>
+          <View style={[home.progressFill, { width: `${Math.max(4, Math.round(progressRatio(progressEntry) * 100))}%` }]} />
         </View>
       ) : null}
-
-      {showContinue ? (
-        <>
-          <Text style={home.continueText}>
-            {tr(appLanguage, "Continue")} · {formatPlaybackTime(progressEntry.positionMs)} / {formatPlaybackTime(progressEntry.durationMs)}
-          </Text>
-          <View style={home.progressTrack}>
-            <View style={[home.progressFill, { width: `${progressPercent}%` }]} />
-          </View>
-        </>
-      ) : null}
+      <View style={home.metaRow}>
+        {downloaded ? <Ionicons name="checkmark-circle" size={13} color={C.accentText} /> : null}
+        <Text style={home.metaAccent} numberOfLines={1}>
+          {showContinue
+            ? `${tr(appLanguage, "Continue")} · ${formatPlaybackTime(progressEntry.positionMs)} / ${formatPlaybackTime(progressEntry.durationMs)}`
+            : tr(appLanguage, "Downloaded")}
+        </Text>
+      </View>
     </>
   );
 }
 
-function FeaturedMediaCard({ item, onPress, progressEntry, downloadEntry, appLanguage }) {
-  if (!item) return null;
-
-  const thumbnail = sermonThumbnail(item, PHASE1_IMAGES.sermon);
-  const isAudio = item.type === "audio";
-  const showContinue = hasContinueProgress(progressEntry);
-  const progressPercent = Math.max(4, Math.round(progressRatio(progressEntry) * 100));
-  const downloaded = Boolean(downloadEntry?.localUri);
-  const meta = [item.speaker || item.category, item.date || item.sermonDate].filter(Boolean).join(" · ");
-
-  if (isAudio) {
-    return (
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [home.audioCard, pressed && { opacity: 0.8 }]}
-        accessibilityRole="button"
-        accessibilityLabel={`Audio sermon, ${item.title}`}
-      >
-        <View>
-          <Image source={{ uri: thumbnail }} style={home.audioArt} />
-          <View style={home.audioBadge}>
-            <Ionicons name="musical-notes" size={13} color="#FFFFFF" />
-          </View>
-        </View>
-        <Text style={home.cardTitle} numberOfLines={2}>{item.title}</Text>
-        {meta ? <Text style={home.cardMeta} numberOfLines={1}>{meta}</Text> : null}
-        <MediaBadges {...{ downloaded, showContinue, progressEntry, progressPercent, appLanguage }} />
-      </Pressable>
-    );
-  }
-
+function VideoTile({ item, width, onPress, progressEntry, downloadEntry, appLanguage }) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [home.videoCard, pressed && { opacity: 0.8 }]}
+      style={({ pressed }) => [{ width }, pressed && { opacity: 0.8 }]}
       accessibilityRole="button"
       accessibilityLabel={`Video sermon, ${item.title}`}
     >
       <View style={home.videoThumbWrap}>
-        <Image source={{ uri: thumbnail }} style={home.videoThumb} />
-        <View style={home.playBadge}>
-          <Ionicons name="play" size={16} color="#FFFFFF" />
-        </View>
-        {extractYouTubeId(sermonMediaUrl(item)) ? (
-          <View style={home.sourceTag}>
-            <Ionicons name="logo-youtube" size={12} color="#FFFFFF" />
+        <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={home.videoThumb} />
+        {item.live ? (
+          <View style={home.liveTag}>
+            <Text style={home.livePillText}>LIVE</Text>
           </View>
         ) : null}
       </View>
-      <Text style={home.cardTitle} numberOfLines={2}>{item.title}</Text>
-      {meta ? <Text style={home.cardMeta} numberOfLines={1}>{meta}</Text> : null}
-      <MediaBadges {...{ downloaded, showContinue, progressEntry, progressPercent, appLanguage }} />
+      <Text style={home.tileTitle} numberOfLines={2}>{item.title}</Text>
+      <ProgressBits progressEntry={progressEntry} downloadEntry={downloadEntry} appLanguage={appLanguage} />
     </Pressable>
   );
 }
 
-function DevotionPreview({ devotion, go, appLanguage }) {
-  if (!devotion) return null;
-
+function SquareTile({ item, width, onPress, progressEntry, downloadEntry, appLanguage, badge }) {
   return (
     <Pressable
-      style={({ pressed }) => [s.devotionHero, pressed && { opacity: 0.85 }]}
-      onPress={() => go("DevotionDetail", devotion)}
+      onPress={onPress}
+      style={({ pressed }) => [{ width }, pressed && { opacity: 0.8 }]}
       accessibilityRole="button"
-      accessibilityLabel={`${tr(appLanguage, "Today's Devotion")}, ${devotion.title}`}
+      accessibilityLabel={item.title}
     >
       <View>
-        <Image source={{ uri: devotionImage(devotion) }} style={s.devotionThumb} />
-        <View style={s.badgeOnImage}>
-          <Text style={s.badgeText}>{tr(appLanguage, "Today")}</Text>
-        </View>
+        <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={[home.squareArt, { width, height: width }]} />
+        {badge ? (
+          <View style={home.squareBadge}>
+            <Ionicons name={badge} size={14} color={C.textOnAccent} />
+          </View>
+        ) : null}
       </View>
+      <Text style={home.tileTitle} numberOfLines={2}>{item.title}</Text>
+      <ProgressBits progressEntry={progressEntry} downloadEntry={downloadEntry} appLanguage={appLanguage} />
+    </Pressable>
+  );
+}
 
-      <View style={s.devotionBody}>
-        <Text style={home.eyebrow}>{tr(appLanguage, "Today's Devotion")}</Text>
-        <Text style={s.cardTitle} numberOfLines={2}>{devotion.title}</Text>
-        <Text style={s.mutedText} numberOfLines={3}>
-          {devotion.excerpt || devotion.body || tr(appLanguage, "Read today's devotion.")}
+function EventTile({ item, width, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [{ width }, pressed && { opacity: 0.8 }]}
+      accessibilityRole="button"
+      accessibilityLabel={item.title}
+    >
+      <Image source={{ uri: contentImage(item, PHASE1_IMAGES.event) }} style={home.eventImage} />
+      <Text style={home.tileTitle} numberOfLines={2}>{item.title}</Text>
+      <View style={home.metaRow}>
+        <Ionicons name="calendar-outline" size={13} color={C.gold} />
+        <Text style={home.meta} numberOfLines={1}>
+          {[item.date, item.time].filter(Boolean).join(" · ")}
         </Text>
-        <View style={[home.metaRow, { marginTop: 8 }]}>
-          <Ionicons name="calendar-outline" size={13} color={C.muted} />
-          <Text style={home.cardMeta}>{devotion.date || devotion.devotionDate || ""}</Text>
-        </View>
       </View>
     </Pressable>
   );
@@ -348,18 +325,56 @@ function UpdateRow({ item, go }) {
 
   return (
     <Pressable
-      style={({ pressed }) => [s.listRow, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [home.updateRow, pressed && { opacity: 0.7 }]}
       onPress={() => go("Updates")}
       accessibilityRole="button"
     >
       <Image source={{ uri: contentImage(item, PHASE1_IMAGES.event) }} style={home.updateImage} />
-
-      <View style={s.rowBody}>
-        <Text style={s.rowTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={s.mutedText} numberOfLines={2}>{item.excerpt || item.date}</Text>
-        {item.date ? <Text style={home.cardMeta}>{item.date}</Text> : null}
+      <View style={{ flex: 1 }}>
+        <Text style={home.updateTitle} numberOfLines={2}>{item.title}</Text>
+        {item.excerpt ? <Text style={home.updateExcerpt} numberOfLines={2}>{item.excerpt}</Text> : null}
+        {item.date ? <Text style={home.meta}>{item.date}</Text> : null}
       </View>
     </Pressable>
+  );
+}
+
+function ScriptureCard({ scripture, appLanguage }) {
+  const item = scripture || {};
+
+  const share = () => {
+    Share.share({ message: `${item.verse || ""} - ${item.reference || ""}` });
+  };
+
+  return (
+    <View style={s.scriptureCard}>
+      <LinearGradient
+        colors={["rgba(212,175,55,0.16)", "rgba(212,175,55,0)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={fill}
+        pointerEvents="none"
+      />
+      <View style={s.scriptureHead}>
+        <View style={home.verseLabel}>
+          <Ionicons name="book" size={15} color={C.gold} />
+          <Text style={home.verseLabelText}>{item.title || tr(appLanguage, "Scripture of the Day")}</Text>
+        </View>
+
+        <Pressable
+          onPress={share}
+          style={({ pressed }) => [home.shareBtn, pressed && { opacity: 0.6 }]}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel="Share scripture"
+        >
+          <Ionicons name="share-social-outline" size={18} color={C.white} />
+        </Pressable>
+      </View>
+
+      <Text style={s.verseText}>{item.verse || tr(appLanguage, "The word of God is life.")}</Text>
+      {item.reference ? <Text style={home.reference}>{item.reference}</Text> : null}
+    </View>
   );
 }
 
@@ -367,6 +382,13 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   const { data, loading, reload } = useContent();
   const progressMap = usePlaybackProgressMap();
   const downloads = useDownloadsMap();
+  const { width } = useWindowDimensions();
+
+  // Responsive card sizes: wide 16:9 tiles show ~1.3 per screen, square art ~2.4.
+  const videoWidth = Math.min(320, Math.round(width * 0.66));
+  const squareWidth = Math.min(180, Math.round(width * 0.365));
+  const clipWidth = Math.min(260, Math.round((width - GUTTER) * 0.56));
+  const eventWidth = Math.min(300, Math.round((width - GUTTER) * 0.66));
 
   const sermons = Array.isArray(data.sermons) ? data.sermons : [];
   const devotions = Array.isArray(data.devotions) ? data.devotions : [];
@@ -382,8 +404,6 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       const mediaUrl = sermonMediaUrl(item);
       return Boolean(extractYouTubeId(mediaUrl) || isVideoUrl(mediaUrl));
     });
-  const featuredVideo = videos[0] || null;
-  const todayDevotion = devotions[0] || null;
   const continuingSermons = useMemo(() => {
     return sermons
       .filter(item => hasContinueProgress(progressMap[item.id]))
@@ -395,119 +415,103 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
       .slice(0, 6);
   }, [sermons, progressMap]);
 
+  const tileProps = item => ({
+    item,
+    progressEntry: progressMap[item.id],
+    downloadEntry: downloads.bySermonId[item.id],
+    appLanguage,
+    onPress: () => openSermon(item)
+  });
+
   return (
     <Screen>
       <TopBar
         go={go}
         onMenu={openDrawer}
         appLanguage={appLanguage}
-        right={<IconButton name="search-outline" accessibilityLabel="Search" onPress={() => go("Search")} />}
+        right={
+          <>
+            <IconButton name="search-outline" accessibilityLabel="Search" onPress={() => go("Search")} />
+            <IconButton name="notifications-outline" accessibilityLabel="Notifications" onPress={() => go("Notifications")} />
+          </>
+        }
       />
 
       <ScrollView
         contentContainerStyle={s.scrollPad}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={loading}
             onRefresh={reload}
-            tintColor={C.accent}
-            colors={[C.accent]}
+            tintColor={C.gold}
+            colors={[C.gold]}
             progressBackgroundColor={C.surface2}
           />
         }
       >
-        <HomeHero live={data.live} featuredVideo={featuredVideo} go={go} appLanguage={appLanguage} />
+        <LiveBanner live={data.live} go={go} appLanguage={appLanguage} />
 
-        <QuickActions go={go} appLanguage={appLanguage} />
-
-        <DevotionPreview devotion={todayDevotion} go={go} appLanguage={appLanguage} />
+        <DevotionCarousel devotions={devotions} go={go} appLanguage={appLanguage} />
 
         {continuingSermons.length > 0 ? (
           <>
-            <SectionHeader title="Continue Listening" onPress={() => go("Sermons")} appLanguage={appLanguage} />
-            <Horizontal>
-              {continuingSermons.map(item => (
-                <FeaturedMediaCard
-                  key={item.id}
-                  item={item}
-                  downloadEntry={downloads.bySermonId[item.id]}
-                  progressEntry={progressMap[item.id]}
-                  appLanguage={appLanguage}
-                  onPress={() => openSermon(item)}
-                />
-              ))}
-            </Horizontal>
+            <SectionHeader title="Continue Listening" appLanguage={appLanguage} />
+            <Rail itemWidth={squareWidth}>
+              {continuingSermons.map(item =>
+                item.type === "audio" ? (
+                  <SquareTile key={item.id} width={squareWidth} badge="musical-notes" {...tileProps(item)} />
+                ) : (
+                  <VideoTile key={item.id} width={videoWidth} {...tileProps(item)} />
+                )
+              )}
+            </Rail>
           </>
         ) : null}
 
         {videos.length > 0 ? (
           <>
             <SectionHeader title="Latest Video Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
-            <Horizontal>
-              {videos.slice(0, 8).map(item => (
-                <FeaturedMediaCard
-                  key={item.id}
-                  item={item}
-                  downloadEntry={downloads.bySermonId[item.id]}
-                  progressEntry={progressMap[item.id]}
-                  appLanguage={appLanguage}
-                  onPress={() => openSermon(item)}
-                />
+            <Rail itemWidth={videoWidth}>
+              {videos.slice(0, 10).map(item => (
+                <VideoTile key={item.id} width={videoWidth} {...tileProps(item)} />
               ))}
-            </Horizontal>
+            </Rail>
           </>
         ) : null}
 
         {audio.length > 0 ? (
           <>
             <SectionHeader title="Latest Audio Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
-            <Horizontal>
-              {audio.slice(0, 8).map(item => (
-                <FeaturedMediaCard
-                  key={item.id}
-                  item={item}
-                  downloadEntry={downloads.bySermonId[item.id]}
-                  progressEntry={progressMap[item.id]}
-                  appLanguage={appLanguage}
-                  onPress={() => openSermon(item)}
-                />
+            <Rail itemWidth={squareWidth}>
+              {audio.slice(0, 10).map(item => (
+                <SquareTile key={item.id} width={squareWidth} badge="musical-notes" {...tileProps(item)} />
               ))}
-            </Horizontal>
+            </Rail>
+          </>
+        ) : null}
+
+        {playableClips.length > 0 ? (
+          <>
+            <SectionHeader title="Short Clips" onPress={() => go("Sermons")} appLanguage={appLanguage} />
+            <Rail itemWidth={clipWidth}>
+              {playableClips.slice(0, 10).map(item => (
+                <VideoTile key={item.id} width={clipWidth} {...tileProps(item)} />
+              ))}
+            </Rail>
           </>
         ) : null}
 
         <ScriptureCard scripture={data.scripture} appLanguage={appLanguage} />
 
-        {playableClips.length > 0 ? (
-          <>
-            <SectionHeader title="Short Clips" appLanguage={appLanguage} />
-            <Horizontal>
-              {playableClips.slice(0, 6).map(item => (
-                <ClipCard
-                  key={item.id}
-                  item={item}
-                  onPress={() => openSermon(item)}
-                />
-              ))}
-            </Horizontal>
-          </>
-        ) : null}
-
         {events.length > 0 ? (
           <>
             <SectionHeader title="Upcoming Events" onPress={() => go("Events")} appLanguage={appLanguage} />
-            <Horizontal>
-              {events.slice(0, 5).map(item => (
-                <EventMiniCard
-                  key={item.id}
-                  item={{
-                    ...item,
-                    image: contentImage(item, PHASE1_IMAGES.event)
-                  }}
-                  onPress={() => go("EventDetail", item)}
-                />
+            <Rail itemWidth={eventWidth}>
+              {events.slice(0, 6).map(item => (
+                <EventTile key={item.id} item={item} width={eventWidth} onPress={() => go("EventDetail", item)} />
               ))}
-            </Horizontal>
+            </Rail>
           </>
         ) : null}
 
@@ -524,83 +528,89 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
   );
 }
 
-function ScriptureCard({ scripture, appLanguage }) {
-  const item = scripture || {};
-
-  const share = () => {
-    Share.share({ message: `${item.verse || ""} - ${item.reference || ""}` });
-  };
-
-  return (
-    <View style={s.scriptureCard}>
-      <Text style={home.quoteMark} accessibilityElementsHidden importantForAccessibility="no">“</Text>
-      <View style={s.scriptureHead}>
-        <Text style={home.eyebrow}>{item.title || tr(appLanguage, "Scripture of the Day")}</Text>
-
-        <Pressable
-          onPress={share}
-          style={({ pressed }) => [home.shareBtn, pressed && { opacity: 0.6 }]}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel="Share scripture"
-        >
-          <Ionicons name="share-social-outline" size={18} color="#FFFFFF" />
-        </Pressable>
-      </View>
-
-      <Text style={s.verseText}>{item.verse || tr(appLanguage, "The word of God is life.")}</Text>
-      {item.reference ? <Text style={home.reference}>— {item.reference}</Text> : null}
-    </View>
-  );
-}
-
 const home = makeThemedStyles(C => ({
-  hero: {
-    borderRadius: 20,
+  liveBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: C.redSoft,
+    borderWidth: 1,
+    borderColor: C.red,
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 4,
+    marginBottom: 12
+  },
+  livePill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: C.red, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  livePillText: { color: "#FFFFFF", fontSize: 11, fontFamily: C.fontBold, letterSpacing: 0.8 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#FFFFFF" },
+  liveTitle: { color: C.white, fontSize: 15, fontFamily: C.fontBold },
+  liveMeta: { color: C.muted, fontSize: 12.5, fontFamily: C.fontBody, marginTop: 2 },
+  liveTag: { position: "absolute", top: 8, left: 8, backgroundColor: C.red, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+
+  devStack: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    bottom: -8,
+    height: 40,
+    borderRadius: 18,
+    backgroundColor: C.surface2,
+    opacity: 0.7
+  },
+  devCard: {
+    flexDirection: "row",
+    minHeight: 220,
+    borderRadius: 18,
     overflow: "hidden",
     backgroundColor: C.surface,
-    marginTop: 4,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: C.line
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: C.lineStrong
   },
-  heroImage: { minHeight: 300, justifyContent: "space-between" },
-  heroTop: { padding: 14, flexDirection: "row", justifyContent: "space-between" },
-  heroBottom: { padding: 18, paddingTop: 0 },
-  heroTitle: { color: "#FFFFFF", fontSize: 24, lineHeight: 30, fontFamily: C.fontDisplay, letterSpacing: -0.3 },
-  heroSubtitle: { color: "rgba(255,255,255,0.78)", fontSize: 14, fontFamily: C.fontMedium, marginTop: 6 },
-  heroActions: { flexDirection: "row", gap: 10, marginTop: 16 },
-  chip: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 6 },
-  chipGlass: { backgroundColor: "rgba(7,8,10,0.62)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  chipTextLight: { color: "#FFFFFF", fontSize: 11, fontFamily: C.fontBold, letterSpacing: 0.8 },
-  chipTextGold: { color: "#F1D48A", fontSize: 11, fontFamily: C.fontBold, letterSpacing: 1 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#FFFFFF" },
-  btnPrimary: { flex: 1, minHeight: 48, borderRadius: 999, backgroundColor: C.accent, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  btnPrimaryText: { color: "#FFFFFF", fontSize: 15, fontFamily: C.fontBold },
-  btnGhost: { flex: 1, minHeight: 48, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
-  btnGhostText: { color: "#FFFFFF", fontSize: 15, fontFamily: C.fontBold },
-  quickRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 18 },
-  quickItem: { flex: 1, alignItems: "center", gap: 8, paddingVertical: 4 },
-  quickIcon: { width: 56, height: 56, borderRadius: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, alignItems: "center", justifyContent: "center" },
-  quickLabel: { color: C.white, fontSize: 12.5, fontFamily: C.fontMedium },
-  eyebrow: { color: C.gold, fontSize: 11, fontFamily: C.fontBold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 6 },
-  videoCard: { width: 248 },
-  videoThumbWrap: { borderRadius: 12, overflow: "hidden", backgroundColor: C.surface2 },
+  devImage: { width: "40%", backgroundColor: C.surface2 },
+  devBody: { flex: 1, padding: 14, justifyContent: "center" },
+  devPill: { alignSelf: "flex-start", backgroundColor: C.accentPressed, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, marginBottom: 10 },
+  devPillText: { color: "#FFFFFF", fontSize: 12, fontFamily: C.fontBold },
+  devTitle: { color: C.white, fontSize: 17, lineHeight: 22, fontFamily: C.fontBold },
+  devExcerpt: { color: C.muted, fontSize: 13.5, lineHeight: 19, fontFamily: C.fontBody, marginTop: 6 },
+  dateChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.accentSoft,
+    backgroundColor: C.accentSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 5
+  },
+  dateChipText: { color: C.accentText, fontSize: 12, fontFamily: C.fontBold },
+  dots: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 18 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.surface3 },
+  dotActive: { width: 18, backgroundColor: C.gold },
+
+  videoThumbWrap: { borderRadius: 14, overflow: "hidden", backgroundColor: C.surface2 },
   videoThumb: { width: "100%", aspectRatio: 16 / 9 },
-  playBadge: { position: "absolute", left: 10, bottom: 10, width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(7,8,10,0.72)", alignItems: "center", justifyContent: "center" },
-  sourceTag: { position: "absolute", right: 8, top: 8, backgroundColor: "rgba(7,8,10,0.72)", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4 },
-  audioCard: { width: 148 },
-  audioArt: { width: 148, height: 148, borderRadius: 12, backgroundColor: C.surface2 },
-  audioBadge: { position: "absolute", right: 8, bottom: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
-  cardTitle: { color: C.white, fontSize: 14, lineHeight: 19, fontFamily: C.fontBold, marginTop: 10 },
-  cardMeta: { color: C.muted, fontSize: 12, fontFamily: C.fontBody, marginTop: 3 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 },
-  metaOk: { color: C.green, fontSize: 12, fontFamily: C.fontMedium },
-  continueText: { color: C.accentText, fontSize: 12, fontFamily: C.fontBold, marginTop: 6 },
-  progressTrack: { marginTop: 6, height: 3, borderRadius: 999, backgroundColor: C.surface3, overflow: "hidden" },
+  squareArt: { borderRadius: 14, backgroundColor: C.surface2 },
+  squareBadge: { position: "absolute", right: 8, bottom: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: C.gold, alignItems: "center", justifyContent: "center" },
+  tileTitle: { color: C.white, fontSize: 14.5, lineHeight: 20, fontFamily: C.fontMedium, marginTop: 10 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 5 },
+  meta: { color: C.muted, fontSize: 12.5, fontFamily: C.fontBody, flexShrink: 1 },
+  metaAccent: { color: C.accentText, fontSize: 12, fontFamily: C.fontBold, flexShrink: 1 },
+  progressTrack: { marginTop: 8, height: 3, borderRadius: 999, backgroundColor: C.surface3, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 999, backgroundColor: C.accent },
-  updateImage: { width: 72, height: 72, borderRadius: 12, backgroundColor: C.surface2 },
-  quoteMark: { position: "absolute", right: 14, bottom: -40, fontSize: 160, lineHeight: 160, color: "rgba(212,165,55,0.12)", fontFamily: C.fontBrand },
-  shareBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.10)", alignItems: "center", justifyContent: "center" },
-  reference: { color: "#F1D48A", fontSize: 13, fontFamily: C.fontBold, marginTop: 12, letterSpacing: 0.4 }
+
+  eventImage: { width: "100%", aspectRatio: 16 / 9, borderRadius: 14, backgroundColor: C.surface2 },
+
+  updateRow: { flexDirection: "row", gap: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.lineStrong },
+  updateImage: { width: 96, height: 96, borderRadius: 12, backgroundColor: C.surface2 },
+  updateTitle: { color: C.white, fontSize: 15.5, lineHeight: 21, fontFamily: C.fontBold },
+  updateExcerpt: { color: C.muted, fontSize: 13.5, lineHeight: 19, fontFamily: C.fontBody, marginTop: 4, marginBottom: 6 },
+
+  verseLabel: { flexDirection: "row", alignItems: "center", gap: 8 },
+  verseLabelText: { color: C.gold, fontSize: 12, fontFamily: C.fontBold, letterSpacing: 1.1, textTransform: "uppercase" },
+  shareBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.surface2, alignItems: "center", justifyContent: "center" },
+  reference: { color: C.gold, fontSize: 13.5, fontFamily: C.fontBold, marginTop: 14, letterSpacing: 0.3 }
 }));

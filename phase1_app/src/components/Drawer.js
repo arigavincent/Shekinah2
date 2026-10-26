@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 import { Ionicons } from "./Icon";
 
-import { brandLogo } from "../constants/assets";
+import { brandMark } from "../constants/assets";
 import { C, GOLD_GRADIENT } from "../constants/theme";
 import { DRAWER_GROUPS } from "../constants/drawerGroups";
 import { tr } from "../i18n/labels";
@@ -63,13 +63,10 @@ export function Drawer({ visible, close, go, appLanguage = "en" }) {
       </Animated.View>
 
       <Animated.View style={[s.drawer, { width: drawerWidth, transform: [{ translateX }] }]}>
-        <View style={[s.drawerHeader, { paddingTop: insets.top }]}>
-          <Image source={brandLogo} style={s.drawerHeaderImage} resizeMode="cover" />
-          <LinearGradient
-            colors={["transparent", C.backgroundElevated]}
-            style={s.drawerHeaderFade}
-            pointerEvents="none"
-          />
+        <View style={[s.drawerHeader, { paddingTop: insets.top + 12 }]}>
+          <Image source={brandMark} style={s.drawerHeaderImage} resizeMode="contain" />
+          <Text style={s.drawerBrandName} accessibilityRole="header">SHEKINAH</Text>
+          <Text style={s.drawerBrandSub}>SONS GLOBAL</Text>
         </View>
         <LinearGradient
           colors={["transparent", GOLD_GRADIENT[1], "transparent"]}

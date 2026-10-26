@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -8,6 +9,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
@@ -19,7 +21,7 @@ import YoutubePlayer from "react-native-youtube-iframe";
 import { WebView } from "react-native-webview";
 
 import { PHASE1_IMAGES } from "../content";
-import { C } from "../constants/theme";
+import { C, makeThemedStyles } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { liveChatSocketUrl, listCommunityMessages, sendCommunityMessage } from "../api/communityApi";
 import { loadSavedSession } from "../features/profile/authSession";
@@ -27,7 +29,7 @@ import { useContent } from "../providers/ContentProvider";
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
-import { EmptyState, VideoCard } from "../components/Cards";
+import { LinearGradient } from "expo-linear-gradient";
 import { SectionHeader } from "../components/SectionHeader";
 import {
   extractYouTubeId,
@@ -35,6 +37,82 @@ import {
   sermonMediaUrl,
   sermonThumbnail
 } from "../utils/mediaUrl";
+
+function OfflineStage({ height, nextService, lastService, onWatchLast, appLanguage }) {
+  const cover = lastService ? sermonThumbnail(lastService, PHASE1_IMAGES.sermon) : PHASE1_IMAGES.crowd;
+
+  return (
+    <View style={[lv.stage, { height: Math.max(220, height) }]}>
+      <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={6} />
+      <LinearGradient colors={["rgba(0,0,0,0.55)", "rgba(0,0,0,0.88)"]} style={StyleSheet.absoluteFill} />
+
+      <View style={lv.stageBody}>
+        <View style={lv.offlineIcon}>
+          <Ionicons name="radio-outline" size={26} color={C.gold} />
+        </View>
+        <Text style={lv.offlineTitle}>{tr(appLanguage, "We're not live right now")}</Text>
+        {nextService ? (
+          <View style={lv.nextRow}>
+            <Ionicons name="time-outline" size={14} color={C.gold2} />
+            <Text style={lv.nextText}>{`${tr(appLanguage, "Next service:")} ${nextService}`}</Text>
+          </View>
+        ) : null}
+        {lastService ? (
+          <Pressable
+            style={({ pressed }) => [lv.watchBtn, pressed && { backgroundColor: C.goldDeep }]}
+            onPress={onWatchLast}
+            accessibilityRole="button"
+          >
+            <Ionicons name="play" size={16} color={C.textOnAccent} />
+            <Text style={lv.watchText}>{tr(appLanguage, "Watch last service")}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      <View style={lv.offlineTag}>
+        <View style={lv.offlineDot} />
+        <Text style={lv.offlineTagText}>{tr(appLanguage, "NOT LIVE")}</Text>
+      </View>
+    </View>
+  );
+}
+
+function PastServiceRow({ item, onPress }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [lv.row, pressed && { opacity: 0.7 }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={item.title}
+    >
+      <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={lv.rowThumb} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={lv.rowTitle} numberOfLines={3}>{item.title}</Text>
+        <Text style={lv.rowMeta} numberOfLines={1}>
+          {[item.date || item.sermonDate, item.speaker].filter(Boolean).join(" · ")}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+const lv = makeThemedStyles(C => ({
+  stage: { borderRadius: 16, overflow: "hidden", backgroundColor: C.surface, marginTop: 6 },
+  stageBody: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20, gap: 8 },
+  offlineIcon: { width: 56, height: 56, borderRadius: 28, borderWidth: 1, borderColor: "rgba(212,175,55,0.5)", backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  offlineTitle: { color: "#FFFFFF", fontSize: 19, fontFamily: C.fontBold, textAlign: "center" },
+  nextRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  nextText: { color: "#F0D27A", fontSize: 13.5, fontFamily: C.fontMedium },
+  watchBtn: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.gold, borderRadius: 999, paddingHorizontal: 18, minHeight: 44, marginTop: 10 },
+  watchText: { color: C.textOnAccent, fontSize: 14.5, fontFamily: C.fontBold },
+  offlineTag: { position: "absolute", top: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  offlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#8A8A8A" },
+  offlineTagText: { color: "#FFFFFF", fontSize: 11, fontFamily: C.fontBold, letterSpacing: 0.8 },
+  row: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.lineStrong },
+  rowThumb: { width: 160, aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: C.surface2 },
+  rowTitle: { color: C.white, fontSize: 15, lineHeight: 20, fontFamily: C.fontMedium },
+  rowMeta: { color: C.muted, fontSize: 12.5, fontFamily: C.fontBody, marginTop: 5 }
+}));
 
 function youtubeWatchUrl(videoId) {
   return `https://www.youtube.com/watch?v=${videoId}`;
@@ -809,7 +887,13 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
             </KeyboardAvoidingView>
           </>
         ) : (
-          <EmptyState title={tr(appLanguage, "No live service right now")} text={`${tr(appLanguage, "Next service:")} ${live.nextService}`} />
+          <OfflineStage
+            height={Math.round((width - 32) * 9 / 16)}
+            nextService={live.nextService}
+            lastService={pastServices[0]}
+            onWatchLast={() => pastServices[0] && openSermon(pastServices[0])}
+            appLanguage={appLanguage}
+          />
         )}
         <SectionHeader title="Past Services" appLanguage={appLanguage} />
         {pastServices.length === 0 ? (
@@ -821,12 +905,7 @@ export function LiveScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
           </View>
         ) : (
           pastServices.map(item => (
-            <VideoCard
-              key={item.id}
-              item={item}
-              onPress={() => openSermon(item)}
-              wide
-            />
+            <PastServiceRow key={item.id} item={item} onPress={() => openSermon(item)} />
           ))
         )}
       </ScrollView>

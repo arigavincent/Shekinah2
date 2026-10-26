@@ -6,6 +6,7 @@ import { ArrowRightIcon } from "phosphor-react-native/src/icons/ArrowRight";
 import { ArrowSquareOutIcon } from "phosphor-react-native/src/icons/ArrowSquareOut";
 import { ArrowsInIcon } from "phosphor-react-native/src/icons/ArrowsIn";
 import { ArrowsOutIcon } from "phosphor-react-native/src/icons/ArrowsOut";
+import { ArrowsDownUpIcon } from "phosphor-react-native/src/icons/ArrowsDownUp";
 import { ArticleIcon } from "phosphor-react-native/src/icons/Article";
 import { BellIcon } from "phosphor-react-native/src/icons/Bell";
 import { BookOpenIcon } from "phosphor-react-native/src/icons/BookOpen";
@@ -62,12 +63,15 @@ import { SkipBackIcon } from "phosphor-react-native/src/icons/SkipBack";
 import { SkipForwardIcon } from "phosphor-react-native/src/icons/SkipForward";
 import { SmileyIcon } from "phosphor-react-native/src/icons/Smiley";
 import { StackIcon } from "phosphor-react-native/src/icons/Stack";
+import { SpeakerHighIcon } from "phosphor-react-native/src/icons/SpeakerHigh";
 import { SunHorizonIcon } from "phosphor-react-native/src/icons/SunHorizon";
 import { TextAaIcon } from "phosphor-react-native/src/icons/TextAa";
 import { TrashIcon } from "phosphor-react-native/src/icons/Trash";
 import { UserIcon } from "phosphor-react-native/src/icons/User";
 import { UsersThreeIcon } from "phosphor-react-native/src/icons/UsersThree";
 import { VideoCameraIcon } from "phosphor-react-native/src/icons/VideoCamera";
+import { WaveformIcon } from "phosphor-react-native/src/icons/Waveform";
+import { DotsThreeVerticalIcon } from "phosphor-react-native/src/icons/DotsThreeVertical";
 import { WarningCircleIcon } from "phosphor-react-native/src/icons/WarningCircle";
 import { WhatsappLogoIcon } from "phosphor-react-native/src/icons/WhatsappLogo";
 import { XCircleIcon } from "phosphor-react-native/src/icons/XCircle";
@@ -142,6 +146,7 @@ const MAP = {
   rose: FlowerIcon,
   search: MagnifyingGlassIcon,
   sunny: SunHorizonIcon,
+  "volume-high": SpeakerHighIcon,
   send: PaperPlaneRightIcon,
   settings: GearSixIcon,
   "share-social": ShareNetworkIcon,
@@ -149,7 +154,10 @@ const MAP = {
   text: TextAaIcon,
   time: ClockIcon,
   trash: TrashIcon,
-  videocam: VideoCameraIcon
+  videocam: VideoCameraIcon,
+  "swap-vertical": ArrowsDownUpIcon,
+  pulse: WaveformIcon,
+  "ellipsis-vertical": DotsThreeVerticalIcon
 };
 
 // Line glyphs read better stroked even when the Ionicons name is "filled".
@@ -168,7 +176,9 @@ const ALWAYS_STROKED = new Set([
   "search",
   "repeat",
   "list",
-  "open"
+  "open",
+  "swap-vertical",
+  "ellipsis-vertical"
 ]);
 
 function resolve(name = "") {

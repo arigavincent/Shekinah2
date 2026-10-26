@@ -8,6 +8,9 @@ import { tr } from "../i18n/labels";
 import { useNav } from "../navigation/NavContext";
 import { s } from "../styles/appStyles";
 
+// Bottom-tab screens show only the dove, like Phaneroo shows its logo.
+const TAB_TITLES = new Set(["Sermons", "Devotions", "Live Stream", "Live", "Bible"]);
+
 // Root screens (opened from tabs/drawer) show the menu + brand lockup.
 // Pushed screens show a back arrow + left-aligned title, Android style.
 export function TopBar({ title, go, right, back, onBack, onMenu, appLanguage = "en" }) {
@@ -52,17 +55,17 @@ export function TopBar({ title, go, right, back, onBack, onMenu, appLanguage = "
         </Text>
       ) : (
         <View style={s.brandLockup}>
-          <Image source={brandMark} style={s.brandMark} resizeMode="contain" />
-          {title ? (
+          <Image
+            source={brandMark}
+            style={s.brandMark}
+            resizeMode="contain"
+            accessibilityLabel="Shekinah Sons Global"
+          />
+          {title && !TAB_TITLES.has(title) ? (
             <Text style={s.brandTitle} numberOfLines={1} accessibilityRole="header">
               {tr(appLanguage, title)}
             </Text>
-          ) : (
-            <View>
-              <Text style={s.brandName}>SHEKINAH</Text>
-              <Text style={s.brandSub}>SONS GLOBAL</Text>
-            </View>
-          )}
+          ) : null}
         </View>
       )}
 

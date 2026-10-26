@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  StyleSheet,
   Alert,
   BackHandler,
   Modal,
@@ -12,6 +13,9 @@ import {
 import { Ionicons } from "../components/Icon";
 
 import { Screen } from "../components/Screen";
+import { TopBar } from "../components/TopBar";
+import { IconButton } from "../components/IconButton";
+import { Tabs } from "../components/Tabs";
 import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles } from "../constants/theme";
 import { tr } from "../i18n/labels";
 import { listBibleVersions } from "../api/bibleVersionsApi";
@@ -176,7 +180,7 @@ function TestamentLabel({ value }) {
   );
 }
 
-export function BibleScreen({ go, appLanguage = "en" }) {
+export function BibleScreen({ go, openDrawer, appLanguage = "en" }) {
   const [db, setDb] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -973,45 +977,48 @@ export function BibleScreen({ go, appLanguage = "en" }) {
   if (stage === "books") {
     return (
       <Screen>
-        <Header
-          title={tr(appLanguage, "Books")}
-          onBack={() => go?.("Home")}
+        <TopBar
+          title="Bible"
+          go={go}
+          onMenu={openDrawer}
+          appLanguage={appLanguage}
           right={
-            <Pressable onPress={() => setStage("library")}>
-              <Ionicons name="library-outline" size={28} color={C.text} />
-            </Pressable>
+            <IconButton
+              name="library-outline"
+              accessibilityLabel={tr(appLanguage, "Version Library")}
+              onPress={() => setStage("library")}
+            />
           }
         />
 
-        <View style={styles.tabs}>
-          {[
-            ["ALL", "ALL BOOKS"],
-            ["OT", "OLD TESTAMENT"],
-            ["NT", "NEW TESTAMENT"]
-          ].map(([key, label]) => (
+        <Tabs
+          tabs={["All Books", "Old Testament", "New Testament"]}
+          active={{ ALL: "All Books", OT: "Old Testament", NT: "New Testament" }[tab] || "All Books"}
+          setActive={label => setTab({ "All Books": "ALL", "Old Testament": "OT", "New Testament": "NT" }[label])}
+          appLanguage={appLanguage}
+        />
+
+        <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
+          {visibleBooks.map((item, position) => (
             <Pressable
-              key={key}
-              style={[styles.tab, tab === key && styles.tabActive]}
-              onPress={() => setTab(key)}
+              key={item.id}
+              style={({ pressed }) => [styles.bookCard, pressed && { opacity: 0.7 }]}
+              onPress={() => openBook(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.english_name}, ${item.swahili_name}`}
             >
-              <Text style={styles.tabText}>{tr(appLanguage, label)}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <ScrollView contentContainerStyle={styles.page}>
-          {visibleBooks.map(item => (
-            <Pressable key={item.id} style={styles.bookCard} onPress={() => openBook(item)}>
-              <Ionicons name="book" size={36} color={C.gold} />
-
-              <View style={styles.bookMeta}>
-                <Text style={styles.bookTitle}>
-                  {item.swahili_name} ~ {item.english_name}
-                </Text>
-                <TestamentLabel value={item.testament} />
+              <View style={styles.bookBadge}>
+                <Text style={styles.bookBadgeText}>{item.sort_order || position + 1}</Text>
               </View>
 
-              <Ionicons name="arrow-forward" size={34} color={C.muted} />
+              <View style={styles.bookMeta}>
+                <Text style={styles.bookTitle} numberOfLines={1}>{item.english_name}</Text>
+                <Text style={styles.bookSub} numberOfLines={1}>
+                  {item.swahili_name} · {item.testament === "NT" ? tr(appLanguage, "New Testament") : tr(appLanguage, "Old Testament")}
+                </Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={18} color={C.faint} />
             </Pressable>
           ))}
         </ScrollView>
@@ -1420,34 +1427,30 @@ const styles = makeThemedStyles(C => ({
     justifyContent: "center"
   },
   header: {
-    minHeight: 86 + ANDROID_STATUS_BAR_HEIGHT,
-    paddingHorizontal: 18,
-    paddingTop: ANDROID_STATUS_BAR_HEIGHT + 14,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.line,
+    minHeight: 60 + ANDROID_STATUS_BAR_HEIGHT,
+    paddingHorizontal: 8,
+    paddingTop: ANDROID_STATUS_BAR_HEIGHT + 8,
+    paddingBottom: 8,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12
+    gap: 6
   },
   iconBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: C.surface2,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center"
   },
   iconGhost: {
-    width: 52
+    width: 8
   },
   headerTitleWrap: {
     flex: 1
   },
-  headerTitle: { fontFamily: C.fontDisplay,
+  headerTitle: { fontFamily: C.fontBold,
     color: C.text,
-    fontSize: 24,
-    fontWeight: "900"
+    fontSize: 19
   },
   headerSubtitle: { fontFamily: C.fontBody,
     color: C.muted,
@@ -1461,47 +1464,61 @@ const styles = makeThemedStyles(C => ({
   },
   tabs: {
     flexDirection: "row",
-    backgroundColor: C.blue
+    backgroundColor: C.background,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.lineStrong
   },
   tab: {
     flex: 1,
-    paddingVertical: 17,
+    paddingVertical: 14,
     alignItems: "center",
-    borderBottomWidth: 4,
+    borderBottomWidth: 3,
     borderBottomColor: "transparent"
   },
   tabActive: {
-    borderBottomColor: C.gold
+    borderBottomColor: C.accent
   },
-  tabText: { fontFamily: C.fontBold,
-    color: C.textOnBrand,
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: 1.2
+  tabText: { fontFamily: C.fontMedium,
+    color: C.text,
+    fontSize: 14
   },
   page: {
-    padding: 16,
-    paddingBottom: 120
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 140
   },
   bookCard: {
-    minHeight: 104,
-    paddingHorizontal: 18,
-    marginBottom: 22,
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 8,
-    backgroundColor: C.surface,
+    minHeight: 68,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.lineStrong,
     flexDirection: "row",
     alignItems: "center",
-    gap: 18
+    gap: 16
+  },
+  bookBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: C.goldSoft,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  bookBadgeText: { fontFamily: C.fontBrand,
+    color: C.gold,
+    fontSize: 15
+  },
+  bookSub: { fontFamily: C.fontBody,
+    color: C.muted,
+    fontSize: 13,
+    marginTop: 3
   },
   bookMeta: {
     flex: 1
   },
-  bookTitle: { fontFamily: C.fontDisplay,
+  bookTitle: { fontFamily: C.fontBold,
     color: C.text,
-    fontSize: 21,
-    fontWeight: "700"
+    fontSize: 16.5
   },
   muted: { fontFamily: C.fontBody,
     color: C.muted,

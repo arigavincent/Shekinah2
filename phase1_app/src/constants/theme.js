@@ -10,8 +10,8 @@ export const THEME_PALETTE_OPTIONS = [
   {
     key: "shekinah",
     label: "Shekinah Gold",
-    description: "True black, sapphire blue highlights, and the gold of the Shekinah dove",
-    swatches: ["#07080A", "#3D7BFF", "#D4A537"]
+    description: "Black and white with Shekinah gold, blue highlights and red for live moments",
+    swatches: ["#000000", "#D4AF37", "#4A8BFF"]
   }
 ];
 
@@ -26,96 +26,101 @@ export const FONTS = {
   semibold: "Inter_600SemiBold",
   bold: "Inter_700Bold",
   brand: "Cinzel_700Bold",
-  brandSoft: "Cinzel_600SemiBold"
+  brandSoft: "Cinzel_600SemiBold",
+  scripture: "PlayfairDisplay_500Medium_Italic"
 };
 
 export const RADIUS = { sm: 8, md: 12, lg: 16, xl: 22, pill: 999 };
 export const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
-// Color roles:
-//   gold   -> brand moments (logo, featured, section accents)
-//   accent -> anything tappable or active (tabs, links, progress, play)
-//   white/text -> content
+// Color roles (modelled on how Phaneroo uses its green):
+//   gold   -> the dominant brand colour: primary buttons, icons, brand marks
+//   accent -> blue highlights only: active tab, selected pills, tags, progress
+//   red    -> live, badges and favourites
+//   neutrals -> true black with neutral (not tinted) greys
 const SHARED_FONTS = {
   fontDisplay: FONTS.bold,
   fontBody: FONTS.body,
   fontBold: FONTS.semibold,
   fontMedium: FONTS.medium,
-  fontBrand: FONTS.brand
+  fontBrand: FONTS.brand,
+  fontScripture: FONTS.scripture
 };
 
 const PALETTES = {
   shekinah: {
     dark: {
-      background: "#07080A",
-      backgroundElevated: "#0D0F13",
-      surface: "#12151A",
-      surface2: "#1A1E25",
-      surface3: "#232832",
-      card: "#12151A",
-      line: "#20252E",
-      lineStrong: "#2C323D",
-      white: "#F5F3EE",
-      black: "#07080A",
-      text: "#F5F3EE",
-      muted: "#A3A7B0",
-      faint: "#6E7380",
-      textOnAccent: "#1A1205",
+      background: "#000000",
+      backgroundElevated: "#0B0B0B",
+      surface: "#141414",
+      surface2: "#1E1E1E",
+      surface3: "#2A2A2A",
+      card: "#161616",
+      line: "#1F1F1F",
+      lineStrong: "#2C2C2C",
+      white: "#FFFFFF",
+      black: "#000000",
+      text: "#FFFFFF",
+      muted: "#A6A6A6",
+      faint: "#6B6B6B",
+      textOnAccent: "#1A1405",
       textOnBrand: "#FFFFFF",
-      gold: "#D4A537",
-      gold2: "#F1D48A",
-      goldDeep: "#8A6519",
-      goldSoft: "rgba(212, 165, 55, 0.14)",
-      blue: "#0E1F45",
-      blue2: "#16306B",
-      accent: "#3D7BFF",
-      accentPressed: "#2E63D6",
-      accentSoft: "rgba(61, 123, 255, 0.16)",
-      accentText: "#8FB3FF",
-      red: "#E5484D",
-      green: "#3FB950",
-      overlay: "rgba(7, 8, 10, 0.72)",
-      scrim: "rgba(0, 0, 0, 0.6)",
+      gold: "#D4AF37",
+      gold2: "#F0D27A",
+      goldDeep: "#A8841F",
+      goldSoft: "rgba(212, 175, 55, 0.14)",
+      blue: "#1A1A1A",
+      blue2: "#262626",
+      accent: "#4A8BFF",
+      accentPressed: "#2F6FE6",
+      accentSoft: "rgba(74, 139, 255, 0.16)",
+      accentText: "#6EA2FF",
+      red: "#E53935",
+      redSoft: "rgba(229, 57, 53, 0.16)",
+      green: "#43A047",
+      overlay: "rgba(0, 0, 0, 0.62)",
+      scrim: "rgba(0, 0, 0, 0.62)",
       ...SHARED_FONTS
     },
 
     light: {
-      background: "#F7F5F0",
+      background: "#FFFFFF",
       backgroundElevated: "#FFFFFF",
-      surface: "#FFFFFF",
-      surface2: "#EFEBE2",
-      surface3: "#E4DFD3",
-      card: "#FFFFFF",
-      line: "#E2DCCF",
-      lineStrong: "#CFC7B6",
-      white: "#12151C",
-      black: "#0B0D12",
-      text: "#12151C",
-      muted: "#5D6370",
-      faint: "#8D929C",
-      textOnAccent: "#1A1205",
+      surface: "#F5F5F5",
+      surface2: "#EDEDED",
+      surface3: "#E0E0E0",
+      card: "#F7F7F7",
+      line: "#EBEBEB",
+      lineStrong: "#DCDCDC",
+      white: "#111111",
+      black: "#000000",
+      text: "#111111",
+      muted: "#5F5F5F",
+      faint: "#8F8F8F",
+      textOnAccent: "#1A1405",
       textOnBrand: "#FFFFFF",
-      gold: "#A87A12",
-      gold2: "#D4A537",
-      goldDeep: "#7A570C",
-      goldSoft: "rgba(168, 122, 18, 0.12)",
-      blue: "#0E1F45",
-      blue2: "#16306B",
-      accent: "#1F5BE0",
-      accentPressed: "#1847B3",
-      accentSoft: "rgba(31, 91, 224, 0.10)",
-      accentText: "#1F5BE0",
-      red: "#C9353A",
-      green: "#1F8A3B",
-      overlay: "rgba(255, 255, 255, 0.86)",
+      gold: "#B08A1E",
+      gold2: "#D4AF37",
+      goldDeep: "#8A6B12",
+      goldSoft: "rgba(176, 138, 30, 0.12)",
+      blue: "#F2F2F2",
+      blue2: "#E6E6E6",
+      accent: "#1F63E0",
+      accentPressed: "#174FB8",
+      accentSoft: "rgba(31, 99, 224, 0.10)",
+      accentText: "#1F63E0",
+      red: "#D32F2F",
+      redSoft: "rgba(211, 47, 47, 0.10)",
+      green: "#2E7D32",
+      overlay: "rgba(0, 0, 0, 0.55)",
       scrim: "rgba(0, 0, 0, 0.45)",
       ...SHARED_FONTS
     }
   }
 };
 
-// Brand gradient stops for gold accents (hairlines, featured borders).
-export const GOLD_GRADIENT = ["#F1D48A", "#D4A537", "#8A6519"];
+// Metallic gold stops (hairlines, featured borders).
+export const GOLD_GRADIENT = ["#F0D27A", "#D4AF37", "#A8841F"];
 
 let currentMode = DEFAULT_APP_THEME;
 let currentPalette = DEFAULT_APP_THEME_PALETTE;

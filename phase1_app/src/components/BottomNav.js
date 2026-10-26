@@ -17,9 +17,10 @@ const TABS = [
   { key: "Live", icon: "radio", match: [] }
 ];
 
+// Space the floating bar occupies from the bottom edge (bar + its margin).
 export function useNavBarHeight() {
   const insets = useSafeAreaInsets();
-  return NAV_BAR_HEIGHT + insets.bottom;
+  return NAV_BAR_HEIGHT + 10 + Math.max(insets.bottom, 8);
 }
 
 export function BottomNav({ current, go, appLanguage = "en" }) {
@@ -28,7 +29,7 @@ export function BottomNav({ current, go, appLanguage = "en" }) {
   const isLive = Boolean(data?.live?.isLive);
 
   return (
-    <View style={[s.bottomNav, { height: NAV_BAR_HEIGHT + insets.bottom, paddingBottom: insets.bottom }]}>
+    <View style={[s.bottomNav, { height: NAV_BAR_HEIGHT, bottom: Math.max(insets.bottom, 8) + 2 }]}>
       {TABS.map(tab => {
         const active = current === tab.key || tab.match.includes(current);
         const label = tr(appLanguage, tab.key);
@@ -46,17 +47,18 @@ export function BottomNav({ current, go, appLanguage = "en" }) {
             accessibilityLabel={tab.key === "Live" && isLive ? `${label}, live now` : label}
           >
             <View style={[s.navPill, active && s.navPillActive]}>
-              <Ionicons
-                name={active ? tab.icon : `${tab.icon}-outline`}
-                size={22}
-                color={active ? C.accent : C.muted}
-              />
-              {tab.key === "Live" && isLive ? <View style={s.liveDot} /> : null}
+              <View>
+                <Ionicons
+                  name={active ? tab.icon : `${tab.icon}-outline`}
+                  size={21}
+                  color={active ? C.accent : C.muted}
+                />
+                {tab.key === "Live" && isLive ? <View style={s.liveDot} /> : null}
+              </View>
+              <Text style={[s.navLabel, active && s.navActive]} numberOfLines={1}>
+                {label}
+              </Text>
             </View>
-
-            <Text style={[s.navLabel, active && s.navActive]} numberOfLines={1}>
-              {label}
-            </Text>
           </Pressable>
         );
       })}

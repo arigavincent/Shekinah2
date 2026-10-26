@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Image,
   Pressable,
+  StyleSheet,
   Text,
   View
 } from "react-native";
@@ -68,7 +69,7 @@ export function MiniPlayer({ item, sermon, onOpen, onClose }) {
   if (!activeItem) return null;
 
   return (
-    <View style={[styles.root, { bottom: navHeight + 8 }]}>
+    <View style={[styles.root, { bottom: navHeight + 6 }]}>
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${progress}%` }]} />
       </View>
@@ -93,13 +94,13 @@ export function MiniPlayer({ item, sermon, onOpen, onClose }) {
       </Pressable>
 
       <Pressable
-        style={({ pressed }) => [styles.iconButton, pressed && { backgroundColor: C.accentPressed }]}
+        style={({ pressed }) => [styles.iconButton, pressed && { backgroundColor: C.goldDeep }]}
         onPress={toggle}
         hitSlop={6}
         accessibilityRole="button"
         accessibilityLabel={audioState.playing ? "Pause" : "Play"}
       >
-        <Ionicons name={audioState.playing ? "pause" : "play"} size={20} color="#FFFFFF" />
+        <Ionicons name={audioState.playing ? "pause" : "play"} size={20} color={C.textOnAccent} />
       </Pressable>
 
       <Pressable style={styles.closeButton} onPress={close} hitSlop={6} accessibilityRole="button" accessibilityLabel="Stop and close player">
@@ -117,21 +118,17 @@ const styles = makeThemedStyles(C => ({
     minHeight: 64,
     borderRadius: 16,
     backgroundColor: C.surface2,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: C.lineStrong,
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: 8,
+    paddingLeft: 12,
     paddingRight: 6,
     paddingVertical: 8,
     gap: 6,
     zIndex: 50,
     overflow: "hidden",
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 }
+    elevation: 8
   },
   info: {
     flex: 1,
@@ -163,7 +160,7 @@ const styles = makeThemedStyles(C => ({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 0,
+    top: 0,
     height: 2,
     backgroundColor: C.line
   },
@@ -175,7 +172,7 @@ const styles = makeThemedStyles(C => ({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: C.accent,
+    backgroundColor: C.gold,
     alignItems: "center",
     justifyContent: "center"
   },
