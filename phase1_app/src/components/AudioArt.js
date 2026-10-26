@@ -125,16 +125,19 @@ export function AudioArt({ item, size, variant = "card", radius = 14 }) {
         {!compact ? <Text style={styles.brandText}>SHEKINAH</Text> : null}
       </View>
 
-      {!photo ? (
-        <View style={[styles.titleBlock, { left: compact ? 7 : 12, right: compact ? 7 : 12, top: compact ? size * 0.3 : size * 0.26 }]}>
+      {!photo && !compact ? (
+        <View style={[styles.titleBlock, { left: 12, right: 12, top: size * 0.26 }]}>
           {code ? <Text style={[styles.code, { fontSize: Math.max(9, titleSize * 0.62) }]}>{code}</Text> : null}
-          <Text
-            style={[styles.title, { fontSize: titleSize, lineHeight: titleSize * 1.18 }]}
-            numberOfLines={compact ? 3 : 3}
-          >
+          <Text style={[styles.title, { fontSize: titleSize, lineHeight: titleSize * 1.18 }]} numberOfLines={3}>
             {title}
           </Text>
         </View>
+      ) : null}
+      {/* Small thumbnails carry only the sermon code; the row shows the title. */}
+      {!photo && compact && code ? (
+        <Text style={[styles.thumbCode, { fontSize: Math.round(size * 0.24), top: size * 0.32 }]} numberOfLines={1}>
+          {code}
+        </Text>
       ) : null}
 
       {compact ? (
@@ -163,6 +166,7 @@ const styles = makeThemedStyles(C => ({
   titleBlock: { position: "absolute" },
   code: { color: "#F0D27A", fontFamily: C.fontBold, letterSpacing: 1, marginBottom: 2 },
   title: { color: "#D4AF37", fontFamily: C.fontBrand },
+  thumbCode: { position: "absolute", left: 8, right: 6, color: "#D4AF37", fontFamily: C.fontBrand },
   thumbWave: { position: "absolute", right: 7, bottom: 7 },
   glassWrap: { position: "absolute", left: 8, right: 8, bottom: 8, borderRadius: 12, overflow: "hidden" },
   glass: {

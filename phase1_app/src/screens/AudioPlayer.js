@@ -169,6 +169,14 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
     }
   }, [remoteMediaUrl]);
 
+  // Opening a sermon starts it, unless it is already the active track.
+  const autoStarted = React.useRef(false);
+  useEffect(() => {
+    if (autoStarted.current || !sermon?.id || !playbackUrl || isCurrentActive) return;
+    autoStarted.current = true;
+    togglePlay();
+  }, [sermon?.id, playbackUrl, isCurrentActive]);
+
   // Artwork settles back slightly when paused, like a record lifting.
   useEffect(() => {
     Animated.spring(artScale, { toValue: playing ? 1 : 0.9, friction: 7, tension: 60, useNativeDriver: true }).start();
