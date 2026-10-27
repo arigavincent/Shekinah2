@@ -159,7 +159,14 @@ fun ServiceStrip(nextService: String) {
     }
 }
 
-// Sermons started but not finished, with how far you got.
+// "12 min left", "Watched" or "Opened" for a history card.
+fun progressLabel(p: Library.Progress) = when {
+    p.finished -> "Watched \u2713"
+    p.position > 0 && p.duration > 0 -> "${(p.leftMs / 60_000).coerceAtLeast(1)} min left"
+    else -> "Opened"
+}
+
+// Every sermon opened, most recent first, with how far you got.
 @Composable
 fun ContinueRail(items: List<Pair<Sermon, Library.Progress>>, open: (Sermon) -> Unit) {
     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -180,8 +187,7 @@ fun ContinueRail(items: List<Pair<Sermon, Library.Progress>>, open: (Sermon) -> 
                     Box(Modifier.align(Alignment.Center).size(42.dp).glass(CircleShape, 1.3f), contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.PlayArrow, "Continue", tint = Color.White, modifier = Modifier.size(26.dp))
                     }
-                    val left = (p.leftMs / 60_000).coerceAtLeast(1)
-                    Text("$left min left", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 11.sp,
+                    Text(progressLabel(p), color = Color.White, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 11.sp,
                         modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).glass().padding(horizontal = 8.dp, vertical = 3.dp))
                     Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color(0x40FFFFFF))) {
                         Box(Modifier.fillMaxWidth(p.fraction).fillMaxHeight().background(Brand.GoldGradient))

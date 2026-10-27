@@ -135,7 +135,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
     val route = nav.current
     val saveable = rememberSaveableStateHolder()
     val openVideo = { s: Sermon, q: List<Sermon> -> nav.push(Route.Video(s, q)) }
-    val openAudio = { s: Sermon, q: List<Sermon> -> nav.push(Route.Audio(s, q)) }
+    val openAudio = { s: Sermon, q: List<Sermon> -> library.opened(s.id); nav.push(Route.Audio(s, q)) }
     val openClip = { c: Clip -> nav.push(Route.Video(c.asSermon(), content.clips.map { it.asSermon() })) }
     val context2 = context
     // Opens the Bible tab at a written reference ("Matthew 6:6").
@@ -182,6 +182,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                             refresh = refresh,
                             openReference = openReference,
                             openProfile = { nav.push(Route.Page("Profile")) },
+                            seeHistory = { nav.push(Route.Page("History")) },
                         ),
                     )
                     Tab.Sermons -> SermonsScreen(content, library, sermonsStartTab, sermonsStartCategory.also { sermonsStartCategory = null }, { menuOpen = true }, openVideo, openAudio, openClip)

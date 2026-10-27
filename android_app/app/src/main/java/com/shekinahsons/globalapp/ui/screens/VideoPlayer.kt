@@ -134,6 +134,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
     val activity = context as Activity
     val scope = rememberCoroutineScope()
     var fullscreen by remember { mutableStateOf(false) }
+    LaunchedEffect(sermon.id) { library.opened(sermon.id) }
     var controls by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
     var unlockHint by remember { mutableStateOf(false) }
@@ -185,7 +186,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
             override fun onPlaybackStateChanged(state: Int) {
                 buffering = state == Player.STATE_BUFFERING
                 if (state == Player.STATE_READY) retries = 0
-                if (state == Player.STATE_ENDED) { ended = true; library.savePosition(sermon.id, 0, 0) }
+                if (state == Player.STATE_ENDED) { ended = true; library.savePosition(sermon.id, player.duration, player.duration) }
             }
             override fun onPlayerError(e: PlaybackException) {
                 // A dropped connection: pick up where it stopped (a few times) before asking.

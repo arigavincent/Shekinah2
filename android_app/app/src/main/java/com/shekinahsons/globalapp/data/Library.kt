@@ -54,10 +54,10 @@ class Library(private val context: Context) {
         }
     }
 
-    // Where each sermon was left (position, length, when), so it resumes
-    // instead of starting over and can be offered under Continue.
-    data class Progress(val position: Long, val duration: Long, val at: Long) {
-        val fraction get() = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    // Every sermon opened (the watch history), with where it was left so it
+    // resumes instead of starting over.
+    data class Progress(val position: Long, val duration: Long, val at: Long, val finished: Boolean = false) {
+        val fraction get() = if (finished) 1f else if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
         val leftMs get() = (duration - position).coerceAtLeast(0)
     }
     private val progress = context.getSharedPreferences("progress2", Context.MODE_PRIVATE)
@@ -65,21 +65,33 @@ class Library(private val context: Context) {
     var progressVersion by androidx.compose.runtime.mutableIntStateOf(0)
         private set
 
+    // Recorded as soon as a sermon is opened, even for a moment.
+    fun opened(id: String) {
+        val p = progressOf(id)
+        progress.edit().putString(id, "${p?.position ?: 0},${p?.duration ?: 0},${System.currentTimeMillis()},${if (p?.finished == true) 1 else 0}").apply()
+        progressVersion++
+    }
+
     fun savePosition(id: String, positionMs: Long, durationMs: Long) {
-        // Near the end counts as finished: next time it starts from the top.
-        val keep = positionMs > 10_000 && (durationMs <= 0 || positionMs < durationMs - 20_000)
-        progress.edit().apply { if (keep) putString(id, "$positionMs,$durationMs,${System.currentTimeMillis()}") else remove(id) }.apply()
+        // Near the end counts as finished: it stays in the history and starts from the top next time.
+        val finished = durationMs > 0 && positionMs >= durationMs - 20_000
+        val resume = if (positionMs > 10_000 && !finished) positionMs else 0
+        val wasFinished = progressOf(id)?.finished == true
+        progress.edit().putString(id, "$resume,$durationMs,${System.currentTimeMillis()},${if (finished || (wasFinished && resume == 0L)) 1 else 0}").apply()
         progressVersion++
     }
 
     fun progressOf(id: String): Progress? = progress.getString(id, null)?.split(',')?.let { p ->
         val pos = p.getOrNull(0)?.toLongOrNull() ?: return null
-        Progress(pos, p.getOrNull(1)?.toLongOrNull() ?: 0, p.getOrNull(2)?.toLongOrNull() ?: 0)
+        Progress(pos, p.getOrNull(1)?.toLongOrNull() ?: 0, p.getOrNull(2)?.toLongOrNull() ?: 0, p.getOrNull(3) == "1")
     }
 
     fun position(id: String): Long = progressOf(id)?.position ?: 0L
 
-    // Started but not finished, most recent first.
-    fun inProgress(all: List<Sermon>): List<Pair<Sermon, Progress>> =
+    // Everything opened, most recent first.
+    fun history(all: List<Sermon>): List<Pair<Sermon, Progress>> =
         all.mapNotNull { s -> progressOf(s.id)?.let { s to it } }.sortedByDescending { it.second.at }
+
+    fun forget(id: String) { progress.edit().remove(id).apply(); progressVersion++ }
+    fun clearHistory() { progress.edit().clear().apply(); progressVersion++ }
 }

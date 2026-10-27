@@ -1,5 +1,7 @@
 package com.shekinahsons.globalapp.ui.screens
 
+import com.shekinahsons.globalapp.data.asSermon
+import androidx.compose.material.icons.rounded.Close
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -266,5 +268,54 @@ fun DownloadsPage(content: HomeContent, library: Library, openVideo: (Sermon, Li
                 Icon(Icons.Rounded.Delete, "Remove download", tint = Brand.Text2, modifier = Modifier.padding(end = 12.dp).size(40.dp).clip(CircleShape).clickable { library.delete(s) }.padding(9.dp))
             }
         }
+    }
+}
+
+// Watch history: every sermon opened, most recent first.
+@Composable
+fun HistoryPage(content: HomeContent, library: Library, openVideo: (Sermon, List<Sermon>) -> Unit, openAudio: (Sermon, List<Sermon>) -> Unit) {
+    val everything = remember(content) { content.sermons + content.clips.map { it.asSermon() } }
+    val items = remember(library.progressVersion, everything) { library.history(everything) }
+    var confirm by remember { mutableStateOf(false) }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp)) {
+        if (items.isEmpty()) item {
+            Text("Sermons you open will show up here, so you can pick up where you left off.", style = Type.Body, color = Brand.Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(36.dp))
+        } else item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("${items.size} opened", style = Type.Meta, color = Brand.Text2, modifier = Modifier.weight(1f))
+                Text("Clear history", color = Brand.GoldLight, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable { confirm = true }.padding(horizontal = 12.dp, vertical = 8.dp))
+            }
+        }
+        items(items, key = { it.first.id }) { (s, p) ->
+            val audio = s.type == "audio"
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    SermonRow(s, audio = audio) { if (audio) openAudio(s, items.map { it.first }.filter { it.type == "audio" }) else openVideo(s, items.map { it.first }.filter { it.type != "audio" }) }
+                    Row(Modifier.padding(start = 16.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color(0x22FFFFFF))) {
+                            Box(Modifier.fillMaxWidth(p.fraction).height(3.dp).background(Brand.GoldGradient))
+                        }
+                        Text("  ${progressLabel(p)} \u00B7 ${ago(p.at)}", style = Type.Meta.copy(fontSize = 11.5.sp), color = Brand.Text2)
+                    }
+                }
+                Icon(Icons.Rounded.Close, "Remove from history", tint = Brand.Text2, modifier = Modifier.padding(end = 10.dp).size(38.dp).clip(CircleShape).clickable { library.forget(s.id) }.padding(9.dp))
+            }
+        }
+    }
+    if (confirm) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { confirm = false }, containerColor = Color(0xFF1C1C20),
+        title = { Text("Clear watch history?", color = Brand.White) },
+        text = { Text("Where you stopped in each sermon is forgotten too.", color = Brand.Text2) },
+        confirmButton = { androidx.compose.material3.TextButton({ library.clearHistory(); confirm = false }) { Text("Clear", color = Brand.Red) } },
+        dismissButton = { androidx.compose.material3.TextButton({ confirm = false }) { Text("Cancel", color = Brand.Text2) } },
+    )
+}
+
+private fun ago(at: Long): String {
+    val mins = (System.currentTimeMillis() - at) / 60_000
+    return when {
+        mins < 1 -> "just now"; mins < 60 -> "$mins min ago"; mins < 1440 -> "${mins / 60} h ago"
+        mins < 2880 -> "yesterday"; else -> "${mins / 1440} days ago"
     }
 }

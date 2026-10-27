@@ -114,6 +114,7 @@ class HomeActions(
     val refresh: () -> Unit,
     val openReference: (String) -> Unit,
     val openProfile: () -> Unit,
+    val seeHistory: () -> Unit = {},
 )
 
 // Phaneroo's home order: today's devotional, then (when on air) the live
@@ -144,7 +145,7 @@ fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing:
 
         // Started-but-unfinished sermons; re-read whenever progress is saved.
         val everything = remember(content) { content.sermons + content.clips.map { it.asSermon() } }
-        val continuing = remember(library.progressVersion, everything) { library.inProgress(everything).take(10) }
+        val continuing = remember(library.progressVersion, everything) { library.history(everything).take(15) }
         val pull = rememberPullToRefreshState()
 
         PullToRefreshBox(
@@ -162,7 +163,7 @@ fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing:
             else item { ServiceStrip(content.live.nextService) }
 
             if (continuing.isNotEmpty()) {
-                item { RailHeader("Continue", null) }
+                item { RailHeader("Continue watching", actions.seeHistory) }
                 item {
                     ContinueRail(continuing) { s ->
                         if (s.type == "audio") actions.openAudio(s, audios) else if (s.category == "Recap") actions.openVideo(s, content.clips.map { it.asSermon() }) else actions.openVideo(s, videos)

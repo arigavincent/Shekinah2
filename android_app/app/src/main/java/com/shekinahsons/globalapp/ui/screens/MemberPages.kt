@@ -176,6 +176,7 @@ private fun PrayerForm(session: Session, done: () -> Unit) {
     var topic by remember { mutableStateOf(prayerTopics.first()) }
     var text by remember { mutableStateOf("") }
     var public by remember { mutableStateOf(true) }
+    var anonymous by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     Card {
@@ -186,13 +187,14 @@ private fun PrayerForm(session: Session, done: () -> Unit) {
         Field("YOUR REQUEST", text, { text = it }, hint = "Share as much as you are comfortable with", minHeight = 120.dp, singleLine = false)
         Spacer(Modifier.height(8.dp))
         com.shekinahsons.globalapp.ui.components.ToggleRow("Share on the prayer wall", "The family can see it and pray with you", public) { public = it }
-        Text("Shared as ${session.member?.name}", style = Type.Meta, color = Brand.Muted)
+        com.shekinahsons.globalapp.ui.components.ToggleRow("Post anonymously", "Your name isn't shown. The pastoral team can still see it so they can follow up.", anonymous) { anonymous = it }
+        Text(if (anonymous) "Shared as Anonymous" else "Shared as ${session.member?.name}", style = Type.Meta, color = Brand.Muted)
         ErrorNote(error)
         Spacer(Modifier.height(14.dp))
         GoldButton("Send prayer request", busy = busy, enabled = text.trim().length >= 5) {
             scope.launch {
                 busy = true; error = null
-                runCatching { Api.post("/prayer-requests", mapOf("category" to topic, "text" to text.trim(), "isPublic" to public, "anonymous" to false)) }
+                runCatching { Api.post("/prayer-requests", mapOf("category" to topic, "text" to text.trim(), "isPublic" to public, "anonymous" to anonymous)) }
                     .onSuccess { done() }.onFailure { error = it.message }
                 busy = false
             }
@@ -239,6 +241,7 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
     var reload by remember { mutableIntStateOf(0) }
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
+    var anonymous by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var sent by remember { mutableStateOf(false) }
@@ -246,7 +249,7 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Segments(listOf("Testimonies", "Share yours"), tab) { tab = it } }
         if (tab == "Share yours") item {
-            if (session.member == null) SignInCard("Sign in to share what God has done; your name goes with your testimony.", onSignIn)
+            if (session.member == null) SignInCard("Sign in to share what God has done. You can choose to share it anonymously.", onSignIn)
             else if (sent) Card { Text("Thank you! 🙌", style = Type.Title, color = Brand.White); Text("Your testimony was sent. It appears here once the team has reviewed it.", style = Type.Body, color = Brand.Text2) }
             else Card {
                 Text("What has God done?", style = Type.Title, color = Brand.White)
@@ -254,12 +257,14 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
                 Field("TITLE", title, { title = it }, hint = "e.g. Healed after surgery")
                 Spacer(Modifier.height(12.dp))
                 Field("YOUR STORY", body, { body = it }, minHeight = 150.dp, singleLine = false)
+                Spacer(Modifier.height(6.dp))
+                com.shekinahsons.globalapp.ui.components.ToggleRow("Share anonymously", "Shown as Anonymous on the wall. The team reviewing it still sees your name.", anonymous) { anonymous = it }
                 ErrorNote(error)
                 Spacer(Modifier.height(14.dp))
                 GoldButton("Share testimony", busy = busy, enabled = title.isNotBlank() && body.trim().length >= 20) {
                     scope.launch {
                         busy = true; error = null
-                        runCatching { Api.post("/testimonies", mapOf("title" to title.trim(), "body" to body.trim())) }.onSuccess { sent = true }.onFailure { error = it.message }
+                        runCatching { Api.post("/testimonies", mapOf("title" to title.trim(), "body" to body.trim(), "anonymous" to anonymous)) }.onSuccess { sent = true }.onFailure { error = it.message }
                         busy = false
                     }
                 }

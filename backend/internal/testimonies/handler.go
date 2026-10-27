@@ -32,8 +32,9 @@ type Testimony struct {
 }
 
 type CreateRequest struct {
-	Title string `json:"title"`
-	Body  string `json:"body"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	Anonymous bool   `json:"anonymous"`
 }
 
 type UpdateRequest struct {
@@ -99,7 +100,7 @@ func (h Handler) List(c *gin.Context) {
 				t.status,
 				t.featured,
 				t.like_count,
-				COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') AS display_name,
+				CASE WHEN t.is_anonymous THEN 'Anonymous' ELSE COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') END AS display_name,
 				''::text AS owner_email,
 				t.created_at,
 				t.updated_at
@@ -152,7 +153,7 @@ func (h Handler) ListMine(c *gin.Context) {
 				t.status,
 				t.featured,
 				t.like_count,
-				COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') AS display_name,
+				COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') || CASE WHEN t.is_anonymous THEN ' (anonymous)' ELSE '' END AS display_name,
 				u.email,
 				t.created_at,
 				t.updated_at
@@ -223,9 +224,10 @@ func (h Handler) Create(c *gin.Context) {
 					user_id,
 					title,
 					body,
-					status
+					status,
+					is_anonymous
 				)
-				VALUES ($1, $2, $3, $4, 'pending')
+				VALUES ($1, $2, $3, $4, 'pending', $5)
 				RETURNING
 					id,
 					title,
@@ -242,6 +244,7 @@ func (h Handler) Create(c *gin.Context) {
 			userID,
 			title,
 			body,
+			req.Anonymous,
 		),
 	)
 	if err != nil {
@@ -331,7 +334,7 @@ func (h Handler) AdminList(c *gin.Context) {
 			t.status,
 			t.featured,
 			t.like_count,
-			COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') AS display_name,
+			COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') || CASE WHEN t.is_anonymous THEN ' (anonymous)' ELSE '' END AS display_name,
 			u.email,
 			t.created_at,
 			t.updated_at
@@ -410,7 +413,7 @@ func (h Handler) AdminUpdate(c *gin.Context) {
 					t.status,
 					t.featured,
 					t.like_count,
-					COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') AS display_name,
+					COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') || CASE WHEN t.is_anonymous THEN ' (anonymous)' ELSE '' END AS display_name,
 					u.email,
 					t.created_at,
 					t.updated_at

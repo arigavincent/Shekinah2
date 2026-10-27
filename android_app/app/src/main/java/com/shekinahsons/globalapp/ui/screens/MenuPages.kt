@@ -53,7 +53,7 @@ import com.shekinahsons.globalapp.ui.theme.Type
 
 val MenuPageTitles = mapOf(
     "Profile" to "Profile", "Giving" to "Giving", "Updates" to "Updates", "Notifications" to "Notifications",
-    "Downloads" to "Downloads", "Library" to "Books & Library", "Platforms" to "Our Platforms",
+    "Downloads" to "Downloads", "History" to "Watch history", "Library" to "Books & Library", "Platforms" to "Our Platforms",
     "Prayer" to "Prayer Request", "Events" to "Events", "ReadingPlans" to "Reading Plans", "Chat" to "Chat",
     "Testimonies" to "Testimonies", "Serve" to "Serve", "Branches" to "Branches", "CheckIn" to "QR Check-In",
     "About" to "About & Contact",
@@ -82,6 +82,7 @@ fun MenuPage(
             "Updates" -> UpdatesPage(content)
             "About" -> AboutPage(content)
             "Downloads" -> DownloadsPage(content, library, openVideo, openAudio)
+            "History" -> HistoryPage(content, library, openVideo, openAudio)
             "Library" -> LibraryPage(content, library, openVideo, openAudio)
             "Prayer" -> PrayerPage(session, openProfile)
             "Testimonies" -> TestimoniesPage(session, openProfile)

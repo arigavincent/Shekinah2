@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AdminPanelSettings
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Chat
@@ -77,6 +78,7 @@ val MenuGroups: List<Pair<String, List<MenuItem>>> = listOf(
     ),
     "MEDIA" to listOf(
         MenuItem("Downloads", "Downloads", Icons.Outlined.Download),
+        MenuItem("Watch history", "History", Icons.Outlined.History),
         MenuItem("Books & Library", "Library", Icons.Outlined.LocalLibrary),
         MenuItem("Our Platforms", "Platforms", Icons.Outlined.Public),
     ),
