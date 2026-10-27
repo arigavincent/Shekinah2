@@ -225,9 +225,10 @@ func (h Handler) Create(c *gin.Context) {
 					title,
 					body,
 					status,
-					is_anonymous
+					is_anonymous,
+					approved_at
 				)
-				VALUES ($1, $2, $3, $4, 'pending', $5)
+				VALUES ($1, $2, $3, $4, 'approved', $5, NOW())
 				RETURNING
 					id,
 					title,

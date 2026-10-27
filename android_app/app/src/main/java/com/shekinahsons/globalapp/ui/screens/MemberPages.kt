@@ -250,7 +250,7 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
         item { Segments(listOf("Testimonies", "Share yours"), tab) { tab = it } }
         if (tab == "Share yours") item {
             if (session.member == null) SignInCard("Sign in to share what God has done. You can choose to share it anonymously.", onSignIn)
-            else if (sent) Card { Text("Thank you! 🙌", style = Type.Title, color = Brand.White); Text("Your testimony was sent. It appears here once the team has reviewed it.", style = Type.Body, color = Brand.Text2) }
+            else if (sent) Card { Text("Thank you! 🙌", style = Type.Title, color = Brand.White); Text("Your testimony is now on the Testimonies wall for the family to read.", style = Type.Body, color = Brand.Text2) }
             else Card {
                 Text("What has God done?", style = Type.Title, color = Brand.White)
                 Spacer(Modifier.height(12.dp))
@@ -258,13 +258,13 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 Field("YOUR STORY", body, { body = it }, minHeight = 150.dp, singleLine = false)
                 Spacer(Modifier.height(6.dp))
-                com.shekinahsons.globalapp.ui.components.ToggleRow("Share anonymously", "Shown as Anonymous on the wall. The team reviewing it still sees your name.", anonymous) { anonymous = it }
+                com.shekinahsons.globalapp.ui.components.ToggleRow("Share anonymously", "Shown as Anonymous on the wall. The pastoral team still sees your name.", anonymous) { anonymous = it }
                 ErrorNote(error)
                 Spacer(Modifier.height(14.dp))
                 GoldButton("Share testimony", busy = busy, enabled = title.isNotBlank() && body.trim().length >= 20) {
                     scope.launch {
                         busy = true; error = null
-                        runCatching { Api.post("/testimonies", mapOf("title" to title.trim(), "body" to body.trim(), "anonymous" to anonymous)) }.onSuccess { sent = true }.onFailure { error = it.message }
+                        runCatching { Api.post("/testimonies", mapOf("title" to title.trim(), "body" to body.trim(), "anonymous" to anonymous)) }.onSuccess { sent = true; reload++ }.onFailure { error = it.message }
                         busy = false
                     }
                 }
