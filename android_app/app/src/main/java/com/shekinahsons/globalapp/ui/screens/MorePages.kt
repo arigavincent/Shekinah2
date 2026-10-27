@@ -162,8 +162,8 @@ fun PlatformsPage(content: HomeContent) {
     }
 }
 
-// What the member wants to hear about. Saved on the phone; pushes start
-// once the app is connected to a push service.
+// What the member wants to hear about. Saved on the phone and sent to the
+// server so pushes respect it; the phone also filters what it shows.
 @Composable
 fun NotificationsPage(content: HomeContent) {
     val context = LocalContext.current
@@ -176,10 +176,10 @@ fun NotificationsPage(content: HomeContent) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.7f).padding(horizontal = 16.dp, vertical = 6.dp)) {
-                ToggleRow("Live services", "When we go live", live) { live = it; prefs.edit().putBoolean("live", it).apply() }
-                ToggleRow("New sermons", "Video and audio messages", sermons) { sermons = it; prefs.edit().putBoolean("sermons", it).apply() }
-                ToggleRow("Daily devotion", "Each morning's devotional", devotion) { devotion = it; prefs.edit().putBoolean("devotion", it).apply() }
-                ToggleRow("Events", "Conferences and gatherings", events) { events = it; prefs.edit().putBoolean("events", it).apply() }
+                ToggleRow("Live services", "When we go live", live) { live = it; prefs.edit().putBoolean("live", it).apply(); com.shekinahsons.globalapp.notify.Push.preferencesChanged(context) }
+                ToggleRow("New sermons", "Video and audio messages", sermons) { sermons = it; prefs.edit().putBoolean("sermons", it).apply(); com.shekinahsons.globalapp.notify.Push.preferencesChanged(context) }
+                ToggleRow("Daily devotion", "Each morning's devotional", devotion) { devotion = it; prefs.edit().putBoolean("devotion", it).apply(); com.shekinahsons.globalapp.notify.Push.preferencesChanged(context) }
+                ToggleRow("Events", "Conferences and gatherings", events) { events = it; prefs.edit().putBoolean("events", it).apply(); com.shekinahsons.globalapp.notify.Push.preferencesChanged(context) }
             }
         }
         item { Text("Recent announcements", style = Type.Title, color = Brand.White, modifier = Modifier.padding(top = 10.dp)) }

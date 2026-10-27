@@ -860,7 +860,7 @@ func (h Handler) ListTransactions(c *gin.Context) {
 			SELECT id, category, method, phone, amount, note, status,
 			       checkout_request_id, merchant_request_id, mpesa_receipt_number,
 			       COALESCE(result_code, -1), result_description, created_at, updated_at,
-			       email, currency, provider, checkout_url, provider_reference
+			       email, currency, provider, checkout_url, provider_reference, payer_name
 			FROM giving_transactions
 			ORDER BY created_at DESC
 			LIMIT 200
@@ -910,7 +910,7 @@ func (h Handler) getTransaction(ctx context.Context, id string) (gin.H, bool, er
 			SELECT id, category, method, phone, amount, note, status,
 			       checkout_request_id, merchant_request_id, mpesa_receipt_number,
 			       COALESCE(result_code, -1), result_description, created_at, updated_at,
-			       email, currency, provider, checkout_url, provider_reference
+			       email, currency, provider, checkout_url, provider_reference, payer_name
 			FROM giving_transactions
 			WHERE id = $1
 			LIMIT 1
@@ -951,6 +951,7 @@ func scanTransaction(row scanner) (gin.H, error) {
 		provider          string
 		checkoutURL       string
 		providerReference string
+		payerName         string
 	)
 
 	err := row.Scan(
@@ -973,6 +974,7 @@ func scanTransaction(row scanner) (gin.H, error) {
 		&provider,
 		&checkoutURL,
 		&providerReference,
+		&payerName,
 	)
 	if err != nil {
 		return nil, err
@@ -1003,6 +1005,7 @@ func scanTransaction(row scanner) (gin.H, error) {
 		"provider":           provider,
 		"checkoutUrl":        checkoutURL,
 		"providerReference":  providerReference,
+		"payerName":          payerName,
 	}, nil
 }
 

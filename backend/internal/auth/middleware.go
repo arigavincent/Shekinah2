@@ -117,3 +117,17 @@ func RequireRole(service Service, allowedRoles ...string) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// OptionalAuth records the member when a valid token is sent, and lets the
+// request through as a guest otherwise.
+func OptionalAuth(service Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		header := c.GetHeader("Authorization")
+		if strings.HasPrefix(header, "Bearer ") {
+			if userID, err := service.ParseToken(strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))); err == nil {
+				c.Set(contextUserIDKey, userID)
+			}
+		}
+		c.Next()
+	}
+}

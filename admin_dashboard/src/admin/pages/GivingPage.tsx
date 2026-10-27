@@ -6,8 +6,13 @@ import { InlineAlert } from "../components/InlineAlert";
 import { PaginationBar } from "../components/PaginationBar";
 import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import {
+  getGivingDetails,
   listGivingTransactions,
-  type GivingTransaction
+  reviewGivingTransaction,
+  saveGivingDetails,
+  type GivingDetails,
+  type GivingTransaction,
+  type Paybill
 } from "../api/adminGivingApi";
 
 function formatKes(amount: number) {
@@ -34,10 +39,110 @@ function statusClass(status: string) {
 }
 
 function statusLabel(status: string) {
+  if (status === "awaiting_verification") return "Needs check";
   if (status === "success") return "Paid";
   if (status === "failed") return "Failed";
   if (status === "cancelled") return "Cancelled";
   return "Pending";
+}
+
+function methodLabel(method: string) {
+  if (method === "mpesa_paybill") return "M-Pesa paybill";
+  if (method === "airtel_paybill") return "Airtel paybill";
+  if (method === "bank") return "Bank";
+  if (method === "card") return "Card";
+  return "M-Pesa prompt";
+}
+
+const emptyPaybill: Paybill = { enabled: false, paybill: "", account: "", accountHint: "", name: "Shekinah Sons Global" };
+const emptyDetails: GivingDetails = {
+  mpesa: { ...emptyPaybill },
+  airtel: { ...emptyPaybill },
+  bank: { enabled: false, bankName: "", accountName: "Shekinah Sons Global", accountNumber: "", branch: "", swiftCode: "", reference: "" },
+  note: "",
+  categories: ["Tithe", "Offering", "Thanksgiving", "Project", "Special Seed"]
+};
+
+// The payment details members see on the giving cards in the app.
+function PaymentDetailsCard() {
+  const [details, setDetails] = useState<GivingDetails>(emptyDetails);
+  const [categories, setCategories] = useState(emptyDetails.categories.join(", "));
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getGivingDetails()
+      .then(response => {
+        setDetails({ ...emptyDetails, ...response.details });
+        setCategories((response.details.categories || []).join(", "));
+      })
+      .catch(err => setError(err instanceof Error ? err.message : "Failed to load payment details"));
+  }, []);
+
+  function paybill(key: "mpesa" | "airtel", label: string) {
+    const value = details[key];
+    const set = (patch: Partial<Paybill>) => setDetails({ ...details, [key]: { ...value, ...patch } });
+    return (
+      <fieldset className="editor-card">
+        <label className="checkbox-row">
+          <input type="checkbox" checked={value.enabled} onChange={e => set({ enabled: e.target.checked })} /> {label}
+        </label>
+        <label>Paybill number<input value={value.paybill} onChange={e => set({ paybill: e.target.value })} placeholder="e.g. 247247" /></label>
+        <label>Account number<input value={value.account} onChange={e => set({ account: e.target.value })} placeholder="Leave empty to use the giving type" /></label>
+        <label>Hint for the account<input value={value.accountHint} onChange={e => set({ accountHint: e.target.value })} placeholder="e.g. Use TITHE, OFFERING or your name" /></label>
+        <label>Business name shown<input value={value.name} onChange={e => set({ name: e.target.value })} /></label>
+      </fieldset>
+    );
+  }
+
+  async function save() {
+    setSaving(true);
+    setMessage("");
+    setError("");
+    try {
+      const response = await saveGivingDetails({ ...details, categories: categories.split(",").map(item => item.trim()).filter(Boolean) });
+      setDetails({ ...emptyDetails, ...response.details });
+      setMessage("Saved. Members see the new details next time they open Giving.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save payment details");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const bank = details.bank;
+  const setBank = (patch: Partial<typeof bank>) => setDetails({ ...details, bank: { ...bank, ...patch } });
+
+  return (
+    <section className="list-card">
+      <div className="section-title-row">
+        <h2>Payment details</h2>
+        <span className="count-pill">Shown in the app</span>
+      </div>
+      <p className="muted">Members pay with these details on their own phone or bank, then confirm in the app with the transaction code. Confirm each one below once it shows in your statement.</p>
+      {error ? <InlineAlert title="Payment details" message={error} /> : null}
+      <div className="content-grid">
+        {paybill("mpesa", "M-Pesa paybill")}
+        {paybill("airtel", "Airtel Money paybill")}
+        <fieldset className="editor-card">
+          <label className="checkbox-row">
+            <input type="checkbox" checked={bank.enabled} onChange={e => setBank({ enabled: e.target.checked })} /> Bank transfer
+          </label>
+          <label>Bank<input value={bank.bankName} onChange={e => setBank({ bankName: e.target.value })} /></label>
+          <label>Account name<input value={bank.accountName} onChange={e => setBank({ accountName: e.target.value })} /></label>
+          <label>Account number<input value={bank.accountNumber} onChange={e => setBank({ accountNumber: e.target.value })} /></label>
+          <label>Branch<input value={bank.branch} onChange={e => setBank({ branch: e.target.value })} /></label>
+          <label>SWIFT code<input value={bank.swiftCode} onChange={e => setBank({ swiftCode: e.target.value })} /></label>
+          <label>Reference to use<input value={bank.reference} onChange={e => setBank({ reference: e.target.value })} placeholder="e.g. Your name + giving type" /></label>
+        </fieldset>
+      </div>
+      <label>Giving types (comma separated)<input value={categories} onChange={e => setCategories(e.target.value)} /></label>
+      <label>Note shown under the options<input value={details.note} onChange={e => setDetails({ ...details, note: e.target.value })} /></label>
+      {message ? <p className="muted">{message}</p> : null}
+      <button disabled={saving} onClick={save}>{saving ? "Saving..." : "Save payment details"}</button>
+    </section>
+  );
 }
 
 function CopyableId({ value }: { value: string | null | undefined }) {
@@ -90,6 +195,8 @@ export function GivingPage() {
         transaction.checkoutRequestId,
         transaction.merchantRequestId,
         transaction.mpesaReceiptNumber,
+        transaction.providerReference || "",
+        transaction.payerName || "",
         transaction.resultDescription,
         transaction.note
       ]
@@ -126,7 +233,7 @@ export function GivingPage() {
           acc.successCount += 1;
           acc.successAmount += Number(transaction.amount || 0);
         }
-        if (transaction.status === "pending") {
+        if (transaction.status === "pending" || transaction.status === "awaiting_verification") {
           acc.pendingCount += 1;
           acc.pendingAmount += Number(transaction.amount || 0);
         }
@@ -157,6 +264,15 @@ export function GivingPage() {
     load();
   }, []);
 
+  async function review(id: string, next: "success" | "failed") {
+    try {
+      const response = await reviewGivingTransaction(id, next);
+      setTransactions(items => items.map(item => (item.id === id ? response.transaction : item)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update the transaction");
+    }
+  }
+
   function openDocument(transactionId: string, kind: "receipt" | "invoice") {
     window.open(`${API_BASE_URL}/api/v1/giving/transactions/${transactionId}/${kind}.pdf`, "_blank");
   }
@@ -168,7 +284,7 @@ export function GivingPage() {
           <p className="eyebrow">Finance</p>
           <h1>Giving</h1>
           <p className="muted">
-            Monitor M-Pesa giving transactions, payment status, receipts, and callback results.
+            Set the paybill and bank details members see, and confirm the gifts they report.
           </p>
         </div>
 
@@ -178,6 +294,8 @@ export function GivingPage() {
       </header>
 
       {error ? <InlineAlert title="Giving data could not be loaded" message={error} /> : null}
+
+      <PaymentDetailsCard />
 
       <section className="stats-grid">
         <article className="stat-card">
@@ -194,7 +312,7 @@ export function GivingPage() {
         <article className="stat-card stat-card--warning">
           <p>Pending Amount</p>
           <strong className="tabular"><em>KES</em> {formatKes(totals.pendingAmount)}</strong>
-          <span>{totals.pendingCount} pending</span>
+          <span>{totals.pendingCount} to confirm</span>
         </article>
 
         <article className="stat-card stat-card--danger">
@@ -220,6 +338,7 @@ export function GivingPage() {
           <div className="filters-row">
             <select value={status} onChange={event => setStatus(event.target.value)}>
               <option value="all">All statuses</option>
+              <option value="awaiting_verification">Needs check</option>
               <option value="pending">Pending</option>
               <option value="success">Paid</option>
               <option value="failed">Failed</option>
@@ -269,10 +388,10 @@ export function GivingPage() {
                   <th>Created</th>
                   <th className="num">Amount</th>
                   <th>Category</th>
-                  <th>Phone</th>
+                  <th>Member</th>
                   <th>Status</th>
-                  <th>Receipt</th>
-                  <th>Checkout ID</th>
+                  <th>Method</th>
+                  <th>Code</th>
                   <th>Result</th>
                   <th className="actions-col">Documents</th>
                 </tr>
@@ -287,21 +406,18 @@ export function GivingPage() {
                       <strong className="tabular">{formatKes(transaction.amount)}</strong>
                     </td>
                     <td>{transaction.category || "—"}</td>
-                    <td className="tabular">{transaction.phone || "—"}</td>
+                    <td>
+                      <span>{transaction.payerName || "—"}</span>
+                      {transaction.phone ? <p className="cell-note tabular">{transaction.phone}</p> : null}
+                    </td>
                     <td>
                       <span className={statusClass(transaction.status)}>
                         {statusLabel(transaction.status)}
                       </span>
                     </td>
+                    <td>{methodLabel(transaction.method)}</td>
                     <td>
-                      {transaction.mpesaReceiptNumber ? (
-                        <code className="cell-mono">{transaction.mpesaReceiptNumber}</code>
-                      ) : (
-                        <span className="muted-dash">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <CopyableId value={transaction.checkoutRequestId} />
+                      <CopyableId value={transaction.providerReference || transaction.mpesaReceiptNumber || transaction.checkoutRequestId} />
                     </td>
                     <td className="cell-result">
                       <span>{transaction.resultDescription || "—"}</span>
@@ -311,6 +427,16 @@ export function GivingPage() {
                     </td>
                     <td className="actions-col">
                       <div className="row-actions-compact">
+                        {transaction.status === "awaiting_verification" ? (
+                          <>
+                            <button type="button" className="ghost-action" onClick={() => review(transaction.id, "success")} title="Seen in the statement">
+                              <Check size={14} aria-hidden="true" /> Confirm
+                            </button>
+                            <button type="button" className="ghost-action" onClick={() => review(transaction.id, "failed")} title="Not in the statement">
+                              Not found
+                            </button>
+                          </>
+                        ) : null}
                         {transaction.status === "success" ? (
                           <button
                             type="button"

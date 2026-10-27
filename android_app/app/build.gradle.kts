@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -14,6 +16,14 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "2.0.0"
+        // Firebase project values (Project settings > Your apps). Empty = the app
+        // falls back to checking the announcement feed itself.
+        val local = Properties().apply { rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) } }
+        fun prop(key: String) = "\"" + (local.getProperty(key) ?: "") + "\""
+        buildConfigField("String", "FIREBASE_APP_ID", prop("firebase.appId"))
+        buildConfigField("String", "FIREBASE_API_KEY", prop("firebase.apiKey"))
+        buildConfigField("String", "FIREBASE_PROJECT_ID", prop("firebase.projectId"))
+        buildConfigField("String", "FIREBASE_SENDER_ID", prop("firebase.senderId"))
     }
     buildTypes {
         // Debug talks to the local backend through `adb reverse tcp:3000 tcp:3000`.
@@ -66,6 +76,8 @@ dependencies {
     implementation(libs.coil.okhttp)
     implementation(libs.serialization.json)
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.firebase:firebase-messaging:25.1.3")
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
 }
 
 configurations.configureEach {

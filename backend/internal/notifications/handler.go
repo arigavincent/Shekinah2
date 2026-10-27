@@ -16,10 +16,13 @@ import (
 type Handler struct {
 	db     *pgxpool.Pool
 	client *http.Client
+	fcm    *fcmSender
 }
 
 type RegisterDeviceRequest struct {
 	ExpoPushToken string          `json:"expoPushToken"`
+	// "fcm" for the native Android app; empty means the Expo app.
+	Provider      string          `json:"provider"`
 	Platform      string          `json:"platform"`
 	DeviceName    string          `json:"deviceName"`
 	AppVersion    string          `json:"appVersion"`
@@ -49,16 +52,18 @@ type expoPushMessage struct {
 }
 
 func NewHandler(db *pgxpool.Pool) Handler {
-	return Handler{
-		db: db,
-		client: &http.Client{
-			Timeout: 15 * time.Second,
-		},
-	}
+	client := &http.Client{Timeout: 15 * time.Second}
+	return Handler{db: db, client: client, fcm: newFCMSender(client)}
 }
 
 func cleanToken(value string) string {
 	return strings.TrimSpace(value)
+}
+
+// FCM registration tokens are long opaque strings.
+func validDeviceToken(value string) bool {
+	token := cleanToken(value)
+	return validExpoToken(token) || (len(token) >= 60 && len(token) <= 4096 && !strings.ContainsAny(token, " \n"))
 }
 
 func validExpoToken(value string) bool {
@@ -94,8 +99,12 @@ func (h Handler) RegisterDevice(c *gin.Context) {
 	}
 
 	token := cleanToken(req.ExpoPushToken)
-	if !validExpoToken(token) {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Valid Expo push token is required"})
+	provider := "expo"
+	if strings.EqualFold(strings.TrimSpace(req.Provider), "fcm") {
+		provider = "fcm"
+	}
+	if (provider == "expo" && !validExpoToken(token)) || (provider == "fcm" && !validDeviceToken(token)) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Valid push token is required"})
 		return
 	}
 
@@ -113,12 +122,14 @@ func (h Handler) RegisterDevice(c *gin.Context) {
 				app_version,
 				preferences,
 				enabled,
+				provider,
 				created_at,
 				updated_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6::jsonb, TRUE, NOW(), NOW())
+			VALUES ($1, $2, $3, $4, $5, $6::jsonb, TRUE, $7, NOW(), NOW())
 			ON CONFLICT (expo_push_token)
 			DO UPDATE SET
+				provider = EXCLUDED.provider,
 				platform = EXCLUDED.platform,
 				device_name = EXCLUDED.device_name,
 				app_version = EXCLUDED.app_version,
@@ -133,6 +144,7 @@ func (h Handler) RegisterDevice(c *gin.Context) {
 		strings.TrimSpace(req.DeviceName),
 		strings.TrimSpace(req.AppVersion),
 		string(preferences),
+		provider,
 	).Scan(&id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to register notification device"})
@@ -156,7 +168,7 @@ func (h Handler) UpdatePreferences(c *gin.Context) {
 	}
 
 	token := cleanToken(req.ExpoPushToken)
-	if !validExpoToken(token) {
+	if !validDeviceToken(token) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Valid Expo push token is required"})
 		return
 	}
@@ -219,13 +231,20 @@ func (h Handler) Broadcast(c *gin.Context) {
 		req.Category = "general"
 	}
 
-	tokens, err := h.tokensForCategory(c.Request.Context(), req.Category)
+	tokens, fcmTokens, err := h.tokensForCategory(c.Request.Context(), req.Category)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load notification devices"})
 		return
 	}
 
 	success, failure := h.sendExpoPush(tokens, req)
+	fcmSuccess, fcmFailure, stale := h.fcm.send(c.Request.Context(), fcmTokens, req)
+	success += fcmSuccess
+	failure += fcmFailure
+	if len(stale) > 0 {
+		_, _ = h.db.Exec(c.Request.Context(), `UPDATE notification_devices SET enabled = FALSE, updated_at = NOW() WHERE expo_push_token = ANY($1)`, stale)
+	}
+	tokens = append(tokens, fcmTokens...)
 
 	messageID := newID("nm")
 	dataBytes, _ := json.Marshal(req.Data)
@@ -327,11 +346,12 @@ func (h Handler) ListMessages(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"messages": messages})
 }
 
-func (h Handler) tokensForCategory(ctx context.Context, category string) ([]string, error) {
+// Returns Expo tokens and FCM tokens of devices that want this category.
+func (h Handler) tokensForCategory(ctx context.Context, category string) ([]string, []string, error) {
 	rows, err := h.db.Query(
 		ctx,
 		`
-			SELECT expo_push_token
+			SELECT expo_push_token, provider
 			FROM notification_devices
 			WHERE enabled = TRUE
 			  AND (
@@ -342,24 +362,58 @@ func (h Handler) tokensForCategory(ctx context.Context, category string) ([]stri
 		category,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
 	tokens := make([]string, 0)
+	fcmTokens := make([]string, 0)
 
 	for rows.Next() {
-		var token string
-		if err := rows.Scan(&token); err != nil {
-			return nil, err
+		var token, provider string
+		if err := rows.Scan(&token, &provider); err != nil {
+			return nil, nil, err
 		}
 
-		if validExpoToken(token) {
+		if provider == "fcm" {
+			fcmTokens = append(fcmTokens, token)
+		} else if validExpoToken(token) {
 			tokens = append(tokens, token)
 		}
 	}
 
-	return tokens, rows.Err()
+	return tokens, fcmTokens, rows.Err()
+}
+
+// GET /notifications/feed?since=RFC3339: recent announcements, for phones
+// that check in themselves (no push service set up yet, or missed pushes).
+func (h Handler) Feed(c *gin.Context) {
+	since := time.Now().Add(-7 * 24 * time.Hour)
+	if raw := strings.TrimSpace(c.Query("since")); raw != "" {
+		if parsed, err := time.Parse(time.RFC3339, raw); err == nil {
+			since = parsed
+		}
+	}
+	rows, err := h.db.Query(c.Request.Context(), `
+		SELECT id, title, body, category, data, created_at FROM notification_messages
+		WHERE created_at > $1 ORDER BY created_at DESC LIMIT 20
+	`, since)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load notifications"})
+		return
+	}
+	defer rows.Close()
+	items := make([]gin.H, 0)
+	for rows.Next() {
+		var id, title, body, category string
+		var data json.RawMessage
+		var created time.Time
+		if err := rows.Scan(&id, &title, &body, &category, &data, &created); err != nil {
+			continue
+		}
+		items = append(items, gin.H{"id": id, "title": title, "body": body, "category": category, "data": data, "createdAt": created.UTC().Format(time.RFC3339)})
+	}
+	c.JSON(http.StatusOK, gin.H{"messages": items})
 }
 
 func (h Handler) sendExpoPush(tokens []string, req BroadcastRequest) (int, int) {

@@ -22,6 +22,7 @@ class ShekinahApp : Application(), SingletonImageLoader.Factory {
         library = Library(this)
         session = com.shekinahsons.globalapp.data.Session(this)
         com.shekinahsons.globalapp.playback.VideoCache.init(this)
+        com.shekinahsons.globalapp.notify.Push.start(this)
     }
 
     override fun newImageLoader(context: PlatformContext) =
