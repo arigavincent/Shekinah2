@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,14 +14,16 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "2.0.0"
-        // Firebase project values (Project settings > Your apps). Empty = the app
-        // falls back to checking the announcement feed itself.
-        val local = Properties().apply { rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) } }
-        fun prop(key: String) = "\"" + (local.getProperty(key) ?: "") + "\""
-        buildConfigField("String", "FIREBASE_APP_ID", prop("firebase.appId"))
-        buildConfigField("String", "FIREBASE_API_KEY", prop("firebase.apiKey"))
-        buildConfigField("String", "FIREBASE_PROJECT_ID", prop("firebase.projectId"))
-        buildConfigField("String", "FIREBASE_SENDER_ID", prop("firebase.senderId"))
+        // Firebase: drop the google-services.json from the Firebase console into
+        // app/ (it is git-ignored). Without it the app checks the announcement
+        // feed itself instead of receiving pushes.
+        val firebase = file("google-services.json").takeIf { it.exists() }?.readText().orEmpty()
+        fun find(pattern: String) = Regex(pattern).find(firebase)?.groupValues?.get(1).orEmpty()
+        fun quoted(value: String) = "\"" + value + "\""
+        buildConfigField("String", "FIREBASE_APP_ID", quoted(find("\"mobilesdk_app_id\"\\s*:\\s*\"([^\"]+)\"")))
+        buildConfigField("String", "FIREBASE_API_KEY", quoted(find("\"current_key\"\\s*:\\s*\"([^\"]+)\"")))
+        buildConfigField("String", "FIREBASE_PROJECT_ID", quoted(find("\"project_id\"\\s*:\\s*\"([^\"]+)\"")))
+        buildConfigField("String", "FIREBASE_SENDER_ID", quoted(find("\"project_number\"\\s*:\\s*\"([^\"]+)\"")))
     }
     buildTypes {
         // Debug talks to the local backend through `adb reverse tcp:3000 tcp:3000`.
