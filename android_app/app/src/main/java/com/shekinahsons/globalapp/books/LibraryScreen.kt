@@ -139,7 +139,7 @@ fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit)
 
     AnimatedContent(view, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "library", modifier = Modifier.fillMaxSize().background(Brand.Black)) { v ->
         when (v) {
-            View.Shelf -> Shelf(books, loading, error, canPublish, onBack, open = { view = View.Detail(it) }, publish = { view = View.Publish })
+            View.Shelf -> Shelf(books, loading, error, canPublish, onBack, open = { view = View.Detail(it) }, publish = { view = View.Publish }, retry = { loading = true; error = null; reload++ })
             is View.Detail -> {
                 val book = books.firstOrNull { it.id == v.book.id } ?: v.book
                 Detail(book, session, onBack = { view = View.Shelf }, read = { view = View.Read(book) }, buy = { if (session.member == null) openProfile() else view = View.Buy(book) },
@@ -204,7 +204,7 @@ private fun Tag(b: Book, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublish: Boolean, onBack: () -> Unit, open: (Book) -> Unit, publish: () -> Unit) {
+private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublish: Boolean, onBack: () -> Unit, open: (Book) -> Unit, publish: () -> Unit, retry: () -> Unit) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var kind by remember { mutableStateOf("all") }
@@ -245,7 +245,13 @@ private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublis
                 }
             }
             if (loading) item(span = { GridItemSpan(3) }) { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Gold) } }
-            error?.let { item(span = { GridItemSpan(3) }) { ErrorNote(it) } }
+            error?.let { item(span = { GridItemSpan(3) }) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp)) {
+                    ErrorNote(it)
+                    Spacer(Modifier.height(12.dp))
+                    GhostButton("Try again", onClick = retry)
+                }
+            } }
             if (!loading && books.isEmpty()) item(span = { GridItemSpan(3) }) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.AutoMirrored.Rounded.MenuBook, null, tint = Brand.Gold, modifier = Modifier.size(42.dp))
