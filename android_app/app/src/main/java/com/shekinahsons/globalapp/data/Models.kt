@@ -17,6 +17,7 @@ data class HomeContent(
     val branches: List<Branch> = emptyList(),
     val updates: List<Update> = emptyList(),
     val about: About = About(),
+    val platforms: Map<String, List<Platform>> = emptyMap(),
 ) {
     val videoSermons get() = sermons.filter { it.type != "audio" }
     val audioSermons get() = sermons.filter { it.type == "audio" }
@@ -101,3 +102,6 @@ data class About(val vision: String = "", val description: String = "", val cont
 
 // Recaps play in the sermon video player.
 fun Clip.asSermon() = Sermon(id = id, title = title, thumbnail = image, mediaUrl = mediaUrl, duration = duration, category = "Recap")
+
+@Serializable
+data class Platform(val id: String = "", val name: String = "", val description: String = "", val link: String = "")

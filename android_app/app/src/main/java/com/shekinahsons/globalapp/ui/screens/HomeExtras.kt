@@ -75,14 +75,45 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-// "Good morning" with today's date, set above the devotional.
+// A greeting by name that changes with the time of day, with a short
+// blessing from Scripture that rotates daily.
+private val blessings = mapOf(
+    "morning" to listOf(
+        "His mercies are new every morning" to "Lamentations 3:23",
+        "This is the day the Lord has made" to "Psalm 118:24",
+        "Joy comes in the morning" to "Psalm 30:5",
+        "Let the morning bring word of His unfailing love" to "Psalm 143:8",
+        "Seek first the kingdom of God" to "Matthew 6:33",
+    ),
+    "afternoon" to listOf(
+        "Grace and peace to you" to "Romans 1:7",
+        "The Lord bless you and keep you" to "Numbers 6:24",
+        "Be strong and courageous" to "Joshua 1:9",
+        "Cast all your anxiety on Him" to "1 Peter 5:7",
+        "Those who hope in the Lord will renew their strength" to "Isaiah 40:31",
+    ),
+    "evening" to listOf(
+        "In peace I will lie down and sleep" to "Psalm 4:8",
+        "Peace be with you" to "John 20:19",
+        "Come to Me and I will give you rest" to "Matthew 11:28",
+        "He who watches over you will not slumber" to "Psalm 121:3",
+        "The Lord gives His beloved sleep" to "Psalm 127:2",
+    ),
+)
+
 @Composable
-fun Greeting() {
+fun Greeting(name: String, onProfile: () -> Unit) {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    val greeting = when (hour) { in 4..11 -> "Good morning"; in 12..16 -> "Good afternoon"; else -> "Good evening" }
+    val (part, hello) = when (hour) { in 4..11 -> "morning" to "Good morning"; in 12..16 -> "afternoon" to "Good afternoon"; else -> "evening" to "Good evening" }
+    val day = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+    val (line, ref) = blessings.getValue(part).let { it[day % it.size] }
     Column(Modifier.padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 12.dp)) {
-        Text(greeting, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-0.4).sp, color = Brand.White)
-        Text(SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()), style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.GoldLight)
+        Text(if (name.isNotBlank()) "$hello, $name" else hello, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-0.4).sp, color = Brand.White)
+        Text("$line · $ref", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.GoldLight, maxLines = 2)
+        if (name.isBlank()) {
+            Text("Sign in so we can greet you by name", color = Brand.BlueText, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp).clickable(onClick = onProfile))
+        }
     }
 }
 

@@ -30,6 +30,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true; buildConfig = true }
+    // The bundled Bible database is copied out once; keep it uncompressed so that is fast.
+    androidResources { noCompress += "db" }
     lint { disable += "UnsafeOptInUsageError" }
 }
 
@@ -63,6 +65,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.okhttp)
     implementation(libs.serialization.json)
+    implementation("com.google.zxing:core:3.5.3")
 }
 
 configurations.configureEach {

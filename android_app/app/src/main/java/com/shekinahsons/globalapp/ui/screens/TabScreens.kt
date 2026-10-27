@@ -170,24 +170,3 @@ fun LiveScreen(content: HomeContent) {
     }
 }
 
-@Composable
-fun BibleScreen(content: HomeContent) {
-    val s = content.scripture
-    Column(Modifier.fillMaxSize().background(Brand.Black)) {
-        TopBar()
-        ScreenTitle("Bible", "Read, listen and highlight")
-        Spacer(Modifier.height(20.dp))
-        Column(
-            Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF231B08), Color(0xFF0E1526)))).padding(24.dp),
-        ) {
-            Icon(Icons.AutoMirrored.Rounded.MenuBook, null, tint = Brand.Gold, modifier = Modifier.size(30.dp))
-            Spacer(Modifier.height(14.dp))
-            Text("“${s.verse}”", style = TextStyle(fontFamily = Scripture, fontSize = 21.sp, lineHeight = 30.sp), color = Brand.White)
-            Spacer(Modifier.height(10.dp))
-            Text(s.reference, color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.SemiBold)
-        }
-        Spacer(Modifier.height(16.dp))
-        Text("The full Bible reader is being moved over from the old app next.", style = Type.Meta, color = Brand.Muted, modifier = Modifier.padding(horizontal = 24.dp))
-    }
-}

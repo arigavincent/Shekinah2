@@ -112,12 +112,14 @@ class HomeActions(
     val seeUpdates: () -> Unit,
     val openCategory: (String) -> Unit,
     val refresh: () -> Unit,
+    val openReference: (String) -> Unit,
+    val openProfile: () -> Unit,
 )
 
 // Phaneroo's home order: today's devotional, then (when on air) the live
 // preview, then the video, audio and recap rails.
 @Composable
-fun HomeScreen(content: HomeContent, library: Library, refreshing: Boolean, actions: HomeActions) {
+fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing: Boolean, actions: HomeActions) {
     val screenW = LocalConfiguration.current.screenWidthDp.dp
     val videos = content.videoSermons
     val audios = content.audioSermons
@@ -154,7 +156,7 @@ fun HomeScreen(content: HomeContent, library: Library, refreshing: Boolean, acti
         ) {
         LazyColumn(state = list, contentPadding = PaddingValues(bottom = NavBarHeight + 120.dp), modifier = Modifier.fillMaxSize()) {
             item { HomeTopBar(actions.openMenu) }
-            item { Greeting() }
+            item { Greeting(name, actions.openProfile) }
             if (content.devotions.isNotEmpty()) item { DevotionCarousel(content.devotions, actions.openDevotion) }
             if (content.live.isLive) item { LiveCard(content, actions.openLive) }
             else item { ServiceStrip(content.live.nextService) }
@@ -200,7 +202,7 @@ fun HomeScreen(content: HomeContent, library: Library, refreshing: Boolean, acti
                     }
                 }
             }
-            if (content.scripture.verse.isNotBlank()) item { ScriptureCard(content) }
+            item { ScriptureCard(content, actions.openReference) }
             if (content.events.isNotEmpty()) {
                 item { RailHeader("Upcoming Events", actions.seeEvents) }
                 item {
@@ -401,14 +403,18 @@ private fun DevotionCarousel(devotions: List<Devotion>, open: (Devotion) -> Unit
 }
 
 @Composable
-private fun ScriptureCard(content: HomeContent) {
+private fun ScriptureCard(content: HomeContent, openReference: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val s = content.scripture
+    // A new verse every morning from the offline Bible; the backend's verse if that fails.
+    val daily = remember(java.time.LocalDate.now()) { runCatching { com.shekinahsons.globalapp.bible.DailyWord.today(context) }.getOrNull() }
+    val s = daily?.let { com.shekinahsons.globalapp.data.Scripture("Verse of the Day", it.text, it.reference) } ?: content.scripture
+    if (s.verse.isBlank()) return
     Column(
         Modifier.padding(horizontal = 16.dp).padding(top = 32.dp).fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
             .background(Brush.linearGradient(listOf(Color(0xFF2A2009), Color(0xFF15120A), Color(0xFF0E1526))))
             .border(1.dp, Brush.linearGradient(listOf(Brand.Gold.copy(alpha = 0.6f), Color(0x00D4AF37), Brand.Blue.copy(alpha = 0.45f))), RoundedCornerShape(22.dp))
+            .clickable { openReference(s.reference) }
             .padding(22.dp),
     ) {
         Text(s.title.ifBlank { "Scripture of the Day" }.uppercase(), style = Type.Label, color = Brand.Gold)

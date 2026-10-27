@@ -1,13 +1,11 @@
 package com.shekinahsons.globalapp.data
 
-import android.app.DownloadManager
 import android.content.Context
-import android.net.Uri
 import android.os.Environment
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.setValue
-import java.io.File
+import kotlinx.coroutines.launch
 
 // The listener's own shelf: saved (hearted) sermons and offline downloads.
 // Both live on the device only.
@@ -15,7 +13,6 @@ class Library(private val context: Context) {
     private val prefs = context.getSharedPreferences("library", Context.MODE_PRIVATE)
 
     val saved = mutableStateSetOf<String>().apply { addAll(prefs.getStringSet("saved", emptySet()).orEmpty()) }
-    val downloading = mutableStateSetOf<String>()
 
     fun isSaved(id: String) = id in saved
 
@@ -24,43 +21,38 @@ class Library(private val context: Context) {
         prefs.edit().putStringSet("saved", saved.toSet()).apply()
     }
 
-    private fun fileFor(s: Sermon): File {
-        val ext = s.mediaUrl.substringAfterLast('.', "").substringBefore('?').takeIf { it.length in 2..4 } ?: "mp4"
-        val dir = if (s.type == "audio") Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_MOVIES
-        return File(context.getExternalFilesDir(dir), "${s.id}.$ext")
-    }
+    // Downloads are encrypted into the app's private storage (see Vault
+    // files below): they play inside the app and nowhere else.
+    val downloading = androidx.compose.runtime.mutableStateMapOf<String, Float>()
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
-    fun isDownloaded(s: Sermon) = s.id !in downloading && fileFor(s).let { it.exists() && it.length() > 0 }
+    fun isDownloaded(s: Sermon) = s.id !in downloading && VaultFiles.has(context, s.id)
 
-    // Plays from the phone when a copy is there, otherwise streams.
-    fun playableUri(s: Sermon): String = if (isDownloaded(s)) Uri.fromFile(fileFor(s)).toString() else s.mediaUrl
+    // Plays from the encrypted copy when there is one, otherwise streams.
+    fun playableUri(s: Sermon): String = if (isDownloaded(s)) VaultFiles.uri(s.id) else s.mediaUrl
 
     fun download(s: Sermon) {
         if (s.mediaUrl.isBlank() || isDownloaded(s) || s.id in downloading) return
-        val target = fileFor(s)
-        val request = DownloadManager.Request(Uri.parse(s.mediaUrl))
-            .setTitle(s.title)
-            .setDescription("Shekinah Sons Global")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationUri(Uri.fromFile(target))
-        val manager = context.getSystemService(DownloadManager::class.java)
-        val id = manager.enqueue(request)
-        downloading.add(s.id)
-        // Poll the download in the background and clear the spinner when done.
-        Thread {
-            while (true) {
-                Thread.sleep(1000)
-                manager.query(DownloadManager.Query().setFilterById(id)).use { c ->
-                    if (!c.moveToFirst()) { downloading.remove(s.id); return@Thread }
-                    when (c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
-                        DownloadManager.STATUS_SUCCESSFUL, DownloadManager.STATUS_FAILED -> { downloading.remove(s.id); return@Thread }
-                    }
-                }
-            }
-        }.start()
+        downloading[s.id] = 0f
+        scope.launch {
+            val ok = runCatching { VaultFiles.save(context, s.id, s.mediaUrl) { downloading[s.id] = it } }.isSuccess
+            downloading.remove(s.id)
+            if (ok) version++
+        }
     }
 
-    fun delete(s: Sermon) { fileFor(s).delete(); downloading.remove(s.id) }
+    fun delete(s: Sermon) { VaultFiles.delete(context, s.id); downloading.remove(s.id); version++ }
+
+    // Bumped when a download finishes or is removed.
+    var version by androidx.compose.runtime.mutableIntStateOf(0)
+        private set
+
+    init {
+        // Earlier builds saved plain copies in shared storage; remove them.
+        listOf(Environment.DIRECTORY_MUSIC, Environment.DIRECTORY_MOVIES).forEach { dir ->
+            context.getExternalFilesDir(dir)?.listFiles()?.forEach { it.delete() }
+        }
+    }
 
     // Where each sermon was left (position, length, when), so it resumes
     // instead of starting over and can be offered under Continue.

@@ -49,7 +49,7 @@ func NewHandler(db *pgxpool.Pool, cfg config.Config) Handler {
 		db:  db,
 		cfg: cfg,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 5 * time.Minute,
 		},
 	}
 }

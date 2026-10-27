@@ -13,11 +13,14 @@ class ShekinahApp : Application(), SingletonImageLoader.Factory {
         private set
     lateinit var library: Library
         private set
+    lateinit var session: com.shekinahsons.globalapp.data.Session
+        private set
 
     override fun onCreate() {
         super.onCreate()
         content = ContentRepository(this)
         library = Library(this)
+        session = com.shekinahsons.globalapp.data.Session(this)
         com.shekinahsons.globalapp.playback.VideoCache.init(this)
     }
 

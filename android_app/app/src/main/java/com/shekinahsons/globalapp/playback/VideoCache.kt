@@ -34,7 +34,11 @@ object VideoCache {
         cache = SimpleCache(File(app.cacheDir, "video"), LeastRecentlyUsedCacheEvictor(400L * 1024 * 1024), StandaloneDatabaseProvider(app))
     }
 
-    fun dataSourceFactory(): CacheDataSource.Factory = CacheDataSource.Factory()
+    // Encrypted downloads first, then the shared cache, then the network.
+    fun dataSourceFactory(): androidx.media3.datasource.DataSource.Factory =
+        com.shekinahsons.globalapp.data.VaultFiles.Router(app, cacheFactory())
+
+    private fun cacheFactory(): CacheDataSource.Factory = CacheDataSource.Factory()
         .setCache(cache!!)
         .setUpstreamDataSourceFactory(DefaultDataSource.Factory(app, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)))
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
@@ -52,7 +56,7 @@ object VideoCache {
             if (warming[url]?.isActive == true) return
             warming[url] = scope.launch {
                 runCatching {
-                    val source = dataSourceFactory().createDataSource()
+                    val source = cacheFactory().createDataSource()
                     CacheWriter(source, DataSpec.Builder().setUri(Uri.parse(url)).setLength(WARM_BYTES).build(), null, null).cache()
                 }
             }

@@ -322,11 +322,18 @@ func (s Service) ParseToken(tokenString string) (string, error) {
 func (s Service) issueToken(user User) (string, error) {
 	now := time.Now().UTC()
 
+	// Members stay signed in on their phones for a month; staff sessions
+	// (dashboard access) still expire daily.
+	ttl := 30 * 24 * time.Hour
+	if user.Role != "member" {
+		ttl = 24 * time.Hour
+	}
+
 	claims := jwt.MapClaims{
 		"sub":  user.ID,
 		"role": user.Role,
 		"iat":  now.Unix(),
-		"exp":  now.Add(24 * time.Hour).Unix(),
+		"exp":  now.Add(ttl).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

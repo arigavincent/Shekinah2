@@ -317,7 +317,7 @@ private fun AudioRow(s: Sermon, library: Library, modifier: Modifier, onOpen: ()
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).clip(CircleShape).clickable(enabled = !busy) { if (done) library.delete(s) else library.download(s) }, contentAlignment = Alignment.Center) {
                         when {
-                            busy -> CircularProgressIndicator(color = Brand.Gold, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                            busy -> CircularProgressIndicator(progress = { library.downloading[s.id] ?: 0f }, color = Brand.Gold, trackColor = Color(0x33FFFFFF), strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                             done -> Icon(Icons.Rounded.DownloadDone, "Downloaded, tap to remove", tint = Brand.Gold, modifier = Modifier.size(24.dp))
                             else -> Icon(Icons.Outlined.DownloadForOffline, "Download", tint = Brand.Text2, modifier = Modifier.size(24.dp))
                         }

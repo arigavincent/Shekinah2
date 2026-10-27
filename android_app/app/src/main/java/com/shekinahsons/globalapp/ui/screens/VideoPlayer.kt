@@ -423,7 +423,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
                     ActionChip(Icons.Rounded.PictureInPictureAlt, "Mini player") { enterPip(activity) }
                     ActionChip(Icons.Rounded.Fullscreen, "Full screen") { fullscreen = true }
                     ActionChip(if (saved) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder, if (saved) "Saved" else "Save", saved) { library.toggleSaved(sermon.id) }
-                    ActionChip(if (done) Icons.Rounded.DownloadDone else Icons.Outlined.DownloadForOffline, if (busy) "Downloading…" else if (done) "Downloaded" else "Download", done) {
+                    ActionChip(if (done) Icons.Rounded.DownloadDone else Icons.Outlined.DownloadForOffline, if (busy) "Downloading ${((library.downloading[sermon.id] ?: 0f) * 100).toInt()}%" else if (done) "Downloaded" else "Download", done) {
                         if (!busy && !done) library.download(sermon)
                     }
                     ActionChip(Icons.Rounded.Share, "Share") {

@@ -51,7 +51,7 @@ import com.shekinahsons.globalapp.ui.Tab
 import com.shekinahsons.globalapp.ui.components.BottomBar
 import com.shekinahsons.globalapp.ui.components.NavBarHeight
 import com.shekinahsons.globalapp.ui.screens.AudioPlayerScreen
-import com.shekinahsons.globalapp.ui.screens.BibleScreen
+import com.shekinahsons.globalapp.bible.BibleScreen
 import com.shekinahsons.globalapp.ui.screens.DevotionReader
 import com.shekinahsons.globalapp.ui.screens.DevotionsScreen
 import com.shekinahsons.globalapp.ui.screens.HomeActions
@@ -88,9 +88,9 @@ class MainActivity : ComponentActivity() {
                 val content by repo.content.collectAsState()
                 val refreshing by repo.refreshing.collectAsState()
                 val scope = rememberCoroutineScope()
-                LaunchedEffect(Unit) { repo.refresh() }
+                LaunchedEffect(Unit) { repo.refresh(); app.session.refresh() }
                 val c = content
-                if (c == null) Splash(refreshing) { scope.launch { repo.refresh() } } else AppShell(c, audio, app.library, refreshing) { scope.launch { repo.refresh() } }
+                if (c == null) Splash(refreshing) { scope.launch { repo.refresh() } } else AppShell(c, audio, app.library, app.session, refreshing) { scope.launch { repo.refresh() } }
             }
         }
     }
@@ -111,7 +111,7 @@ private fun Route.key(): String = when (this) {
 
 
 @Composable
-private fun AppShell(content: HomeContent, audio: AudioController, library: Library, refreshing: Boolean, refresh: () -> Unit) {
+private fun AppShell(content: HomeContent, audio: AudioController, library: Library, session: com.shekinahsons.globalapp.data.Session, refreshing: Boolean, refresh: () -> Unit) {
     val nav = remember { Navigator() }
     val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
@@ -123,6 +123,13 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
     val openVideo = { s: Sermon, q: List<Sermon> -> nav.push(Route.Video(s, q)) }
     val openAudio = { s: Sermon, q: List<Sermon> -> nav.push(Route.Audio(s, q)) }
     val openClip = { c: Clip -> nav.push(Route.Video(c.asSermon(), content.clips.map { it.asSermon() })) }
+    val context2 = context
+    // Opens the Bible tab at a written reference ("Matthew 6:6").
+    val openReference = { reference: String ->
+        com.shekinahsons.globalapp.bible.BibleLink.pending = com.shekinahsons.globalapp.bible.BibleLink.parse(com.shekinahsons.globalapp.bible.BibleDb.get(context2), reference)
+        saveable.removeState("tab:Bible")
+        nav.select(Tab.Bible)
+    }
     val openSermons = { tab: String -> sermonsStartTab = tab; saveable.removeState("tab:Sermons"); nav.select(Tab.Sermons) }
 
     CompositionLocalProvider(LocalOpenMenu provides { menuOpen = true }) {
@@ -145,7 +152,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
             when (r) {
                 is Route.Root -> when (r.tab) {
                     Tab.Home -> HomeScreen(
-                        content, library, refreshing,
+                        content, library, session.firstName, refreshing,
                         HomeActions(
                             openMenu = { menuOpen = true },
                             openVideo = openVideo, openAudio = openAudio,
@@ -159,17 +166,23 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                             seeUpdates = { nav.push(Route.Page("Updates")) },
                             openCategory = { sermonsStartCategory = it; openSermons("Video") },
                             refresh = refresh,
+                            openReference = openReference,
+                            openProfile = { nav.push(Route.Page("Profile")) },
                         ),
                     )
                     Tab.Sermons -> SermonsScreen(content, library, sermonsStartTab, sermonsStartCategory.also { sermonsStartCategory = null }, { menuOpen = true }, openVideo, openAudio, openClip)
-                    Tab.Bible -> BibleScreen(content)
+                    Tab.Bible -> BibleScreen()
                     Tab.Devotions -> DevotionsScreen(content) { nav.push(Route.DevotionRead(it)) }
                     Tab.Live -> LiveScreen(content)
                 }
                 is Route.Video -> VideoPlayerScreen(r.sermon, r.queue, library, onOpen = { nav.back(); nav.push(Route.Video(it, r.queue)) }, onBack = { nav.back() })
                 is Route.Audio -> AudioPlayerScreen(r.sermon, r.queue, audio) { nav.back() }
                 is Route.DevotionRead -> DevotionReader(r.devotion) { nav.back() }
-                is Route.Page -> MenuPage(r.page, content, library, openVideo, openAudio) { nav.back() }
+                is Route.Page -> MenuPage(
+                    r.page, content, library, session, openVideo, openAudio,
+                    openProfile = { nav.push(Route.Page("Profile")) },
+                    openReference = openReference,
+                ) { nav.back() }
             }
           }
         }

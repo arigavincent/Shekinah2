@@ -24,6 +24,14 @@ type Handler struct {
 type CreateMessageRequest struct {
 	Channel string `json:"channel"`
 	Message string `json:"message"`
+	ReplyTo string `json:"replyTo"`
+}
+
+// The message being replied to, quoted above the reply.
+type Quote struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	Message     string `json:"message"`
 }
 
 type UpdateMessageRequest struct {
@@ -41,6 +49,7 @@ type Message struct {
 	CreatedAt    string `json:"createdAt"`
 	UserID       string `json:"userId,omitempty"`
 	UserEmail    string `json:"userEmail,omitempty"`
+	ReplyTo      *Quote `json:"replyTo,omitempty"`
 }
 
 type liveEvent struct {
@@ -188,6 +197,7 @@ func (h Handler) userIdentity(ctx *gin.Context, userID string) (string, string, 
 func scanMessage(row interface{ Scan(dest ...any) error }) (Message, error) {
 	var item Message
 	var createdAt time.Time
+	var replyID, replyName, replyText *string
 
 	err := row.Scan(
 		&item.ID,
@@ -199,13 +209,26 @@ func scanMessage(row interface{ Scan(dest ...any) error }) (Message, error) {
 		&createdAt,
 		&item.UserID,
 		&item.UserEmail,
+		&replyID,
+		&replyName,
+		&replyText,
 	)
 	if err != nil {
 		return Message{}, err
 	}
 
+	if replyID != nil && *replyID != "" {
+		item.ReplyTo = &Quote{ID: *replyID, DisplayName: deref(replyName), Message: deref(replyText)}
+	}
 	item.CreatedAt = formatTimestamp(createdAt)
 	return item, nil
+}
+
+func deref(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (h Handler) List(c *gin.Context) {
@@ -242,9 +265,13 @@ func (h Handler) List(c *gin.Context) {
 			m.hidden_reason,
 			m.created_at,
 			u.id::text,
-			u.email
+			u.email,
+			r.id,
+			r.display_name,
+			r.message
 		FROM community_messages m
 		JOIN users u ON u.id = m.user_id
+		LEFT JOIN community_messages r ON r.id = m.reply_to_id AND r.status = 'approved'
 		WHERE m.channel = $1
 		  AND m.status = 'approved'
 	`
@@ -310,10 +337,11 @@ func (h Handler) Create(c *gin.Context) {
 
 	channel := cleanChannel(req.Channel)
 	message := strings.TrimSpace(req.Message)
-	if len(message) < 2 || len(message) > 280 {
-		httpx.Error(c, http.StatusBadRequest, "invalid_input", "chat message must be between 2 and 280 characters")
+	if len(message) < 1 || len(message) > 2000 {
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", "chat message must be between 1 and 2000 characters")
 		return
 	}
+	replyTo := strings.TrimSpace(req.ReplyTo)
 
 	if channel == "live" {
 		active, err := h.liveChatActive(c)
@@ -339,7 +367,7 @@ func (h Handler) Create(c *gin.Context) {
 		`,
 		userID,
 	).Scan(&lastMessageAt)
-	if err == nil && time.Since(lastMessageAt) < 10*time.Second {
+	if err == nil && time.Since(lastMessageAt) < time.Second {
 		httpx.Error(c, http.StatusTooManyRequests, "rate_limited", "please wait a few seconds before sending another message")
 		return
 	}
@@ -354,38 +382,25 @@ func (h Handler) Create(c *gin.Context) {
 		return
 	}
 
-	status := "pending"
-	if channel == "live" {
-		status = "approved"
-	}
+	// Members chat like a family group: messages show at once, and admins
+	// can hide one afterwards from the dashboard.
+	status := "approved"
 
 	item, err := scanMessage(
 		h.db.QueryRow(
 			c.Request.Context(),
 			`
-				INSERT INTO community_messages (
-					id,
-					user_id,
-					channel,
-					display_name,
-					message,
-					user_id,
-					channel,
-					display_name,
-					message,
-					status
+				WITH inserted AS (
+					INSERT INTO community_messages (id, user_id, channel, display_name, message, status, reply_to_id)
+					VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''))
+					RETURNING id, channel, display_name, message, status, hidden_reason, created_at, reply_to_id
 				)
-				VALUES ($1, $2, $3, $4, $5, $6)
-				RETURNING
-					id,
-					channel,
-					display_name,
-					message,
-					status,
-					hidden_reason,
-					created_at,
-					$2::text,
-					''::text
+				SELECT
+					i.id, i.channel, i.display_name, i.message, i.status, i.hidden_reason, i.created_at,
+					$2::text, ''::text,
+					r.id, r.display_name, r.message
+				FROM inserted i
+				LEFT JOIN community_messages r ON r.id = i.reply_to_id
 			`,
 			generateID("chat"),
 			userID,
@@ -393,6 +408,7 @@ func (h Handler) Create(c *gin.Context) {
 			displayName,
 			message,
 			status,
+			replyTo,
 		),
 	)
 	if err != nil {
@@ -482,7 +498,10 @@ func (h Handler) AdminList(c *gin.Context) {
 			m.hidden_reason,
 			m.created_at,
 			u.id::text,
-			u.email
+			u.email,
+			NULL::text,
+			NULL::text,
+			NULL::text
 		FROM community_messages m
 		JOIN users u ON u.id = m.user_id
 		WHERE ($1 = '' OR m.channel = $1)
@@ -570,7 +589,10 @@ func (h Handler) AdminUpdate(c *gin.Context) {
 					m.hidden_reason,
 					m.created_at,
 					u.id::text,
-					u.email
+					u.email,
+					NULL::text,
+					NULL::text,
+					NULL::text
 			`,
 			id,
 			status,
