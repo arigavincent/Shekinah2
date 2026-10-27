@@ -28,6 +28,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/library"
 	"github.com/ariga/shekinah-backend/internal/live"
 	"github.com/ariga/shekinah-backend/internal/notifications"
+	"github.com/ariga/shekinah-backend/internal/overview"
 	"github.com/ariga/shekinah-backend/internal/permissions"
 	"github.com/ariga/shekinah-backend/internal/prayers"
 	"github.com/ariga/shekinah-backend/internal/privatechat"
@@ -287,6 +288,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.POST("/media", adminMediaHandler.Upload)
 			adminGroup.GET("/members", perms.AdminListMembers)
 			adminGroup.PATCH("/members/:id/permissions", perms.AdminSetPermissions)
+			adminGroup.GET("/permissions/log", perms.AdminPermissionLog)
+			adminGroup.GET("/overview", overview.Handle(db))
 			adminGroup.GET("/giving/transactions", givingHandler.ListTransactions)
 			adminGroup.GET("/giving/details", givingHandler.Details)
 			adminGroup.PUT("/giving/details", givingHandler.AdminUpdateDetails)

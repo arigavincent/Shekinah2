@@ -27,10 +27,14 @@ data class Book(
     val category: String = "", val kind: String = "book", val coverUrl: String = "", val price: Int = 0,
     val fileSizeBytes: Long = 0, val publishedAt: String = "", val isPublished: Boolean = true,
     val owned: Boolean = false, val pending: Boolean = false, val canEdit: Boolean = false,
+    // Record keeping, sent only to whoever manages the book.
+    val publisherName: String = "", val sales: Int = 0,
 ) {
     val free get() = price <= 0
     val readable get() = free || owned || canEdit
 }
+
+
 
 // The shelf, the reader's own copies (encrypted in the app's vault), and
 // where each reader stopped.
@@ -38,28 +42,31 @@ object Books {
     private const val PREFIX = "book-"
     val downloading = mutableStateMapOf<String, Float>()
     var version by mutableStateOf(0); private set
+    // The signed-in member. A paid book's saved copy belongs to the account
+    // that downloaded it, so another account on the same phone can't open it.
+    var user = ""
 
     suspend fun list(): Pair<List<Book>, Boolean> = withContext(Dispatchers.IO) {
         val res = Api.get("/library")
         Api.decode<List<Book>>(res["items"]) to ((res["canPublish"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true")
     }
 
-    fun has(context: Context, b: Book) = VaultFiles.has(context, PREFIX + b.id)
-    fun vaultId(b: Book) = PREFIX + b.id
+    fun vaultId(b: Book) = if (b.free) PREFIX + b.id else "$PREFIX$user-${b.id}"
+    fun has(context: Context, b: Book) = VaultFiles.has(context, vaultId(b))
 
     // Downloads the book (the server only sends it to those allowed) straight into the vault.
     suspend fun fetch(context: Context, b: Book) = withContext(Dispatchers.IO) {
         downloading[b.id] = 0f
         try {
             val headers = Api.token?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap()
-            VaultFiles.save(context, PREFIX + b.id, "${BuildConfig.API_BASE}/api/v1/library/${b.id}/file", headers) { downloading[b.id] = it }
+            VaultFiles.save(context, vaultId(b), "${BuildConfig.API_BASE}/api/v1/library/${b.id}/file", headers) { downloading[b.id] = it }
             version++
         } finally {
             downloading.remove(b.id)
         }
     }
 
-    fun remove(context: Context, b: Book) { VaultFiles.delete(context, PREFIX + b.id); version++ }
+    fun remove(context: Context, b: Book) { VaultFiles.delete(context, vaultId(b)); version++ }
 
     // Publishing: the PDF and cover go to the server, which encrypts and stores them.
     suspend fun publish(
@@ -105,13 +112,13 @@ object Books {
     suspend fun update(id: String, changes: Map<String, Any?>) = withContext(Dispatchers.IO) { Api.patch("/library/$id", changes) }
 
     // Reading position and the reader's marks, per book.
-    fun lastPage(context: Context, id: String) = context.getSharedPreferences("reading", Context.MODE_PRIVATE).getInt("page-$id", 0)
+    fun lastPage(context: Context, id: String) = context.getSharedPreferences("reading", Context.MODE_PRIVATE).getInt("page-$user-$id", 0)
     fun saveLastPage(context: Context, id: String, page: Int, pages: Int) =
-        context.getSharedPreferences("reading", Context.MODE_PRIVATE).edit().putInt("page-$id", page).putInt("pages-$id", pages).putLong("at-$id", System.currentTimeMillis()).apply()
+        context.getSharedPreferences("reading", Context.MODE_PRIVATE).edit().putInt("page-$user-$id", page).putInt("pages-$user-$id", pages).putLong("at-$user-$id", System.currentTimeMillis()).apply()
     fun progress(context: Context, id: String): Float {
         val p = context.getSharedPreferences("reading", Context.MODE_PRIVATE)
-        val pages = p.getInt("pages-$id", 0)
-        return if (pages > 0) (p.getInt("page-$id", 0) + 1f) / pages else 0f
+        val pages = p.getInt("pages-$user-$id", 0)
+        return if (pages > 0) (p.getInt("page-$user-$id", 0) + 1f) / pages else 0f
     }
-    fun lastReadAt(context: Context, id: String) = context.getSharedPreferences("reading", Context.MODE_PRIVATE).getLong("at-$id", 0)
+    fun lastReadAt(context: Context, id: String) = context.getSharedPreferences("reading", Context.MODE_PRIVATE).getLong("at-$user-$id", 0)
 }

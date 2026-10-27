@@ -35,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,7 +92,17 @@ class MainActivity : ComponentActivity() {
                 // Keep Home current (a service going live shows up by itself).
                 LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(20_000); repo.refresh() } }
                 val c = content
-                if (c == null) Splash(refreshing) { scope.launch { repo.refresh() } } else AppShell(c, audio, app.library, app.session, refreshing) { scope.launch { repo.refresh() } }
+                // Admin accounts open the admin console; "View app" switches to the member app.
+                val session = app.session
+                var adminMode by rememberSaveable { mutableStateOf(session.isAdmin) }
+                LaunchedEffect(session.member?.id) { adminMode = session.isAdmin }
+                if (adminMode && session.isAdmin) com.shekinahsons.globalapp.admin.AdminConsole(
+                    session,
+                    openApp = { adminMode = false },
+                    openLive = { startOnLive = true; adminMode = false },
+                )
+                else if (c == null) Splash(refreshing) { scope.launch { repo.refresh() } }
+                else AppShell(c, audio, app.library, session, refreshing, openAdmin = { adminMode = true }) { scope.launch { repo.refresh() } }
             }
         }
     }
@@ -113,13 +124,14 @@ private fun Route.key(): String = when (this) {
 
 
 @Composable
-private fun AppShell(content: HomeContent, audio: AudioController, library: Library, session: com.shekinahsons.globalapp.data.Session, refreshing: Boolean, refresh: () -> Unit) {
+private fun AppShell(content: HomeContent, audio: AudioController, library: Library, session: com.shekinahsons.globalapp.data.Session, refreshing: Boolean, openAdmin: () -> Unit, refresh: () -> Unit) {
     val nav = remember { Navigator() }
     val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
     BackHandler(enabled = menuOpen) { menuOpen = false }
     BackHandler(enabled = !menuOpen && (nav.stack.size > 1 || nav.tab != Tab.Home)) { nav.back() }
 
+    LaunchedEffect(Unit) { if (startOnLive) { startOnLive = false; nav.select(Tab.Live) } }
     val route = nav.current
     val saveable = rememberSaveableStateHolder()
     val openVideo = { s: Sermon, q: List<Sermon> -> nav.push(Route.Video(s, q)) }
@@ -195,13 +207,15 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
             onClose = { menuOpen = false },
             onSelect = { item ->
                 menuOpen = false
-                if (item.page == "Share") {
+                if (item.page == "Admin") openAdmin()
+                else if (item.page == "Share") {
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
                         .putExtra(android.content.Intent.EXTRA_TEXT, "Get the Shekinah Sons Global app for sermons, devotions and live services.")
                     context.startActivity(android.content.Intent.createChooser(send, "Share app"))
                 } else nav.push(Route.Page(item.page))
             },
             version = BuildConfig.VERSION_NAME,
+            admin = session.isAdmin,
         )
 
         if (route is Route.Root) {
@@ -213,6 +227,9 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
     }
     }
 }
+
+// Set by the admin console's live card so the app opens on the Live tab.
+private var startOnLive = false
 
 // Set by "View All" on Home so Sermons opens on the matching tab.
 private var sermonsStartTab = "Video"

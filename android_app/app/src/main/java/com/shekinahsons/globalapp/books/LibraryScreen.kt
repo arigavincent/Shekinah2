@@ -123,7 +123,7 @@ private fun price(b: Book) = if (b.free) "Free" else "KSh ${"%,d".format(b.price
 
 // Books & Library: the ministry's books, journals and study materials.
 @Composable
-fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit) {
+fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit, bottomInset: androidx.compose.ui.unit.Dp = 0.dp) {
     val context = LocalContext.current
     var view by remember { mutableStateOf<View>(View.Shelf) }
     val books = remember { mutableStateListOf<Book>() }
@@ -131,6 +131,7 @@ fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit)
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
+    Books.user = session.member?.id.orEmpty()
     LaunchedEffect(reload, session.member) {
         runCatching { Books.list() }.onSuccess { (list, publish) -> books.clear(); books.addAll(list); canPublish = publish; error = null }.onFailure { error = it.message }
         loading = false
@@ -139,7 +140,7 @@ fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit)
 
     AnimatedContent(view, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "library", modifier = Modifier.fillMaxSize().background(Brand.Black)) { v ->
         when (v) {
-            View.Shelf -> Shelf(books, loading, error, canPublish, onBack, open = { view = View.Detail(it) }, publish = { view = View.Publish }, retry = { loading = true; error = null; reload++ })
+            View.Shelf -> Shelf(books, loading, error, canPublish, onBack, open = { view = View.Detail(it) }, publish = { view = View.Publish }, retry = { loading = true; error = null; reload++ }, bottomInset = bottomInset)
             is View.Detail -> {
                 val book = books.firstOrNull { it.id == v.book.id } ?: v.book
                 Detail(book, session, onBack = { view = View.Shelf }, read = { view = View.Read(book) }, buy = { if (session.member == null) openProfile() else view = View.Buy(book) },
@@ -204,7 +205,7 @@ private fun Tag(b: Book, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublish: Boolean, onBack: () -> Unit, open: (Book) -> Unit, publish: () -> Unit, retry: () -> Unit) {
+private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublish: Boolean, onBack: () -> Unit, open: (Book) -> Unit, publish: () -> Unit, retry: () -> Unit, bottomInset: androidx.compose.ui.unit.Dp) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var kind by remember { mutableStateOf("all") }
@@ -219,7 +220,7 @@ private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublis
             AmbientGlow(featured.firstOrNull()?.coverUrl?.takeIf { it.isNotBlank() }, Modifier.fillMaxSize(), blur = 80.dp, alpha = 0.6f)
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x55000000), 1f to Brand.Black)))
         }
-        LazyVerticalGrid(GridCells.Fixed(3), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 120.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        LazyVerticalGrid(GridCells.Fixed(3), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 120.dp + bottomInset), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             item(span = { GridItemSpan(3) }) { TopBar(title = "", onBack = onBack) }
             item(span = { GridItemSpan(3) }) {
                 Column {
@@ -321,7 +322,7 @@ private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublis
         }
         if (canPublish) {
             Row(
-                Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp).lifted(RoundedCornerShape(50), 18.dp, Brand.Gold)
+                Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(bottom = bottomInset).padding(20.dp).lifted(RoundedCornerShape(50), 18.dp, Brand.Gold)
                     .clip(RoundedCornerShape(50)).background(Brand.GoldGradient).clickable(onClick = publish).padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -398,6 +399,12 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
                     Spacer(Modifier.height(26.dp))
                     Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.7f).padding(16.dp)) {
                         Text("PUBLISHER", style = Type.Label, color = Brand.Gold)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            (if (b.publisherName.isNotBlank()) "Published by ${b.publisherName}" else "Published from the dashboard") +
+                                if (!b.free) " \u00B7 ${b.sales} sold" else "",
+                            style = Type.Meta, color = Brand.Text2,
+                        )
                         Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.Bottom) {
                             Field("PRICE (KSH, 0 = FREE)", editPrice, { editPrice = it.filter(Char::isDigit).take(7) }, Modifier.weight(1f), keyboard = KeyboardType.Number)

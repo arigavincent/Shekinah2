@@ -166,6 +166,8 @@ fun Reader(book: Book, onBack: () -> Unit) {
 
     // Fetch into the vault once, then open a private plain copy while reading.
     LaunchedEffect(book.id) {
+        // Never open a paid book the reader hasn't got.
+        if (!book.readable) { error = "Get this book to read it."; return@LaunchedEffect }
         runCatching {
             if (!Books.has(context, book)) Books.fetch(context, book)
             val f = withContext(Dispatchers.IO) { VaultFiles.decryptToTemp(context, Books.vaultId(book)) }

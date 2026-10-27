@@ -131,25 +131,50 @@ type Item struct {
 	Owned   bool `json:"owned"`
 	Pending bool `json:"pending"`
 	CanEdit bool `json:"canEdit"`
+	// Record keeping, shown to whoever manages the book.
+	PublishedBy   string `json:"publishedBy,omitempty"`
+	PublisherName string `json:"publisherName,omitempty"`
+	Sales         int    `json:"sales,omitempty"`
 }
 
 const itemColumns = `
 	l.id, l.title, l.description, l.author, l.category, l.kind, l.cover_url, l.price, l.file_size_bytes, l.published_at, l.is_published,
 	EXISTS (SELECT 1 FROM giving_transactions g WHERE g.item_id = l.id AND g.user_id::text = $1 AND g.status = 'success'),
-	EXISTS (SELECT 1 FROM giving_transactions g WHERE g.item_id = l.id AND g.user_id::text = $1 AND g.status = 'awaiting_verification')`
+	EXISTS (SELECT 1 FROM giving_transactions g WHERE g.item_id = l.id AND g.user_id::text = $1 AND g.status = 'awaiting_verification'),
+	COALESCE(l.published_by::text, ''), COALESCE((SELECT u.name FROM users u WHERE u.id = l.published_by), ''),
+	(SELECT COUNT(*) FROM giving_transactions g WHERE g.item_id = l.id AND g.status = 'success')`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var it Item
-	err := row.Scan(&it.ID, &it.Title, &it.Description, &it.Author, &it.Category, &it.Kind, &it.CoverURL, &it.Price, &it.FileSizeBytes, &it.PublishedAt, &it.IsPublished, &it.Owned, &it.Pending)
+	err := row.Scan(&it.ID, &it.Title, &it.Description, &it.Author, &it.Category, &it.Kind, &it.CoverURL, &it.Price, &it.FileSizeBytes, &it.PublishedAt, &it.IsPublished, &it.Owned, &it.Pending, &it.PublishedBy, &it.PublisherName, &it.Sales)
 	return it, err
 }
 
-// GET /library: the shelf. Publishers also see their unpublished items.
+// manages: admins manage every book; a publisher manages the books they
+// published, for as long as they keep the publishing permission.
+func (h Handler) manages(ctx context.Context, userID, publishedBy string, admin bool) bool {
+	if userID == "" {
+		return false
+	}
+	return admin || (publishedBy == userID && h.perms.Has(ctx, userID, permissions.BooksPublish))
+}
+
+// redact hides the record-keeping fields from those who don't manage the book.
+func redact(it *Item) {
+	if !it.CanEdit {
+		it.PublishedBy, it.PublisherName, it.Sales = "", "", 0
+	}
+}
+
+// GET /library: the shelf. Hidden items show only to those who manage them.
 func (h Handler) List(c *gin.Context) {
 	userID, _ := auth.UserIDFromContext(c)
-	canPublish := userID != "" && h.perms.Has(c.Request.Context(), userID, permissions.BooksPublish)
-	rows, err := h.db.Query(c.Request.Context(), `SELECT `+itemColumns+` FROM library_items l
-		WHERE l.is_published = TRUE OR $2 ORDER BY l.is_featured DESC, l.published_at DESC LIMIT 300`, userID, canPublish)
+	ctx := c.Request.Context()
+	canPublish := userID != "" && h.perms.Has(ctx, userID, permissions.BooksPublish)
+	admin := userID != "" && h.perms.IsAdmin(ctx, userID)
+	rows, err := h.db.Query(ctx, `SELECT `+itemColumns+` FROM library_items l
+		WHERE l.is_published = TRUE OR $2 OR ($3 AND l.published_by::text = $1)
+		ORDER BY l.is_featured DESC, l.published_at DESC LIMIT 300`, userID, admin, canPublish)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load the library"})
 		return
@@ -158,28 +183,35 @@ func (h Handler) List(c *gin.Context) {
 	items := make([]Item, 0)
 	for rows.Next() {
 		if it, err := scanItem(rows); err == nil {
-			it.CanEdit = canPublish
+			it.CanEdit = admin || (canPublish && it.PublishedBy == userID)
+			redact(&it)
 			items = append(items, it)
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "canPublish": canPublish})
 }
 
-// GET /library/:id/file: the readable file, only for those allowed.
+// GET /library/:id/file: the readable file. A paid book opens only for
+// members who have paid (confirmed by finance), its publisher and admins.
 func (h Handler) File(c *gin.Context) {
 	userID, _ := auth.UserIDFromContext(c)
 	ctx := c.Request.Context()
 	var price int
-	var fileKey, fileURL string
-	var owned bool
-	err := h.db.QueryRow(ctx, `SELECT price, file_key, file_url,
+	var fileKey, fileURL, publishedBy string
+	var owned, published bool
+	err := h.db.QueryRow(ctx, `SELECT price, file_key, file_url, is_published, COALESCE(published_by::text, ''),
 		EXISTS (SELECT 1 FROM giving_transactions g WHERE g.item_id = l.id AND g.user_id::text = $2 AND g.status = 'success')
-		FROM library_items l WHERE id = $1`, c.Param("id"), userID).Scan(&price, &fileKey, &fileURL, &owned)
+		FROM library_items l WHERE id = $1`, c.Param("id"), userID).Scan(&price, &fileKey, &fileURL, &published, &publishedBy, &owned)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
 		return
 	}
-	if price > 0 && !owned && !(userID != "" && h.perms.Has(ctx, userID, permissions.BooksPublish)) {
+	manager := h.manages(ctx, userID, publishedBy, userID != "" && h.perms.IsAdmin(ctx, userID))
+	if !published && !manager {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
+		return
+	}
+	if price > 0 && !owned && !manager {
 		if userID == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"message": "Sign in to read this"})
 		} else {
@@ -334,7 +366,18 @@ func (h Handler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid changes"})
 		return
 	}
-	tag, err := h.db.Exec(c.Request.Context(), `UPDATE library_items SET
+	userID, _ := auth.UserIDFromContext(c)
+	ctx := c.Request.Context()
+	var publishedBy string
+	if err := h.db.QueryRow(ctx, `SELECT COALESCE(published_by::text, '') FROM library_items WHERE id = $1`, c.Param("id")).Scan(&publishedBy); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
+		return
+	}
+	if !h.manages(ctx, userID, publishedBy, h.perms.IsAdmin(ctx, userID)) {
+		c.JSON(http.StatusForbidden, gin.H{"message": "Only the publisher of this book or an admin can change it"})
+		return
+	}
+	tag, err := h.db.Exec(ctx, `UPDATE library_items SET
 		title = COALESCE($2, title), description = COALESCE($3, description), author = COALESCE($4, author),
 		category = COALESCE($5, category), price = COALESCE($6, price), is_published = COALESCE($7, is_published), updated_at = NOW()
 		WHERE id = $1`, c.Param("id"), req.Title, req.Description, req.Author, req.Category, req.Price, req.IsPublished)

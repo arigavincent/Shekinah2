@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,6 +45,13 @@ func (c Checker) Of(ctx context.Context, userID string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// IsAdmin reports whether the account has the admin (or super admin) role.
+func (c Checker) IsAdmin(ctx context.Context, userID string) bool {
+	var role string
+	err := c.db.QueryRow(ctx, `SELECT role FROM users WHERE id = $1 AND is_active = TRUE`, userID).Scan(&role)
+	return err == nil && (role == "admin" || role == "super_admin")
 }
 
 func (c Checker) Has(ctx context.Context, userID, permission string) bool {
@@ -120,10 +128,72 @@ func (c Checker) AdminSetPermissions(ctx *gin.Context) {
 			clean = append(clean, p)
 		}
 	}
-	tag, err := c.db.Exec(ctx.Request.Context(), `UPDATE users SET permissions = $2, updated_at = NOW() WHERE id = $1`, ctx.Param("id"), clean)
-	if err != nil || tag.RowsAffected() == 0 {
+	rctx := ctx.Request.Context()
+	adminID, _ := auth.UserIDFromContext(ctx)
+	tx, err := c.db.Begin(rctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update permissions"})
+		return
+	}
+	defer tx.Rollback(rctx)
+	var before []string
+	if err := tx.QueryRow(rctx, `SELECT permissions FROM users WHERE id = $1 FOR UPDATE`, ctx.Param("id")).Scan(&before); err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"message": "Member not found"})
 		return
 	}
+	if _, err := tx.Exec(rctx, `UPDATE users SET permissions = $2, updated_at = NOW() WHERE id = $1`, ctx.Param("id"), clean); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update permissions"})
+		return
+	}
+	// Record each change for the permission log.
+	for _, p := range All {
+		had, has := slices.Contains(before, p), slices.Contains(clean, p)
+		if had == has {
+			continue
+		}
+		action := "granted"
+		if had {
+			action = "removed"
+		}
+		if _, err := tx.Exec(rctx, `INSERT INTO permission_changes (user_id, permission, action, changed_by) VALUES ($1, $2, $3, NULLIF($4, '')::uuid)`,
+			ctx.Param("id"), p, action, adminID); err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update permissions"})
+			return
+		}
+	}
+	if err := tx.Commit(rctx); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update permissions"})
+		return
+	}
 	ctx.JSON(http.StatusOK, gin.H{"permissions": clean})
+}
+
+type changeRow struct {
+	Member     string    `json:"member"`
+	Email      string    `json:"email"`
+	Permission string    `json:"permission"`
+	Action     string    `json:"action"`
+	ChangedBy  string    `json:"changedBy"`
+	At         time.Time `json:"at"`
+}
+
+// AdminPermissionLog: GET /admin/permissions/log — the latest grants and removals.
+func (c Checker) AdminPermissionLog(ctx *gin.Context) {
+	rows, err := c.db.Query(ctx.Request.Context(), `
+		SELECT u.name, u.email, pc.permission, pc.action, COALESCE(a.name, 'System'), pc.created_at
+		FROM permission_changes pc JOIN users u ON u.id = pc.user_id LEFT JOIN users a ON a.id = pc.changed_by
+		ORDER BY pc.created_at DESC LIMIT 200`)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load the log"})
+		return
+	}
+	defer rows.Close()
+	items := make([]changeRow, 0)
+	for rows.Next() {
+		var r changeRow
+		if err := rows.Scan(&r.Member, &r.Email, &r.Permission, &r.Action, &r.ChangedBy, &r.At); err == nil {
+			items = append(items, r)
+		}
+	}
+	ctx.JSON(http.StatusOK, gin.H{"changes": items})
 }

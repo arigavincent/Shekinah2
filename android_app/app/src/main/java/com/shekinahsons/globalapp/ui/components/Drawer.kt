@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Chat
@@ -98,7 +99,7 @@ val MenuGroups: List<Pair<String, List<MenuItem>>> = listOf(
 // Slide-in side menu. Drawn under the bottom bar, like Phaneroo's, so the
 // tabs stay reachable while it is open.
 @Composable
-fun AppDrawer(open: Boolean, onClose: () -> Unit, onSelect: (MenuItem) -> Unit, version: String) {
+fun AppDrawer(open: Boolean, onClose: () -> Unit, onSelect: (MenuItem) -> Unit, version: String, admin: Boolean = false) {
     AnimatedVisibility(open, enter = fadeIn(tween(220)), exit = fadeOut(tween(220))) {
         Box(Modifier.fillMaxSize().background(Color(0xB3000000)).clickable(remember { MutableInteractionSource() }, null, onClick = onClose))
     }
@@ -124,7 +125,9 @@ fun AppDrawer(open: Boolean, onClose: () -> Unit, onSelect: (MenuItem) -> Unit, 
             }
             HorizontalDivider(color = Brand.Line)
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = NavBarHeight + 40.dp)) {
-                MenuGroups.forEachIndexed { i, (title, items) ->
+                // Admins get a way back to the admin console.
+                val groups = if (admin) listOf("ADMIN" to listOf(MenuItem("Admin console", "Admin", Icons.Outlined.AdminPanelSettings))) + MenuGroups else MenuGroups
+                groups.forEachIndexed { i, (title, items) ->
                     if (i > 0) HorizontalDivider(color = Brand.Line, modifier = Modifier.padding(top = 6.dp))
                     Text(title, style = Type.Label, color = Brand.Muted, modifier = Modifier.padding(start = 22.dp, top = 18.dp, bottom = 6.dp))
                     items.forEach { item ->
