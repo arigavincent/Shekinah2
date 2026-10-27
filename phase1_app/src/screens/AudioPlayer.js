@@ -20,9 +20,10 @@ import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles } from "../constants/the
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { AudioArt } from "../components/AudioArt";
+import { AmbientGlow } from "../components/motion/AmbientGlow";
 import { toggleSermonFavourite, useSermonFavourites } from "../services/sermonFavorites";
 import { useNav } from "../navigation/NavContext";
-import { PHASE1_IMAGES } from "../content";
+import { AUDIO_COVER, PHASE1_IMAGES } from "../content";
 import { useContent } from "../providers/ContentProvider";
 import {
   isAudioUrl,
@@ -179,6 +180,23 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
     autoStarted.current = true;
     togglePlay();
   }, [sermon?.id, playbackUrl, isCurrentActive]);
+
+  // The glow behind the artwork breathes slowly while the sermon plays.
+  const glowPulse = React.useRef(new Animated.Value(0.75)).current;
+  useEffect(() => {
+    if (!playing) {
+      Animated.timing(glowPulse, { toValue: 0.55, duration: 400, useNativeDriver: true }).start();
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowPulse, { toValue: 1, duration: 1800, useNativeDriver: true }),
+        Animated.timing(glowPulse, { toValue: 0.7, duration: 1800, useNativeDriver: true })
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [playing, glowPulse]);
 
   // Artwork settles back slightly when paused, like a record lifting.
   useEffect(() => {
@@ -441,6 +459,13 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={[ap.artShadow, { marginTop: 16, transform: [{ scale: artScale }] }]}>
+          <Animated.View style={{ position: "absolute", left: 0, top: 0, opacity: glowPulse }} pointerEvents="none">
+            {thumbnail && thumbnail !== AUDIO_COVER ? (
+              <AmbientGlow uri={thumbnail} width={artSize} height={artSize} blur={40} drop={18} />
+            ) : (
+              <AmbientGlow color="rgba(212,175,55,0.8)" width={artSize} height={artSize} blur={40} drop={18} radius={22} />
+            )}
+          </Animated.View>
           <AudioArt item={sermon} size={artSize} radius={22} />
         </Animated.View>
 
@@ -540,7 +565,7 @@ const ap = makeThemedStyles(C => ({
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingBottom: 4 },
   eyebrow: { color: "rgba(255,255,255,0.6)", fontSize: 10, fontFamily: C.fontBold, letterSpacing: 1.6 },
   headerTitle: { color: "#FFFFFF", fontSize: 14, fontFamily: C.fontBold, marginTop: 1 },
-  artShadow: { borderRadius: 22, elevation: 18, shadowColor: "#000", shadowOpacity: 0.6, shadowRadius: 24, shadowOffset: { width: 0, height: 12 } },
+  artShadow: { borderRadius: 22 },
   meta: { alignSelf: "stretch", marginTop: 28 },
   title: { color: "#FFFFFF", fontSize: 22, lineHeight: 28, fontFamily: C.fontBold },
   speaker: { color: C.gold2, fontSize: 15, fontFamily: C.fontMedium, marginTop: 6 },

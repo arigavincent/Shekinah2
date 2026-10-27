@@ -20,6 +20,7 @@ import { Screen } from "../components/Screen";
 import { TopBar } from "../components/TopBar";
 import { Tabs } from "../components/Tabs";
 import { SearchBar } from "../components/SearchBar";
+import { FadeImage } from "../components/motion/FadeImage";
 
 function devotionImage(devotion) {
   return resolveMediaUrl(devotion?.imageUrl || devotion?.image || devotion?.thumbnailUrl || "") || PHASE1_IMAGES.devotion;
@@ -88,7 +89,7 @@ function DevotionListRow({ item, favorites, setFavorites, onPress, appLanguage }
       </View>
 
       <View>
-        <Image source={{ uri: devotionImage(item) }} style={dv.image} />
+        <FadeImage uri={devotionImage(item)} style={dv.image} />
         <Pressable
           style={({ pressed }) => [dv.heart, pressed && { opacity: 0.7 }]}
           hitSlop={8}

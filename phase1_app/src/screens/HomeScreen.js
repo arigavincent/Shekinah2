@@ -137,22 +137,6 @@ function RevealHeader({ index = 0, ...props }) {
 // Content gutter shared by every rail so cards line up with section titles.
 const GUTTER = 16;
 
-function Rail({ children, itemWidth, gap = 10 }) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      decelerationRate="fast"
-      snapToInterval={itemWidth + gap}
-      snapToAlignment="start"
-      contentContainerStyle={{ paddingHorizontal: GUTTER, gap }}
-      style={{ marginHorizontal: -GUTTER }}
-    >
-      {children}
-    </ScrollView>
-  );
-}
-
 function DevotionCarousel({ devotions, go, appLanguage }) {
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
@@ -178,7 +162,7 @@ function DevotionCarousel({ devotions, go, appLanguage }) {
       >
         {items.map((devotion, position) => (
           <View key={devotion.id || position} style={{ width: cardWidth }}>
-            <AmbientGlow uri={devotionImage(devotion)} width={cardWidth} height={220} blur={26} drop={18} intensity={0.9} />
+            <AmbientGlow uri={devotionImage(devotion)} width={cardWidth} height={220} blur={34} drop={18} />
             <View style={home.devStack} />
             <PressableScale
               style={home.devCard}
@@ -254,7 +238,7 @@ function TileArt({ uri, motion, aspectRatio, width, children }) {
 
   return (
     <View>
-      {motion ? <AmbientGlow uri={uri} width={width} height={artHeight} blur={22} drop={10} intensity={0.8} animatedStyle={frontness} /> : null}
+      {motion ? <AmbientGlow uri={uri} width={width} height={artHeight} blur={30} drop={14} animatedStyle={frontness} /> : null}
       <View style={[home.videoThumbWrap, aspectRatio ? { aspectRatio } : { width, height: width }]}>
         <Animated.View style={[StyleSheet.absoluteFill, motion ? parallax : null]}>
           <FadeImage uri={uri} style={StyleSheet.absoluteFill} />
@@ -298,7 +282,9 @@ function SquareTile({ item, width, onPress, progressEntry, downloadEntry, appLan
     >
       {item.type === "audio" ? (
         <View>
-          {motion ? <Animated.View pointerEvents="none" style={[home.goldGlow, frontness]} /> : null}
+          {motion ? (
+            <AmbientGlow color="rgba(212,175,55,0.75)" width={width} height={width} blur={26} drop={12} radius={14} animatedStyle={frontness} />
+          ) : null}
           <AudioArt item={item} size={width} />
         </View>
       ) : (
@@ -315,15 +301,15 @@ function SquareTile({ item, width, onPress, progressEntry, downloadEntry, appLan
   );
 }
 
-function EventTile({ item, width, onPress }) {
+function EventTile({ item, width, onPress, motion }) {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
-      style={({ pressed }) => [{ width }, pressed && { opacity: 0.8 }]}
+      style={{ width }}
       accessibilityRole="button"
       accessibilityLabel={item.title}
     >
-      <Image source={{ uri: contentImage(item, PHASE1_IMAGES.event) }} style={home.eventImage} />
+      <TileArt uri={contentImage(item, PHASE1_IMAGES.event)} motion={motion} width={width} aspectRatio={16 / 9} />
       <Text style={home.tileTitle} numberOfLines={2}>{item.title}</Text>
       <View style={home.metaRow}>
         <Ionicons name="calendar-outline" size={13} color={C.gold} />
@@ -331,7 +317,7 @@ function EventTile({ item, width, onPress }) {
           {[item.date, item.time].filter(Boolean).join(" · ")}
         </Text>
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -483,15 +469,14 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
         {continuingSermons.length > 0 ? (
           <>
             <SectionHeader title="Continue Listening" appLanguage={appLanguage} />
-            <Rail itemWidth={squareWidth}>
-              {continuingSermons.map(item =>
-                item.type === "audio" ? (
-                  <SquareTile key={item.id} width={squareWidth} {...tileProps(item)} />
-                ) : (
-                  <VideoTile key={item.id} width={videoWidth} {...tileProps(item)} />
-                )
+            <CarouselRail
+              data={continuingSermons}
+              itemWidth={videoWidth}
+              keyExtractor={item => item.id}
+              renderItem={({ item, index, scrollX, step }) => (
+                <VideoTile width={videoWidth} motion={{ scrollX, index, step }} {...tileProps(item)} />
               )}
-            </Rail>
+            />
           </>
         ) : null}
 
@@ -543,11 +528,14 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
         {events.length > 0 ? (
           <>
             <RevealHeader index={4} title="Upcoming Events" onPress={() => go("Events")} appLanguage={appLanguage} />
-            <Rail itemWidth={eventWidth}>
-              {events.slice(0, 6).map(item => (
-                <EventTile key={item.id} item={item} width={eventWidth} onPress={() => go("EventDetail", item)} />
-              ))}
-            </Rail>
+            <CarouselRail
+              data={events.slice(0, 6)}
+              itemWidth={eventWidth}
+              keyExtractor={item => item.id}
+              renderItem={({ item, index, scrollX, step }) => (
+                <EventTile item={item} width={eventWidth} motion={{ scrollX, index, step }} onPress={() => go("EventDetail", item)} />
+              )}
+            />
           </>
         ) : null}
 
@@ -629,19 +617,6 @@ const home = makeThemedStyles(C => ({
 
   videoThumbWrap: { borderRadius: 14, overflow: "hidden", backgroundColor: C.surface2 },
   backdropWrap: { position: "absolute", top: -60, left: -16, right: -16 },
-  goldGlow: {
-    position: "absolute",
-    left: 6,
-    right: 6,
-    top: 10,
-    bottom: -12,
-    borderRadius: 22,
-    backgroundColor: "rgba(212,175,55,0.35)",
-    shadowColor: "#D4AF37",
-    shadowOpacity: 0.9,
-    shadowRadius: 24,
-    elevation: 18
-  },
   videoThumb: { width: "100%", aspectRatio: 16 / 9 },
   squareArt: { borderRadius: 14, backgroundColor: C.surface2 },
   squareBadge: { position: "absolute", right: 8, bottom: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: C.gold, alignItems: "center", justifyContent: "center" },

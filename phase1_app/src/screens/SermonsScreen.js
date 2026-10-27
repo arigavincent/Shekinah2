@@ -22,6 +22,8 @@ import { IconButton } from "../components/IconButton";
 import { Tabs } from "../components/Tabs";
 import { SearchBar } from "../components/SearchBar";
 import { AudioArt } from "../components/AudioArt";
+import { AmbientGlow } from "../components/motion/AmbientGlow";
+import { FadeImage } from "../components/motion/FadeImage";
 import { useSermonFavourites } from "../services/sermonFavorites";
 import { useDownloadsMap } from "../hooks/useDownloadsMap";
 import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
@@ -168,7 +170,7 @@ function VideoRow({ item, openSermon, progressEntry, downloadEntry, appLanguage,
       accessibilityLabel={`Video sermon, ${item.title}`}
     >
       <View>
-        <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={[st.videoThumb, { width: thumbWidth }]} />
+        <FadeImage uri={sermonThumbnail(item, PHASE1_IMAGES.sermon)} style={[st.videoThumb, { width: thumbWidth }]} />
         {item.isLive ? (
           <View style={st.liveTag}>
             <Text style={st.liveTagText}>LIVE</Text>
@@ -228,7 +230,8 @@ function GridTile({ title, subtitle, image, onPress, width, badge, wide }) {
       accessibilityLabel={title}
     >
       <View>
-        <Image source={{ uri: image }} style={[st.gridImage, { width, height: wide ? Math.round(width * 9 / 16) : width }]} />
+        <AmbientGlow uri={image} width={width} height={wide ? Math.round((width * 9) / 16) : width} blur={24} drop={10} intensity={0.75} />
+        <FadeImage uri={image} style={[st.gridImage, { width, height: wide ? Math.round((width * 9) / 16) : width }]} />
         {badge ? (
           <View style={st.gridBadge}>
             <Ionicons name={badge} size={14} color={C.textOnAccent} />

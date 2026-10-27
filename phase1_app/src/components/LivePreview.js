@@ -7,6 +7,7 @@ import { C, makeThemedStyles } from "../constants/theme";
 import { PHASE1_IMAGES } from "../content";
 import { tr } from "../i18n/labels";
 import { Ionicons } from "./Icon";
+import { AmbientGlow } from "./motion/AmbientGlow";
 
 export function PulsingDot({ size = 8, color = "#FFFFFF" }) {
   const pulse = useRef(new Animated.Value(0)).current;
@@ -50,6 +51,27 @@ function HlsPreview({ source }) {
   return <VideoView style={StyleSheet.absoluteFill} player={player} nativeControls={false} contentFit="cover" />;
 }
 
+// Red glow that pulses around the live preview so it reads as "on air".
+function LiveGlow({ width, height }) {
+  const pulse = useRef(new Animated.Value(0.55)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.55, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true })
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  return (
+    <Animated.View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, opacity: pulse }}>
+      <AmbientGlow color="rgba(229,57,53,0.85)" width={width} height={height} blur={26} drop={4} radius={18} />
+    </Animated.View>
+  );
+}
+
 // Muted, auto-playing mini player shown at the top of Home while a service
 // is live. Tapping anywhere opens the full Live screen with sound and chat.
 export function LivePreview({ live, onOpen, appLanguage = "en", fallbackImage }) {
@@ -64,6 +86,8 @@ export function LivePreview({ live, onOpen, appLanguage = "en", fallbackImage })
   const title = String(live?.title || "").trim() || tr(appLanguage, "Live Stream");
 
   return (
+    <View style={styles.glowWrap}>
+    <LiveGlow width={playerWidth} height={playerHeight} />
     <Pressable
       onPress={onOpen}
       style={({ pressed }) => [styles.card, pressed && { transform: [{ scale: 0.985 }] }]}
@@ -112,15 +136,15 @@ export function LivePreview({ live, onOpen, appLanguage = "en", fallbackImage })
         </View>
       </View>
     </Pressable>
+    </View>
   );
 }
 
 const styles = makeThemedStyles(C => ({
+  glowWrap: { marginTop: 4, marginBottom: 18 },
   card: {
     borderRadius: 18,
     overflow: "hidden",
-    marginTop: 4,
-    marginBottom: 18,
     borderWidth: 1,
     borderColor: "rgba(229,57,53,0.55)",
     backgroundColor: "#000"

@@ -6,6 +6,7 @@ import {
   Share,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from "react-native";
 import * as Speech from "expo-speech";
@@ -19,6 +20,8 @@ import { Screen } from "../components/Screen";
 import { Ionicons } from "../components/Icon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNav } from "../navigation/NavContext";
+import { AmbientGlow } from "../components/motion/AmbientGlow";
+import { FadeImage } from "../components/motion/FadeImage";
 
 const FONT_STEPS = [14, 15.5, 17, 18.5, 20, 22];
 
@@ -66,6 +69,8 @@ function HeaderAction({ icon, label, onPress, active, activeColor }) {
 
 export function DevotionDetail({ devotion, favorites = [], setFavorites, go, appLanguage = "en" }) {
   const { goBack } = useNav();
+  const { width: screenWidth } = useWindowDimensions();
+  const heroWidth = screenWidth - 32;
   const insets = useSafeAreaInsets();
   const navHeight = Math.max(insets.bottom, 12);
   const [fontStep, setFontStep] = useState(1);
@@ -160,7 +165,10 @@ export function DevotionDetail({ devotion, favorites = [], setFavorites, go, app
             <HeaderAction icon="share-social-outline" label="Share devotional" onPress={share} />
           </View>
 
-          <Image source={{ uri: image }} style={st.heroImage} accessibilityIgnoresInvertColors />
+          <View style={st.heroWrap}>
+            <AmbientGlow uri={image} width={heroWidth} height={Math.round(heroWidth / 1.6)} blur={34} drop={16} />
+            <FadeImage uri={image} style={st.heroImage} />
+          </View>
           {author ? <Text style={st.credit}>{author}</Text> : null}
         </View>
 
@@ -269,7 +277,8 @@ const st = makeThemedStyles(C => ({
   headerBtn: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   headerBtnActive: { backgroundColor: "rgba(255,255,255,0.12)" },
   headerDate: { flex: 1, color: "rgba(255,255,255,0.75)", fontSize: 12, fontFamily: C.fontBold, letterSpacing: 1, marginLeft: 4 },
-  heroImage: { marginHorizontal: 16, marginTop: 6, aspectRatio: 16 / 10, borderRadius: 16, backgroundColor: C.surface2 },
+  heroWrap: { marginHorizontal: 16, marginTop: 6 },
+  heroImage: { aspectRatio: 16 / 10, borderRadius: 16, backgroundColor: C.surface2 },
   credit: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontFamily: C.fontBody, marginHorizontal: 16, marginTop: 8 },
   sheet: {
     marginTop: -20,

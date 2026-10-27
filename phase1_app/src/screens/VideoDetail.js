@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import { Ionicons } from "../components/Icon";
 import { SermonVideoPlayer } from "../components/SermonVideoPlayer";
+import { AmbientBackdrop } from "../components/motion/AmbientGlow";
+import { FadeImage } from "../components/motion/FadeImage";
 import { toggleSermonFavourite, useSermonFavourites } from "../services/sermonFavorites";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -227,6 +229,9 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+        <View style={vd.ambient} pointerEvents="none">
+          <AmbientBackdrop uri={thumbnail} height={420} background={C.background} strength={0.55} />
+        </View>
         <Pressable
           style={({ pressed }) => [vd.titleRow, pressed && { backgroundColor: C.surface }]}
           onPress={() => setExpanded(current => !current)}
@@ -283,7 +288,7 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
             accessibilityRole="button"
             accessibilityLabel={item.title}
           >
-            <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={vd.rowThumb} />
+            <FadeImage uri={sermonThumbnail(item, PHASE1_IMAGES.sermon)} style={vd.rowThumb} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={vd.rowTitle} numberOfLines={3}>{item.title}</Text>
               <Text style={vd.rowMeta} numberOfLines={1}>{item.date || item.sermonDate}</Text>
@@ -311,6 +316,7 @@ function ActionChip({ icon, label, onPress, active, activeColor }) {
 
 const vd = makeThemedStyles(C => ({
   player: { width: "100%", backgroundColor: "#000" },
+  ambient: { position: "absolute", top: 0, left: 0, right: 0 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center", gap: 10 },
   bigPlay: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.gold, alignItems: "center", justifyContent: "center" },
   overlayText: { color: "#FFFFFF", fontSize: 13, fontFamily: C.fontMedium },

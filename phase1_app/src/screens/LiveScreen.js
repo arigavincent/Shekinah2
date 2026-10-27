@@ -31,6 +31,7 @@ import { TopBar } from "../components/TopBar";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { FULLSCREEN_LANDSCAPE } from "../components/SermonVideoPlayer";
+import { AmbientGlow } from "../components/motion/AmbientGlow";
 import { SectionHeader } from "../components/SectionHeader";
 import {
   isVideoUrl,
@@ -39,10 +40,16 @@ import {
 } from "../utils/mediaUrl";
 
 function OfflineStage({ height, nextService, lastService, onWatchLast, appLanguage }) {
+  const { width: screenWidth } = useWindowDimensions();
+  const stageWidth = screenWidth - 32;
   const cover = lastService ? sermonThumbnail(lastService, PHASE1_IMAGES.sermon) : PHASE1_IMAGES.crowd;
 
+  const stageHeight = Math.max(220, height);
+
   return (
-    <View style={[lv.stage, { height: Math.max(220, height) }]}>
+    <View style={{ marginTop: 6 }}>
+    <AmbientGlow uri={cover} width={stageWidth} height={stageHeight} blur={34} drop={16} intensity={0.85} />
+    <View style={[lv.stage, { height: stageHeight, marginTop: 0 }]}>
       <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={6} />
       <LinearGradient colors={["rgba(0,0,0,0.55)", "rgba(0,0,0,0.88)"]} style={StyleSheet.absoluteFill} />
 
@@ -73,6 +80,7 @@ function OfflineStage({ height, nextService, lastService, onWatchLast, appLangua
         <View style={lv.offlineDot} />
         <Text style={lv.offlineTagText}>{tr(appLanguage, "NOT LIVE")}</Text>
       </View>
+    </View>
     </View>
   );
 }
