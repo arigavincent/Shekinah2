@@ -42,6 +42,8 @@ class LiveChat {
     val messages = mutableStateListOf<ChatMessage>()
     var pinned by mutableStateOf<ChatMessage?>(null); private set
     var active by mutableStateOf(true); private set
+    // Set by the host: only the host and moderators can comment.
+    var chatOff by mutableStateOf(false); private set
 
     fun start() {
         scope.launch { runCatching { load() } }
@@ -61,7 +63,11 @@ class LiveChat {
         val local = messages.filter { it.sending }
         messages.clear(); messages.addAll(list); messages.addAll(local)
         pinned = list.lastOrNull { it.pinned }
+        runCatching { chatOff = (Api.get("/live/chat/status")["chatOff"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true" }
     }
+
+    // Refreshes now (after the host changes the chat rules).
+    fun refresh() { scope.launch { runCatching { load() } } }
 
     private fun connect() {
         val url = BuildConfig.API_BASE.replaceFirst("http", "ws") + "/api/v1/community/live/stream"

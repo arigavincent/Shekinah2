@@ -131,6 +131,8 @@ func (h *Handler) Start(c *gin.Context) {
 
 	key := randomKey()
 	id := "live-" + randomKey()[:12]
+	// Each new live starts with chat on.
+	_, _ = h.db.Exec(ctx, `UPDATE app_settings SET value = (value::jsonb || '{"chatOff": false}'::jsonb)::text WHERE key = 'live_chat'`)
 	if _, err := h.db.Exec(ctx, `INSERT INTO live_sessions (id, title, broadcaster_id, stream_key) VALUES ($1, $2, $3, $4)`, id, title, userID, key); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not start the live"})
 		return

@@ -339,7 +339,7 @@ private fun LiveWatch(content: HomeContent, session: Session, openProfile: () ->
 
 // Comments float up over the picture in full screen, like YouTube/Instagram live.
 @Composable
-private fun FloatingComments(chat: LiveChat, modifier: Modifier) {
+internal fun FloatingComments(chat: LiveChat, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         chat.pinned?.let { p -> CommentPill(p, pinned = true) }
         chat.messages.takeLast(5).forEach { m -> CommentPill(m) }
@@ -407,6 +407,9 @@ fun LiveChatPanel(chat: LiveChat, session: Session, openProfile: () -> Unit, mod
         error?.let { Text(it, color = Color(0xFFFFB4AE), fontSize = 12.5.sp, modifier = Modifier.fillMaxWidth().background(Color(0x33E53935)).clickable { error = null }.padding(horizontal = 16.dp, vertical = 8.dp)) }
         if (me == null) {
             Box(Modifier.padding(12.dp)) { GoldButton("Sign in to comment", onClick = openProfile) }
+        } else if (chat.chatOff && !session.canModerate && !session.canBroadcast) {
+            Text("The host has turned off chat for now.", style = Type.Meta, color = Brand.Text2,
+                modifier = Modifier.fillMaxWidth().padding(12.dp).glass(RoundedCornerShape(14.dp)).padding(14.dp))
         } else {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(me.name, me.name, 34.dp)
@@ -422,7 +425,7 @@ fun LiveChatPanel(chat: LiveChat, session: Session, openProfile: () -> Unit, mod
             }
         }
     }
-    if (settings) ModeratorSettings { settings = false }
+    if (settings) ModeratorSettings { settings = false; chat.refresh() }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -454,15 +457,16 @@ private fun LiveComment(m: ChatMessage, session: Session, scope: kotlinx.corouti
 }
 
 @Serializable
-private data class ChatRules(val slowModeSeconds: Int = 0, val bannedWords: List<String> = emptyList())
+internal data class ChatRules(val slowModeSeconds: Int = 0, val bannedWords: List<String> = emptyList(), val chatOff: Boolean = false)
 
 @Composable
-private fun ModeratorSettings(close: () -> Unit) {
+internal fun ModeratorSettings(close: () -> Unit) {
     val scope = rememberCoroutineScope()
     var slow by remember { mutableIntStateOf(0) }
     var words by remember { mutableStateOf("") }
+    var off by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        runCatching { Api.decode<ChatRules>(Api.get("/live/chat/settings")["settings"]) }.onSuccess { slow = it.slowModeSeconds; words = it.bannedWords.joinToString(", ") }
+        runCatching { Api.decode<ChatRules>(Api.get("/live/chat/settings")["settings"]) }.onSuccess { slow = it.slowModeSeconds; words = it.bannedWords.joinToString(", "); off = it.chatOff }
     }
     AlertDialog(
         onDismissRequest = close, containerColor = Color(0xFF1C1C20),
@@ -470,6 +474,13 @@ private fun ModeratorSettings(close: () -> Unit) {
         title = { Text("Chat controls", color = Brand.White) },
         text = {
             Column {
+                Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Chat", color = Brand.GoldLight, fontWeight = FontWeight.SemiBold)
+                        Text(if (off) "Off \u00B7 only hosts and moderators can comment" else "On for everyone signed in", style = Type.Meta, color = Brand.Text2)
+                    }
+                    androidx.compose.material3.Switch(!off, { off = !it }, colors = androidx.compose.material3.SwitchDefaults.colors(checkedThumbColor = Brand.Black, checkedTrackColor = Brand.Gold))
+                }
                 Text("Slow mode", color = Brand.GoldLight, fontWeight = FontWeight.SemiBold)
                 Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(0 to "Off", 10 to "10s", 30 to "30s", 60 to "1 min").forEach { (v, label) ->
@@ -484,7 +495,7 @@ private fun ModeratorSettings(close: () -> Unit) {
         confirmButton = {
             TextButton({
                 scope.launch {
-                    runCatching { Api.put("/live/chat/settings", mapOf("slowModeSeconds" to slow, "bannedWords" to words.split(",").map { it.trim() }.filter { it.isNotEmpty() })) }
+                    runCatching { Api.put("/live/chat/settings", mapOf("slowModeSeconds" to slow, "chatOff" to off, "bannedWords" to words.split(",").map { it.trim() }.filter { it.isNotEmpty() })) }
                     close()
                 }
             }) { Text("Save", color = Brand.Gold) }
@@ -493,183 +504,3 @@ private fun ModeratorSettings(close: () -> Unit) {
     )
 }
 
-// ---------------- Broadcasting ----------------
-
-// The pastor's side: camera preview, then Go Live streams it to the church's
-// live server. Comments float over the picture while live.
-@Composable
-fun GoLiveScreen(session: Session, onClose: () -> Unit) {
-    val context = LocalContext.current
-    val activity = context as Activity
-    val scope = rememberCoroutineScope()
-    var granted by remember {
-        mutableStateOf(listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO).all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED })
-    }
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r -> granted = r.values.all { it } }
-    LaunchedEffect(Unit) { if (!granted) ask.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }
-
-    var title by remember { mutableStateOf("Sunday Service") }
-    var status by remember { mutableStateOf("ready") } // ready, connecting, live, error
-    var error by remember { mutableStateOf<String?>(null) }
-    var muted by remember { mutableStateOf(false) }
-    var hd by remember { mutableStateOf(true) }
-    var confirmEnd by remember { mutableStateOf(false) }
-    var startedAt by remember { mutableLongStateOf(0L) }
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var viewers by remember { mutableIntStateOf(0) }
-    val chat = remember { LiveChat() }
-    var camera by remember { mutableStateOf<RtmpCamera2?>(null) }
-
-    // Keep the screen awake while broadcasting.
-    DisposableEffect(Unit) {
-        activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        onDispose {
-            activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
-    LaunchedEffect(status) {
-        if (status == "live") {
-            chat.start()
-            while (status == "live") {
-                now = System.currentTimeMillis()
-                if ((now / 1000) % 5 == 0L) runCatching { viewers = Api.decode<LiveSession?>(Api.get("/live/current")["session"])?.viewers ?: viewers }
-                delay(1000)
-            }
-        }
-    }
-    DisposableEffect(Unit) { onDispose { chat.stop() } }
-
-    fun stop() {
-        camera?.let { if (it.isStreaming) it.stopStream() }
-        status = "ready"
-        scope.launch { runCatching { Api.post("/live/stop") } }
-    }
-    BackHandler { if (status == "live" || status == "connecting") confirmEnd = true else onClose() }
-
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        if (granted) {
-            AndroidView(
-                factory = { ctx ->
-                    OpenGlView(ctx).also { view ->
-                        val checker = object : ConnectChecker {
-                            override fun onConnectionStarted(url: String) {}
-                            override fun onConnectionSuccess() { activity.runOnUiThread { status = "live"; startedAt = System.currentTimeMillis() } }
-                            override fun onConnectionFailed(reason: String) {
-                                activity.runOnUiThread {
-                                    camera?.stopStream()
-                                    status = "error"; error = "Couldn't reach the live server ($reason). Check your connection and try again."
-                                    scope.launch { runCatching { Api.post("/live/stop") } }
-                                }
-                            }
-                            override fun onDisconnect() {}
-                            override fun onAuthError() { activity.runOnUiThread { status = "error"; error = "The live server refused this broadcast." } }
-                            override fun onAuthSuccess() {}
-                        }
-                        camera = RtmpCamera2(view, checker)
-                        view.holder.addCallback(object : android.view.SurfaceHolder.Callback {
-                            override fun surfaceCreated(holder: android.view.SurfaceHolder) {}
-                            override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {
-                                camera?.let { if (!it.isOnPreview) it.startPreview(CameraHelper.Facing.BACK, 1280, 720, CameraHelper.getCameraOrientation(ctx)) }
-                            }
-                            override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
-                                camera?.let { if (it.isStreaming) it.stopStream(); if (it.isOnPreview) it.stopPreview() }
-                            }
-                        })
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Column(Modifier.align(Alignment.Center).padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Camera and microphone are needed to go live.", color = Brand.White, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(14.dp))
-                GoldButton("Allow") { ask.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }
-            }
-        }
-
-        // Top bar: close / status / timer / viewers.
-        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.Close, "Close", tint = Color.White, modifier = Modifier.size(42.dp).glass(CircleShape).clickable { if (status == "live") confirmEnd = true else onClose() }.padding(9.dp))
-            Spacer(Modifier.width(10.dp))
-            if (status == "live") {
-                LiveBadgeRow(viewers)
-                Spacer(Modifier.width(8.dp))
-                val secs = ((now - startedAt) / 1000).coerceAtLeast(0)
-                Text("%d:%02d:%02d".format(secs / 3600, secs / 60 % 60, secs % 60), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0x99000000)).padding(horizontal = 8.dp, vertical = 4.dp))
-            }
-            Spacer(Modifier.weight(1f))
-            Icon(if (muted) Icons.Rounded.MicOff else Icons.Rounded.Mic, if (muted) "Unmute" else "Mute", tint = if (muted) Brand.Red else Color.White,
-                modifier = Modifier.size(42.dp).glass(CircleShape).clickable {
-                    muted = !muted
-                    camera?.let { if (muted) it.disableAudio() else it.enableAudio() }
-                }.padding(9.dp))
-            Spacer(Modifier.width(8.dp))
-            Icon(Icons.Rounded.Cameraswitch, "Switch camera", tint = Color.White, modifier = Modifier.size(42.dp).glass(CircleShape).clickable { runCatching { camera?.switchCamera() } }.padding(9.dp))
-        }
-
-        if (status == "live") {
-            FloatingComments(chat, Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = 100.dp).widthIn(max = 330.dp))
-            Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp)) {
-                Text("End live", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xE6D7263D)).clickable { confirmEnd = true }.padding(horizontal = 28.dp, vertical = 14.dp))
-            }
-        } else {
-            // Before going live: title, quality and the big button.
-            Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().imePadding()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000), Color(0xF5000000)))).padding(20.dp),
-            ) {
-                Field("TITLE", title, { title = it.take(120) }, hint = "What are we streaming?")
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(true to "HD 720p", false to "Data saver 480p").forEach { (v, label) ->
-                        Text(label, color = if (hd == v) Brand.Black else Brand.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                            modifier = (if (hd == v) Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient) else Modifier.glass()).clickable(enabled = status != "connecting") { hd = v }.padding(horizontal = 14.dp, vertical = 7.dp))
-                    }
-                }
-                error?.let { Text(it, color = Color(0xFFFFB4AE), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp)) }
-                Spacer(Modifier.height(14.dp))
-                Row(
-                    Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(50))
-                        .background(Brush.horizontalGradient(listOf(Color(0xFFFF5A4E), Color(0xFFD7263D))))
-                        .clickable(enabled = granted && status != "connecting") {
-                            val cam = camera ?: return@clickable
-                            status = "connecting"; error = null
-                            scope.launch {
-                                runCatching { Api.post("/live/start", mapOf("title" to title)) }
-                                    .onSuccess { res ->
-                                        val url = (res["publishUrl"] as kotlinx.serialization.json.JsonPrimitive).content
-                                        // Lock to the way the phone is held now; the stream keeps that shape.
-                                        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
-                                        val rotation = CameraHelper.getCameraOrientation(context)
-                                        val (w, h, bitrate) = if (hd) Triple(1280, 720, 2_500_000) else Triple(854, 480, 1_000_000)
-                                        if (cam.prepareAudio(128_000, 44_100, true) && cam.prepareVideo(w, h, 30, bitrate, rotation)) {
-                                            if (muted) cam.disableAudio()
-                                            cam.startStream(url)
-                                        } else { status = "error"; error = "This phone's camera couldn't start a broadcast." }
-                                    }
-                                    .onFailure { status = "error"; error = it.message }
-                            }
-                        },
-                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (status == "connecting") CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
-                    else { PulsingDot(Color.White, 9.dp); Spacer(Modifier.width(10.dp)); Text("Go Live", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
-                }
-                Text("Everyone gets a notification as soon as the picture reaches them.", style = Type.Meta, color = Brand.Text2,
-                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
-            }
-        }
-    }
-    if (confirmEnd) {
-        AlertDialog(
-            onDismissRequest = { confirmEnd = false }, containerColor = Color(0xFF1C1C20),
-            title = { Text("End the live?", color = Brand.White) },
-            text = { Text("Everyone watching will see that the service has ended.", color = Brand.Text2) },
-            confirmButton = { TextButton({ confirmEnd = false; stop(); onClose() }) { Text("End live", color = Brand.Red) } },
-            dismissButton = { TextButton({ confirmEnd = false }) { Text("Keep going", color = Brand.Text2) } },
-        )
-    }
-}

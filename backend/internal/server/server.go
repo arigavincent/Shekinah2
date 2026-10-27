@@ -164,6 +164,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.POST("/live/stop", auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast), liveHandler.Stop)
 		mod := []gin.HandlerFunc{auth.RequireAuth(authService), perms.Require(permissions.LiveModerate)}
 		api.GET("/live/chat/settings", append(mod, communityHandler.GetLiveChatSettings)...)
+		api.GET("/live/chat/status", communityHandler.LiveChatStatus)
 		api.PUT("/live/chat/settings", append(mod, communityHandler.UpdateLiveChatSettings)...)
 		api.POST("/live/chat/messages/:id/hide", append(mod, communityHandler.ModHide)...)
 		api.POST("/live/chat/messages/:id/pin", append(mod, communityHandler.ModPin)...)

@@ -412,6 +412,10 @@ func (h Handler) Create(c *gin.Context) {
 		settings := h.liveChatSettings(c)
 		isStaff := h.perms.Has(c.Request.Context(), userID, permissions.LiveModerate) || h.perms.Has(c.Request.Context(), userID, permissions.LiveBroadcast)
 		if !isStaff {
+			if settings.ChatOff {
+				httpx.Error(c, http.StatusForbidden, "chat_off", "the host has turned off chat for now")
+				return
+			}
 			if settings.SlowModeSeconds > 0 {
 				var last time.Time
 				err := h.db.QueryRow(c.Request.Context(), `SELECT created_at FROM community_messages WHERE user_id = $1 AND channel = 'live' ORDER BY created_at DESC LIMIT 1`, userID).Scan(&last)
@@ -698,6 +702,8 @@ func (h Handler) Delete(c *gin.Context) {
 type LiveChatSettings struct {
 	SlowModeSeconds int      `json:"slowModeSeconds"`
 	BannedWords     []string `json:"bannedWords"`
+	// ChatOff: only the host and moderators can comment.
+	ChatOff bool `json:"chatOff"`
 }
 
 func (h Handler) liveChatSettings(c *gin.Context) LiveChatSettings {
@@ -710,6 +716,12 @@ func (h Handler) liveChatSettings(c *gin.Context) LiveChatSettings {
 		settings.BannedWords = []string{}
 	}
 	return settings
+}
+
+// GET /live/chat/status: what viewers need to know (chat off, slow mode).
+func (h Handler) LiveChatStatus(c *gin.Context) {
+	s := h.liveChatSettings(c)
+	c.JSON(http.StatusOK, gin.H{"chatOff": s.ChatOff, "slowModeSeconds": s.SlowModeSeconds})
 }
 
 // GET /live/chat/settings (moderators)
