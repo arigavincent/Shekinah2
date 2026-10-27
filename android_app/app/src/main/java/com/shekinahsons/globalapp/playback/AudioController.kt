@@ -17,7 +17,14 @@ import com.shekinahsons.globalapp.data.Sermon
 
 // App-wide handle on the playback service, observable from Compose.
 // uriFor lets a downloaded copy play instead of streaming.
-class AudioController(private val context: Context, private val uriFor: (Sermon) -> String = { it.mediaUrl }) {
+class AudioController(
+    private val context: Context,
+    private val uriFor: (Sermon) -> String = { it.mediaUrl },
+    // Where to start each sermon, and where to report how far it got.
+    private val startAt: (Sermon) -> Long = { 0L },
+    private val onProgress: (Sermon, Long, Long) -> Unit = { _, _, _ -> },
+) {
+    private var lastSave = 0L
     private var controller: MediaController? = null
     private var pending: (() -> Unit)? = null
 
@@ -50,6 +57,13 @@ class AudioController(private val context: Context, private val uriFor: (Sermon)
         position = c.currentPosition.coerceAtLeast(0)
         duration = c.duration.takeIf { it > 0 } ?: 0
         if (queue.isNotEmpty()) current = queue.getOrNull(c.currentMediaItemIndex) ?: current
+        // Save progress every few seconds while playing, and on pause.
+        val now = System.currentTimeMillis()
+        val s = current
+        if (s != null && position > 0 && (isPlaying && now - lastSave > 5_000 || !c.playWhenReady && lastSave != -1L)) {
+            onProgress(s, position, duration)
+            lastSave = if (c.playWhenReady) now else -1L
+        } else if (c.playWhenReady && lastSave == -1L) lastSave = now
     }
 
     fun tick() = sync()
@@ -60,7 +74,7 @@ class AudioController(private val context: Context, private val uriFor: (Sermon)
             val c = controller!!
             queue = list.ifEmpty { listOf(sermon) }
             current = sermon
-            c.setMediaItems(queue.map { it.toMediaItem(uriFor(it)) }, queue.indexOfFirst { it.id == sermon.id }.coerceAtLeast(0), 0)
+            c.setMediaItems(queue.map { it.toMediaItem(uriFor(it)) }, queue.indexOfFirst { it.id == sermon.id }.coerceAtLeast(0), startAt(sermon))
             c.prepare()
             c.play()
         }

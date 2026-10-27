@@ -107,6 +107,7 @@ fun SermonsScreen(
     content: HomeContent,
     library: Library,
     initialTab: String,
+    initialCategory: String?,
     openMenu: () -> Unit,
     openVideo: (Sermon, List<Sermon>) -> Unit,
     openAudio: (Sermon, List<Sermon>) -> Unit,
@@ -116,7 +117,7 @@ fun SermonsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var sort by rememberSaveable { mutableStateOf(Sort.Newest) }
     var shelf by rememberSaveable { mutableStateOf(Shelf.All) }
-    var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var category by rememberSaveable { mutableStateOf(initialCategory) }
 
     Column(Modifier.fillMaxSize().background(Brand.Black)) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {

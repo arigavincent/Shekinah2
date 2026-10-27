@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.shekinahsons.globalapp.data.Clip
+import com.shekinahsons.globalapp.data.asSermon
 import com.shekinahsons.globalapp.data.HomeContent
 import com.shekinahsons.globalapp.data.Sermon
 import com.shekinahsons.globalapp.playback.AudioController
@@ -80,7 +81,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         val app = application as ShekinahApp
-        audio = AudioController(applicationContext, app.library::playableUri).also { it.connect() }
+        audio = AudioController(applicationContext, app.library::playableUri, { app.library.position(it.id) }, { s, p, d -> app.library.savePosition(s.id, p, d) }).also { it.connect() }
         val repo = app.content
         setContent {
             ShekinahTheme {
@@ -89,7 +90,7 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 LaunchedEffect(Unit) { repo.refresh() }
                 val c = content
-                if (c == null) Splash(refreshing) { scope.launch { repo.refresh() } } else AppShell(c, audio, app.library)
+                if (c == null) Splash(refreshing) { scope.launch { repo.refresh() } } else AppShell(c, audio, app.library, refreshing) { scope.launch { repo.refresh() } }
             }
         }
     }
@@ -108,10 +109,9 @@ private fun Route.key(): String = when (this) {
     is Route.Page -> "page:$page"
 }
 
-private fun Clip.asSermon() = Sermon(id = id, title = title, thumbnail = image, mediaUrl = mediaUrl, duration = duration, category = "Recap")
 
 @Composable
-private fun AppShell(content: HomeContent, audio: AudioController, library: Library) {
+private fun AppShell(content: HomeContent, audio: AudioController, library: Library, refreshing: Boolean, refresh: () -> Unit) {
     val nav = remember { Navigator() }
     val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
@@ -145,7 +145,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
             when (r) {
                 is Route.Root -> when (r.tab) {
                     Tab.Home -> HomeScreen(
-                        content,
+                        content, library, refreshing,
                         HomeActions(
                             openMenu = { menuOpen = true },
                             openVideo = openVideo, openAudio = openAudio,
@@ -157,9 +157,11 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                             seeDevotions = { nav.select(Tab.Devotions) },
                             seeEvents = { nav.push(Route.Page("Events")) },
                             seeUpdates = { nav.push(Route.Page("Updates")) },
+                            openCategory = { sermonsStartCategory = it; openSermons("Video") },
+                            refresh = refresh,
                         ),
                     )
-                    Tab.Sermons -> SermonsScreen(content, library, sermonsStartTab, { menuOpen = true }, openVideo, openAudio, openClip)
+                    Tab.Sermons -> SermonsScreen(content, library, sermonsStartTab, sermonsStartCategory.also { sermonsStartCategory = null }, { menuOpen = true }, openVideo, openAudio, openClip)
                     Tab.Bible -> BibleScreen(content)
                     Tab.Devotions -> DevotionsScreen(content) { nav.push(Route.DevotionRead(it)) }
                     Tab.Live -> LiveScreen(content)
@@ -198,6 +200,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
 
 // Set by "View All" on Home so Sermons opens on the matching tab.
 private var sermonsStartTab = "Video"
+private var sermonsStartCategory: String? = null
 
 @Composable
 private fun Splash(loading: Boolean, retry: () -> Unit) {

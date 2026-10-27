@@ -98,3 +98,6 @@ data class Update(val id: String = "", val title: String = "", val excerpt: Stri
 
 @Serializable
 data class About(val vision: String = "", val description: String = "", val contactSummary: String = "")
+
+// Recaps play in the sermon video player.
+fun Clip.asSermon() = Sermon(id = id, title = title, thumbnail = image, mediaUrl = mediaUrl, duration = duration, category = "Recap")

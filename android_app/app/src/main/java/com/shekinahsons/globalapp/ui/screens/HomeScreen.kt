@@ -8,6 +8,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.shekinahsons.globalapp.data.Event
+import com.shekinahsons.globalapp.data.Library
+import com.shekinahsons.globalapp.data.asSermon
+import com.shekinahsons.globalapp.extras.VerseImage
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import com.shekinahsons.globalapp.data.Update
 import com.shekinahsons.globalapp.playback.VideoCache
 import com.shekinahsons.globalapp.ui.components.offsetOf
@@ -105,12 +110,14 @@ class HomeActions(
     val seeDevotions: () -> Unit,
     val seeEvents: () -> Unit,
     val seeUpdates: () -> Unit,
+    val openCategory: (String) -> Unit,
+    val refresh: () -> Unit,
 )
 
 // Phaneroo's home order: today's devotional, then (when on air) the live
 // preview, then the video, audio and recap rails.
 @Composable
-fun HomeScreen(content: HomeContent, actions: HomeActions) {
+fun HomeScreen(content: HomeContent, library: Library, refreshing: Boolean, actions: HomeActions) {
     val screenW = LocalConfiguration.current.screenWidthDp.dp
     val videos = content.videoSermons
     val audios = content.audioSermons
@@ -133,10 +140,33 @@ fun HomeScreen(content: HomeContent, actions: HomeActions) {
             }
         }
 
+        // Started-but-unfinished sermons; re-read whenever progress is saved.
+        val everything = remember(content) { content.sermons + content.clips.map { it.asSermon() } }
+        val continuing = remember(library.progressVersion, everything) { library.inProgress(everything).take(10) }
+        val pull = rememberPullToRefreshState()
+
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = actions.refresh,
+            state = pull,
+            modifier = Modifier.fillMaxSize(),
+            indicator = { DoveRefreshIndicator(pull, refreshing) },
+        ) {
         LazyColumn(state = list, contentPadding = PaddingValues(bottom = NavBarHeight + 120.dp), modifier = Modifier.fillMaxSize()) {
             item { HomeTopBar(actions.openMenu) }
+            item { Greeting() }
             if (content.devotions.isNotEmpty()) item { DevotionCarousel(content.devotions, actions.openDevotion) }
             if (content.live.isLive) item { LiveCard(content, actions.openLive) }
+            else item { ServiceStrip(content.live.nextService) }
+
+            if (continuing.isNotEmpty()) {
+                item { RailHeader("Continue", null) }
+                item {
+                    ContinueRail(continuing) { s ->
+                        if (s.type == "audio") actions.openAudio(s, audios) else if (s.category == "Recap") actions.openVideo(s, content.clips.map { it.asSermon() }) else actions.openVideo(s, videos)
+                    }
+                }
+            }
 
             if (videos.isNotEmpty()) {
                 item { RailHeader("Latest Video Sermons", actions.seeVideos) }
@@ -151,6 +181,8 @@ fun HomeScreen(content: HomeContent, actions: HomeActions) {
                         VideoCard(s, cardW, offset) { actions.openVideo(s, videos) }
                     }
                 }
+                val topics = videos.map { it.category }.filter { it.isNotBlank() }.distinct()
+                if (topics.size > 1) item { CategoryChips(topics, actions.openCategory) }
             }
             if (audios.isNotEmpty()) {
                 item { RailHeader("Latest Audio Sermons", actions.seeAudio) }
@@ -187,6 +219,7 @@ fun HomeScreen(content: HomeContent, actions: HomeActions) {
                 }
             }
         }
+        }
         // Keeps scrolled content from colliding with the clock and icons.
         Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(Color(0xF2000000)))
     }
@@ -214,13 +247,13 @@ private fun HomeTopBar(onMenu: () -> Unit) {
 
 // Section title with a "View All" pill, as Phaneroo does it.
 @Composable
-private fun RailHeader(title: String, onViewAll: () -> Unit) {
+private fun RailHeader(title: String, onViewAll: (() -> Unit)?) {
     Row(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 30.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, letterSpacing = (-0.3).sp, color = Brand.White, modifier = Modifier.weight(1f))
-        Text(
+        if (onViewAll != null) Text(
             "View All", color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 14.sp,
             modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0x1FD4AF37))
                 .border(1.dp, Brush.verticalGradient(listOf(Color(0x55F0D27A), Color(0x0FD4AF37))), RoundedCornerShape(50))
@@ -386,9 +419,7 @@ private fun ScriptureCard(content: HomeContent) {
             Text(s.reference, color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
             Box(
                 Modifier.size(40.dp).clip(CircleShape).background(Color(0x1FFFFFFF)).pressable {
-                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
-                        .putExtra(android.content.Intent.EXTRA_TEXT, "\u201C${s.verse}\u201D \u2014 ${s.reference}\n\nShekinah Sons Global")
-                    context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
+                    VerseImage.share(context, s.verse, s.reference)
                 },
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Rounded.Share, "Share verse", tint = Brand.White, modifier = Modifier.size(18.dp)) }
