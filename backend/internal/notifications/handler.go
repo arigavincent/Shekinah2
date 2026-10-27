@@ -20,13 +20,13 @@ type Handler struct {
 }
 
 type RegisterDeviceRequest struct {
-	ExpoPushToken string          `json:"expoPushToken"`
+	ExpoPushToken string `json:"expoPushToken"`
 	// "fcm" for the native Android app; empty means the Expo app.
-	Provider      string          `json:"provider"`
-	Platform      string          `json:"platform"`
-	DeviceName    string          `json:"deviceName"`
-	AppVersion    string          `json:"appVersion"`
-	Preferences   json.RawMessage `json:"preferences"`
+	Provider    string          `json:"provider"`
+	Platform    string          `json:"platform"`
+	DeviceName  string          `json:"deviceName"`
+	AppVersion  string          `json:"appVersion"`
+	Preferences json.RawMessage `json:"preferences"`
 }
 
 type UpdatePreferencesRequest struct {
@@ -231,60 +231,51 @@ func (h Handler) Broadcast(c *gin.Context) {
 		req.Category = "general"
 	}
 
-	tokens, fcmTokens, err := h.tokensForCategory(c.Request.Context(), req.Category)
+	result, err := h.Notify(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load notification devices"})
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{"message": result})
+}
+
+// Notify sends a message to every device that wants its category and
+// records it (the app's feed shows it too). Used by the dashboard broadcast
+// and by features such as going live.
+func (h Handler) Notify(ctx context.Context, req BroadcastRequest) (gin.H, error) {
+	if req.Category == "" {
+		req.Category = "general"
+	}
+	tokens, fcmTokens, err := h.tokensForCategory(ctx, req.Category)
+	if err != nil {
+		return nil, err
+	}
 
 	success, failure := h.sendExpoPush(tokens, req)
-	fcmSuccess, fcmFailure, stale := h.fcm.send(c.Request.Context(), fcmTokens, req)
+	fcmSuccess, fcmFailure, stale := h.fcm.send(ctx, fcmTokens, req)
 	success += fcmSuccess
 	failure += fcmFailure
 	if len(stale) > 0 {
-		_, _ = h.db.Exec(c.Request.Context(), `UPDATE notification_devices SET enabled = FALSE, updated_at = NOW() WHERE expo_push_token = ANY($1)`, stale)
+		_, _ = h.db.Exec(ctx, `UPDATE notification_devices SET enabled = FALSE, updated_at = NOW() WHERE expo_push_token = ANY($1)`, stale)
 	}
-	tokens = append(tokens, fcmTokens...)
+	target := len(tokens) + len(fcmTokens)
 
 	messageID := newID("nm")
 	dataBytes, _ := json.Marshal(req.Data)
-	if len(dataBytes) == 0 {
+	if len(dataBytes) == 0 || string(dataBytes) == "null" {
 		dataBytes = []byte(`{}`)
 	}
 
 	_, _ = h.db.Exec(
-		c.Request.Context(),
+		ctx,
 		`
-			INSERT INTO notification_messages (
-				id,
-				title,
-				body,
-				category,
-				data,
-				target_count,
-				success_count,
-				failure_count
-			)
+			INSERT INTO notification_messages (id, title, body, category, data, target_count, success_count, failure_count)
 			VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
 		`,
-		messageID,
-		req.Title,
-		req.Body,
-		req.Category,
-		string(dataBytes),
-		len(tokens),
-		success,
-		failure,
+		messageID, req.Title, req.Body, req.Category, string(dataBytes), target, success, failure,
 	)
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": gin.H{
-			"id":           messageID,
-			"targetCount":  len(tokens),
-			"successCount": success,
-			"failureCount": failure,
-		},
-	})
+	return gin.H{"id": messageID, "targetCount": target, "successCount": success, "failureCount": failure}, nil
 }
 
 func (h Handler) ListMessages(c *gin.Context) {

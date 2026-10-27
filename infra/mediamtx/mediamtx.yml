@@ -1,0 +1,39 @@
+# Shekinah live streaming server (MediaMTX).
+# The app's broadcaster publishes RTMP to rtmp://<host>:1935/church?key=<session key>;
+# viewers watch HLS at http://<host>:8888/church/index.m3u8.
+logLevel: info
+
+# Every publish is checked with the backend, which only accepts the key of
+# the current live session. Watching is open to everyone.
+authMethod: http
+authHTTPAddress: http://host.docker.internal:3000/api/v1/live/mediamtx-auth
+authHTTPExclude:
+  - action: read
+  - action: playback
+  - action: api
+  - action: metrics
+  - action: pprof
+
+api: true
+apiAddress: :9997
+
+rtmp: true
+rtmpAddress: :1935
+
+hls: true
+hlsAddress: :8888
+hlsAllowOrigins: ["*"]
+# Low-latency HLS: a few seconds behind the pastor.
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsAlwaysRemux: true
+
+rtsp: false
+webrtc: false
+srt: false
+
+paths:
+  church:
+    source: publisher

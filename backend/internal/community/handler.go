@@ -1,6 +1,7 @@
 package community
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ariga/shekinah-backend/internal/auth"
 	"github.com/ariga/shekinah-backend/internal/httpx"
+	"github.com/ariga/shekinah-backend/internal/permissions"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,6 +21,7 @@ import (
 type Handler struct {
 	db      *pgxpool.Pool
 	liveHub *liveHub
+	perms   permissions.Checker
 }
 
 type CreateMessageRequest struct {
@@ -50,12 +53,17 @@ type Message struct {
 	UserID       string `json:"userId,omitempty"`
 	UserEmail    string `json:"userEmail,omitempty"`
 	ReplyTo      *Quote `json:"replyTo,omitempty"`
+	Pinned       bool   `json:"pinned,omitempty"`
+	// "host" or "moderator" on live chat.
+	Badge string `json:"badge,omitempty"`
 }
 
 type liveEvent struct {
 	Type    string   `json:"type"`
 	Active  bool     `json:"active,omitempty"`
 	Message *Message `json:"message,omitempty"`
+	// For "hide" and "unpin" events.
+	ID string `json:"id,omitempty"`
 }
 
 type liveHub struct {
@@ -63,10 +71,11 @@ type liveHub struct {
 	clients map[*websocket.Conn]struct{}
 }
 
-func NewHandler(db *pgxpool.Pool) Handler {
+func NewHandler(db *pgxpool.Pool, perms permissions.Checker) Handler {
 	return Handler{
 		db:      db,
 		liveHub: newLiveHub(),
+		perms:   perms,
 	}
 }
 
@@ -209,6 +218,8 @@ func scanMessage(row interface{ Scan(dest ...any) error }) (Message, error) {
 		&createdAt,
 		&item.UserID,
 		&item.UserEmail,
+		&item.Pinned,
+		&item.Badge,
 		&replyID,
 		&replyName,
 		&replyText,
@@ -266,6 +277,8 @@ func (h Handler) List(c *gin.Context) {
 			m.created_at,
 			u.id::text,
 			u.email,
+			m.pinned,
+			m.badge,
 			r.id,
 			r.display_name,
 			r.message
@@ -386,18 +399,56 @@ func (h Handler) Create(c *gin.Context) {
 	// can hide one afterwards from the dashboard.
 	status := "approved"
 
+	// Live chat rules: blocked members, slow mode, banned words, and badges
+	// for the host and moderators.
+	badge := ""
+	if channel == "live" {
+		var banned bool
+		_ = h.db.QueryRow(c.Request.Context(), `SELECT EXISTS (SELECT 1 FROM chat_bans WHERE user_id = $1)`, userID).Scan(&banned)
+		if banned {
+			httpx.Error(c, http.StatusForbidden, "chat_blocked", "a moderator has turned off chat for your account")
+			return
+		}
+		settings := h.liveChatSettings(c)
+		isStaff := h.perms.Has(c.Request.Context(), userID, permissions.LiveModerate) || h.perms.Has(c.Request.Context(), userID, permissions.LiveBroadcast)
+		if !isStaff {
+			if settings.SlowModeSeconds > 0 {
+				var last time.Time
+				err := h.db.QueryRow(c.Request.Context(), `SELECT created_at FROM community_messages WHERE user_id = $1 AND channel = 'live' ORDER BY created_at DESC LIMIT 1`, userID).Scan(&last)
+				if err == nil && time.Since(last) < time.Duration(settings.SlowModeSeconds)*time.Second {
+					httpx.Error(c, http.StatusTooManyRequests, "slow_mode", "slow mode is on, please wait a moment before your next comment")
+					return
+				}
+			}
+			lower := strings.ToLower(message)
+			for _, word := range settings.BannedWords {
+				if word = strings.ToLower(strings.TrimSpace(word)); word != "" && strings.Contains(lower, word) {
+					httpx.Error(c, http.StatusBadRequest, "filtered", "your comment wasn't posted because it contains words not allowed in this chat")
+					return
+				}
+			}
+		}
+		var hostID string
+		_ = h.db.QueryRow(c.Request.Context(), `SELECT COALESCE(broadcaster_id::text, '') FROM live_sessions WHERE status IN ('starting','live') ORDER BY created_at DESC LIMIT 1`).Scan(&hostID)
+		if hostID == userID {
+			badge = "host"
+		} else if h.perms.Has(c.Request.Context(), userID, permissions.LiveModerate) {
+			badge = "moderator"
+		}
+	}
+
 	item, err := scanMessage(
 		h.db.QueryRow(
 			c.Request.Context(),
 			`
 				WITH inserted AS (
-					INSERT INTO community_messages (id, user_id, channel, display_name, message, status, reply_to_id)
-					VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''))
-					RETURNING id, channel, display_name, message, status, hidden_reason, created_at, reply_to_id
+					INSERT INTO community_messages (id, user_id, channel, display_name, message, status, reply_to_id, badge)
+					VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8)
+					RETURNING id, channel, display_name, message, status, hidden_reason, created_at, reply_to_id, pinned, badge
 				)
 				SELECT
 					i.id, i.channel, i.display_name, i.message, i.status, i.hidden_reason, i.created_at,
-					$2::text, ''::text,
+					$2::text, ''::text, i.pinned, i.badge,
 					r.id, r.display_name, r.message
 				FROM inserted i
 				LEFT JOIN community_messages r ON r.id = i.reply_to_id
@@ -409,6 +460,7 @@ func (h Handler) Create(c *gin.Context) {
 			message,
 			status,
 			replyTo,
+			badge,
 		),
 	)
 	if err != nil {
@@ -499,6 +551,8 @@ func (h Handler) AdminList(c *gin.Context) {
 			m.created_at,
 			u.id::text,
 			u.email,
+			m.pinned,
+			m.badge,
 			NULL::text,
 			NULL::text,
 			NULL::text
@@ -590,6 +644,8 @@ func (h Handler) AdminUpdate(c *gin.Context) {
 					m.created_at,
 					u.id::text,
 					u.email,
+					m.pinned,
+					m.badge,
 					NULL::text,
 					NULL::text,
 					NULL::text
@@ -637,4 +693,155 @@ func (h Handler) Delete(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+type LiveChatSettings struct {
+	SlowModeSeconds int      `json:"slowModeSeconds"`
+	BannedWords     []string `json:"bannedWords"`
+}
+
+func (h Handler) liveChatSettings(c *gin.Context) LiveChatSettings {
+	var raw string
+	settings := LiveChatSettings{BannedWords: []string{}}
+	if err := h.db.QueryRow(c.Request.Context(), `SELECT value FROM app_settings WHERE key = 'live_chat'`).Scan(&raw); err == nil {
+		_ = json.Unmarshal([]byte(raw), &settings)
+	}
+	if settings.BannedWords == nil {
+		settings.BannedWords = []string{}
+	}
+	return settings
+}
+
+// GET /live/chat/settings (moderators)
+func (h Handler) GetLiveChatSettings(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"settings": h.liveChatSettings(c)})
+}
+
+// PUT /live/chat/settings (moderators)
+func (h Handler) UpdateLiveChatSettings(c *gin.Context) {
+	var req LiveChatSettings
+	if err := c.ShouldBindJSON(&req); err != nil || req.SlowModeSeconds < 0 || req.SlowModeSeconds > 600 {
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", "slow mode must be between 0 and 600 seconds")
+		return
+	}
+	words := make([]string, 0, len(req.BannedWords))
+	for _, w := range req.BannedWords {
+		if w = strings.TrimSpace(w); w != "" && len(words) < 200 {
+			words = append(words, w)
+		}
+	}
+	req.BannedWords = words
+	raw, _ := json.Marshal(req)
+	if _, err := h.db.Exec(c.Request.Context(), `
+		INSERT INTO app_settings (key, value, updated_at) VALUES ('live_chat', $1, NOW())
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, string(raw)); err != nil {
+		httpx.Error(c, http.StatusInternalServerError, "save_failed", "failed to save chat settings")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"settings": req})
+}
+
+// POST /live/chat/messages/:id/hide (moderators): removes a comment for everyone.
+func (h Handler) ModHide(c *gin.Context) {
+	tag, err := h.db.Exec(c.Request.Context(), `UPDATE community_messages SET status = 'hidden', pinned = FALSE, hidden_reason = 'Removed by a moderator', updated_at = NOW() WHERE id = $1`, c.Param("id"))
+	if err != nil || tag.RowsAffected() == 0 {
+		httpx.Error(c, http.StatusNotFound, "not_found", "message not found")
+		return
+	}
+	h.liveHub.broadcast(liveEvent{Type: "hide", Active: true, ID: c.Param("id")})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// POST /live/chat/messages/:id/pin {"pinned": true|false} (moderators): one pinned comment at a time.
+func (h Handler) ModPin(c *gin.Context) {
+	var req struct {
+		Pinned bool `json:"pinned"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	ctx := c.Request.Context()
+	if _, err := h.db.Exec(ctx, `UPDATE community_messages SET pinned = FALSE WHERE channel = 'live' AND pinned = TRUE`); err != nil {
+		httpx.Error(c, http.StatusInternalServerError, "pin_failed", "failed to pin")
+		return
+	}
+	if !req.Pinned {
+		h.liveHub.broadcast(liveEvent{Type: "unpin", Active: true, ID: c.Param("id")})
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	}
+	item, err := scanMessage(h.db.QueryRow(ctx, `
+		UPDATE community_messages m SET pinned = TRUE, updated_at = NOW()
+		FROM users u WHERE m.id = $1 AND u.id = m.user_id AND m.status = 'approved'
+		RETURNING m.id, m.channel, m.display_name, m.message, m.status, m.hidden_reason, m.created_at,
+		          u.id::text, ''::text, m.pinned, m.badge, NULL::text, NULL::text, NULL::text`, c.Param("id")))
+	if err != nil {
+		httpx.Error(c, http.StatusNotFound, "not_found", "message not found")
+		return
+	}
+	item.HiddenReason = ""
+	h.liveHub.broadcast(liveEvent{Type: "pin", Active: true, Message: &item})
+	c.JSON(http.StatusOK, gin.H{"message": item})
+}
+
+// POST /live/chat/bans {"userId": "...", "reason": "..."} (moderators): stop a member chatting
+// and remove their live comments.
+func (h Handler) ModBan(c *gin.Context) {
+	var req struct {
+		UserID string `json:"userId"`
+		Reason string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UserID) == "" {
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", "userId is required")
+		return
+	}
+	moderator, _ := auth.UserIDFromContext(c)
+	if req.UserID == moderator || h.perms.Has(c.Request.Context(), req.UserID, permissions.LiveModerate) {
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", "moderators and hosts can't be blocked here")
+		return
+	}
+	ctx := c.Request.Context()
+	if _, err := h.db.Exec(ctx, `INSERT INTO chat_bans (user_id, banned_by, reason) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET reason = EXCLUDED.reason, banned_by = EXCLUDED.banned_by, created_at = NOW()`, req.UserID, moderator, strings.TrimSpace(req.Reason)); err != nil {
+		httpx.Error(c, http.StatusNotFound, "not_found", "member not found")
+		return
+	}
+	rows, _ := h.db.Query(ctx, `UPDATE community_messages SET status = 'hidden', pinned = FALSE, hidden_reason = 'Member blocked', updated_at = NOW() WHERE user_id = $1 AND channel = 'live' AND status = 'approved' RETURNING id`, req.UserID)
+	if rows != nil {
+		for rows.Next() {
+			var id string
+			if rows.Scan(&id) == nil {
+				h.liveHub.broadcast(liveEvent{Type: "hide", Active: true, ID: id})
+			}
+		}
+		rows.Close()
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// DELETE /live/chat/bans/:userId (moderators)
+func (h Handler) ModUnban(c *gin.Context) {
+	_, _ = h.db.Exec(c.Request.Context(), `DELETE FROM chat_bans WHERE user_id = $1`, c.Param("userId"))
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// GET /live/chat/bans (moderators)
+func (h Handler) ModBans(c *gin.Context) {
+	rows, err := h.db.Query(c.Request.Context(), `SELECT b.user_id::text, u.name, b.reason, b.created_at FROM chat_bans b JOIN users u ON u.id = b.user_id ORDER BY b.created_at DESC`)
+	if err != nil {
+		httpx.Error(c, http.StatusInternalServerError, "list_failed", "failed to load blocked members")
+		return
+	}
+	defer rows.Close()
+	items := make([]gin.H, 0)
+	for rows.Next() {
+		var id, name, reason string
+		var at time.Time
+		if rows.Scan(&id, &name, &reason, &at) == nil {
+			items = append(items, gin.H{"userId": id, "name": name, "reason": reason, "createdAt": formatTimestamp(at)})
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"bans": items})
+}
+
+// CloseLive tells connected viewers the live chat has ended.
+func (h Handler) CloseLive() {
+	h.liveHub.broadcast(liveEvent{Type: "inactive", Active: false})
 }

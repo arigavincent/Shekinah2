@@ -25,7 +25,9 @@ import (
 	"github.com/ariga/shekinah-backend/internal/health"
 	"github.com/ariga/shekinah-backend/internal/httpx"
 	"github.com/ariga/shekinah-backend/internal/library"
+	"github.com/ariga/shekinah-backend/internal/live"
 	"github.com/ariga/shekinah-backend/internal/notifications"
+	"github.com/ariga/shekinah-backend/internal/permissions"
 	"github.com/ariga/shekinah-backend/internal/prayers"
 	"github.com/ariga/shekinah-backend/internal/privatechat"
 	"github.com/ariga/shekinah-backend/internal/readingplans"
@@ -111,7 +113,11 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	givingHandler := giving.NewHandler(db)
 	notificationHandler := notifications.NewHandler(db)
 	prayerHandler := prayers.NewHandler(db)
-	communityHandler := community.NewHandler(db)
+	perms := permissions.New(db)
+	communityHandler := community.NewHandler(db, perms)
+	liveHandler := live.NewHandler(db, notificationHandler, communityHandler)
+	// Moves broadcasts from "starting" to "live" and ends dropped ones.
+	go liveHandler.Watch(context.Background())
 	testimonyHandler := testimonies.NewHandler(db)
 	readingPlanHandler := readingplans.NewHandler(db)
 	checkinHandler := checkins.NewHandler(db)
@@ -148,6 +154,20 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.POST("/prayer-requests", auth.RequireAuth(authService), prayerHandler.Create)
 		api.GET("/prayer-requests/mine", auth.RequireAuth(authService), prayerHandler.ListMine)
 		api.POST("/prayer-requests/:id/pray", auth.RequireAuth(authService), prayerHandler.Pray)
+		api.GET("/permissions/me", auth.RequireAuth(authService), perms.Mine)
+		api.GET("/live/current", liveHandler.Current)
+		api.POST("/live/heartbeat", liveHandler.Heartbeat)
+		api.POST("/live/mediamtx-auth", liveHandler.MediaMTXAuth)
+		api.POST("/live/start", auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast), liveHandler.Start)
+		api.POST("/live/stop", auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast), liveHandler.Stop)
+		mod := []gin.HandlerFunc{auth.RequireAuth(authService), perms.Require(permissions.LiveModerate)}
+		api.GET("/live/chat/settings", append(mod, communityHandler.GetLiveChatSettings)...)
+		api.PUT("/live/chat/settings", append(mod, communityHandler.UpdateLiveChatSettings)...)
+		api.POST("/live/chat/messages/:id/hide", append(mod, communityHandler.ModHide)...)
+		api.POST("/live/chat/messages/:id/pin", append(mod, communityHandler.ModPin)...)
+		api.GET("/live/chat/bans", append(mod, communityHandler.ModBans)...)
+		api.POST("/live/chat/bans", append(mod, communityHandler.ModBan)...)
+		api.DELETE("/live/chat/bans/:userId", append(mod, communityHandler.ModUnban)...)
 		api.GET("/community/messages", communityHandler.List)
 		api.GET("/community/live/stream", communityHandler.LiveStream)
 		api.POST("/community/messages", auth.RequireAuth(authService), communityHandler.Create)
@@ -260,6 +280,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.GET("/prayers", adminPrayerHandler.List)
 			adminGroup.PATCH("/prayers/:id", adminPrayerHandler.Update)
 			adminGroup.POST("/media", adminMediaHandler.Upload)
+			adminGroup.GET("/members", perms.AdminListMembers)
+			adminGroup.PATCH("/members/:id/permissions", perms.AdminSetPermissions)
 			adminGroup.GET("/giving/transactions", givingHandler.ListTransactions)
 			adminGroup.GET("/giving/details", givingHandler.Details)
 			adminGroup.PUT("/giving/details", givingHandler.AdminUpdateDetails)
