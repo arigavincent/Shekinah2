@@ -8,6 +8,8 @@ import {
   deleteSermon,
   getPodcastSettings,
   getStorageStatus,
+  listSermonCategories,
+  type SermonCategory,
   putFileToStorage,
   startDirectUpload,
   importSermons,
@@ -23,6 +25,7 @@ import {
 } from "../api/adminSermonsApi";
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
 import { BatchUploadDialog, type BatchField } from "../components/BatchUploadDialog";
+import { SermonCategoriesCard } from "../components/SermonCategoriesCard";
 import { InlineAlert } from "../components/InlineAlert";
 import { BulkCsvImportCard } from "../components/BulkCsvImportCard";
 import { PaginationBar } from "../components/PaginationBar";
@@ -32,7 +35,8 @@ import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { formatPublishAt, getPublishState, PUBLISH_TIME_ZONE, publishNowValue } from "../lib/publish";
 import { isValidAssetReference, isValidDateString, isValidDateTimeString } from "../lib/validation";
 
-const categories = [
+// Used until the real categories load from the API.
+const FALLBACK_CATEGORIES = [
   { id: "cat-1", name: "Faith" },
   { id: "cat-2", name: "Prayer" },
   { id: "cat-3", name: "Grace" },
@@ -142,6 +146,10 @@ export function SermonsPage() {
   const [podcastSaving, setPodcastSaving] = useState(false);
   const [podcastNote, setPodcastNote] = useState("");
   const [storage, setStorage] = useState<{ r2: boolean; stream: boolean } | null>(null);
+  const [categoryList, setCategoryList] = useState<SermonCategory[]>([]);
+  const categories = categoryList.length
+    ? categoryList.map(category => ({ id: category.id, name: category.name }))
+    : FALLBACK_CATEGORIES;
   const [directProgress, setDirectProgress] = useState<{ kind: "video" | "audio"; percent: number } | null>(null);
   const sermonItems = Array.isArray(sermons) ? sermons : [];
 
@@ -187,8 +195,12 @@ export function SermonsPage() {
     setError("");
 
     try {
-      const response = await listSermons();
+      const [response, categoryResponse] = await Promise.all([
+        listSermons(),
+        listSermonCategories().catch(() => ({ categories: [] as SermonCategory[] }))
+      ]);
       setSermons(Array.isArray(response.sermons) ? response.sermons : []);
+      setCategoryList(Array.isArray(categoryResponse.categories) ? categoryResponse.categories : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load sermons");
     } finally {
@@ -877,6 +889,13 @@ export function SermonsPage() {
         </div>
         {podcastNote ? <p className="small-muted">{podcastNote}</p> : null}
       </form>
+
+      <SermonCategoriesCard
+        categories={categoryList}
+        canUploadImages={Boolean(storage?.r2)}
+        onChanged={load}
+        onError={setError}
+      />
 
       <section className="content-grid">
         <form className="editor-card" onSubmit={submit}>

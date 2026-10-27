@@ -129,7 +129,7 @@ export type DirectUpload = {
   expiresAt: string;
 };
 
-export function startDirectUpload(kind: "video" | "audio", file: File) {
+export function startDirectUpload(kind: "video" | "audio" | "image", file: File) {
   return apiRequest<DirectUpload>("/api/v1/admin/sermons/direct-upload", {
     method: "POST",
     token: adminToken(),
@@ -214,3 +214,39 @@ export type SermonImportResult = {
   updated: Sermon[];
   rejected: { rowNumber: number; externalId?: string; title?: string; error: string }[];
 };
+
+export type SermonCategory = {
+  id: string;
+  name: string;
+  imageUrl: string;
+  sermonCount: number;
+};
+
+export function listSermonCategories() {
+  return apiRequest<{ categories: SermonCategory[] }>("/api/v1/admin/sermon-categories", {
+    token: adminToken()
+  });
+}
+
+export function createSermonCategory(name: string, imageUrl = "") {
+  return apiRequest<{ category: SermonCategory }>("/api/v1/admin/sermon-categories", {
+    method: "POST",
+    token: adminToken(),
+    body: { name, imageUrl }
+  });
+}
+
+export function updateSermonCategory(id: string, patch: { name?: string; imageUrl?: string }) {
+  return apiRequest<{ category: SermonCategory }>(`/api/v1/admin/sermon-categories/${id}`, {
+    method: "PATCH",
+    token: adminToken(),
+    body: patch
+  });
+}
+
+export function deleteSermonCategory(id: string) {
+  return apiRequest<null>(`/api/v1/admin/sermon-categories/${id}`, {
+    method: "DELETE",
+    token: adminToken()
+  });
+}

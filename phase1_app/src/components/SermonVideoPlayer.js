@@ -4,7 +4,7 @@ import { useEvent } from "expo";
 import { VideoView, useVideoPlayer } from "expo-video";
 
 import { C, makeThemedStyles } from "../constants/theme";
-import { getPlaybackProgress, savePlaybackProgress } from "../services/playbackProgressStore";
+import { clearPlaybackProgress, getPlaybackProgress, savePlaybackProgress } from "../services/playbackProgressStore";
 import { Ionicons } from "./Icon";
 
 const SAVE_EVERY_SECONDS = 5;
@@ -18,6 +18,7 @@ export const FULLSCREEN_LANDSCAPE = { enable: true, orientation: "landscape", au
 export function SermonVideoPlayer({ sermon, source, poster, height }) {
   const lastSaved = useRef(0);
   const [resumeFrom, setResumeFrom] = useState(null);
+  const [ended, setEnded] = useState(false);
 
   const player = useVideoPlayer(source, instance => {
     instance.timeUpdateEventInterval = 1;
@@ -65,6 +66,22 @@ export function SermonVideoPlayer({ sermon, source, poster, height }) {
     return () => subscription.remove();
   }, [player, sermon?.id, sermon?.title, sermon?.speaker, poster]);
 
+  // When the sermon finishes, show the poster with Replay and forget the
+  // saved position so the next visit starts from the beginning.
+  useEffect(() => {
+    const subscription = player.addListener("playToEnd", () => {
+      setEnded(true);
+      if (sermon?.id) clearPlaybackProgress(sermon.id).catch(() => {});
+    });
+    return () => subscription.remove();
+  }, [player, sermon?.id]);
+
+  const replay = () => {
+    setEnded(false);
+    player.currentTime = 0;
+    player.play();
+  };
+
   const loading = status === "loading" || (status === "idle" && resumeFrom === null);
   const failed = status === "error";
 
@@ -85,6 +102,16 @@ export function SermonVideoPlayer({ sermon, source, poster, height }) {
           <ActivityIndicator size="large" color={C.gold} />
           {resumeFrom > 0 ? <Text style={styles.overlayText}>Resuming where you left off</Text> : null}
         </View>
+      ) : null}
+
+      {ended && !failed ? (
+        <Pressable style={styles.overlay} onPress={replay} accessibilityRole="button" accessibilityLabel="Replay sermon">
+          {poster ? <Image source={{ uri: poster }} style={[StyleSheet.absoluteFill, { opacity: 0.45 }]} /> : null}
+          <View style={styles.replayBtn}>
+            <Ionicons name="repeat-outline" size={26} color={C.textOnAccent} />
+          </View>
+          <Text style={styles.overlayText}>Replay</Text>
+        </Pressable>
       ) : null}
 
       {failed ? (
@@ -114,6 +141,7 @@ const styles = makeThemedStyles(C => ({
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "rgba(0,0,0,0.55)" },
   overlayText: { color: "#FFFFFF", fontSize: 14, fontFamily: C.fontBold },
   overlaySub: { color: "rgba(255,255,255,0.7)", fontSize: 12.5, fontFamily: C.fontBody },
+  replayBtn: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.gold, alignItems: "center", justifyContent: "center" },
   retry: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.gold, borderRadius: 999, paddingHorizontal: 16, height: 38, marginTop: 6 },
   retryText: { color: C.textOnAccent, fontSize: 13.5, fontFamily: C.fontBold }
 }));

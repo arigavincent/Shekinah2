@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/ariga/shekinah-backend/internal/admin"
 	adminbranches "github.com/ariga/shekinah-backend/internal/admin/branches"
+	admincategories "github.com/ariga/shekinah-backend/internal/admin/categories"
 	admindevotions "github.com/ariga/shekinah-backend/internal/admin/devotions"
 	adminevents "github.com/ariga/shekinah-backend/internal/admin/events"
 	adminlibrary "github.com/ariga/shekinah-backend/internal/admin/library"
@@ -84,6 +85,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		db,
 	)
 	sermonMediaHandler := sermonmedia.NewHandler(sermonMediaService)
+	adminCategoryHandler := admincategories.NewHandler(admincategories.NewService(admincategories.NewRepository(db)))
 
 	adminEventRepository := adminevents.NewRepository(db)
 	adminEventService := adminevents.NewService(adminEventRepository)
@@ -202,6 +204,10 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.POST("/sermons", adminSermonHandler.Create)
 			adminGroup.POST("/sermons/import/preview", adminSermonHandler.PreviewImport)
 			adminGroup.POST("/sermons/import", adminSermonHandler.Import)
+			adminGroup.GET("/sermon-categories", adminCategoryHandler.List)
+			adminGroup.POST("/sermon-categories", adminCategoryHandler.Create)
+			adminGroup.PATCH("/sermon-categories/:id", adminCategoryHandler.Update)
+			adminGroup.DELETE("/sermon-categories/:id", adminCategoryHandler.Delete)
 			adminGroup.POST("/sermons/stream-upload", sermonMediaHandler.StartStreamUpload)
 			adminGroup.POST("/sermons/direct-upload", sermonMediaHandler.StartDirectUpload)
 			adminGroup.GET("/sermons/storage", sermonMediaHandler.StorageStatus)
