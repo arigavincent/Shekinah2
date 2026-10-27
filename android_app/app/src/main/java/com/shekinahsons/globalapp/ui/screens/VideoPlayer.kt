@@ -262,6 +262,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
                         setBackgroundColor(android.graphics.Color.BLACK)
                         view = this
 
+                        var volumeLevel = -1f
                         val gestures = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
                             override fun onDown(e: MotionEvent) = true
                             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
@@ -284,11 +285,14 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
                                     activity.window.attributes = attrs
                                     flash = "☀ ${(attrs.screenBrightness * 100).toInt()}%"
                                 } else {
+                                    // Keep a running total for the whole swipe: each move is a fraction of
+                                    // a step, and rounding every move on its own would never change anything.
                                     val audio = activity.getSystemService(android.media.AudioManager::class.java)
                                     val max = audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
-                                    val now = (audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) + step * max * 1.6f).coerceIn(0f, max.toFloat())
-                                    audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, now.toInt(), 0)
-                                    flash = "🔊 ${(now / max * 100).toInt()}%"
+                                    if (volumeLevel < 0) volumeLevel = audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC).toFloat()
+                                    volumeLevel = (volumeLevel + step * max * 1.6f).coerceIn(0f, max.toFloat())
+                                    audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, kotlin.math.round(volumeLevel).toInt(), 0)
+                                    flash = "🔊 ${(volumeLevel / max * 100).toInt()}%"
                                 }
                                 return true
                             }
@@ -306,6 +310,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
                         setOnTouchListener { _, event ->
                             pinch.onTouchEvent(event)
                             if (!pinch.isInProgress && event.pointerCount == 1) gestures.onTouchEvent(event)
+                            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) volumeLevel = -1f
                             true
                         }
                     }
