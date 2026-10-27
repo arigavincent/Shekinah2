@@ -5,12 +5,12 @@ import {
   RefreshControl,
   ScrollView,
   Share,
+  StyleSheet,
   Text,
   useWindowDimensions,
   View
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { StyleSheet } from "react-native";
 import { Ionicons } from "../components/Icon";
 
 import { useContent } from "../providers/ContentProvider";
@@ -23,6 +23,11 @@ import { IconButton } from "../components/IconButton";
 import { SectionHeader } from "../components/SectionHeader";
 import { LivePreview } from "../components/LivePreview";
 import { AudioArt } from "../components/AudioArt";
+import Animated, { FadeInDown } from "react-native-reanimated";
+import { CarouselRail, useFrontness, useParallax } from "../components/motion/CarouselRail";
+import { FadeImage } from "../components/motion/FadeImage";
+import { AmbientBackdrop, AmbientGlow } from "../components/motion/AmbientGlow";
+import { PressableScale } from "../components/motion/PressableScale";
 import { useDownloadsMap } from "../hooks/useDownloadsMap";
 import { tr } from "../i18n/labels";
 import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
@@ -119,6 +124,16 @@ function cleanViewerCount(value) {
   return raw;
 }
 
+const STATIC_SCROLL = { value: 0 };
+
+function RevealHeader({ index = 0, ...props }) {
+  return (
+    <Animated.View entering={FadeInDown.delay(80 + index * 70).duration(420)}>
+      <SectionHeader {...props} />
+    </Animated.View>
+  );
+}
+
 // Content gutter shared by every rail so cards line up with section titles.
 const GUTTER = 16;
 
@@ -163,14 +178,15 @@ function DevotionCarousel({ devotions, go, appLanguage }) {
       >
         {items.map((devotion, position) => (
           <View key={devotion.id || position} style={{ width: cardWidth }}>
+            <AmbientGlow uri={devotionImage(devotion)} width={cardWidth} height={220} blur={26} drop={18} intensity={0.9} />
             <View style={home.devStack} />
-            <Pressable
-              style={({ pressed }) => [home.devCard, pressed && { opacity: 0.9 }]}
+            <PressableScale
+              style={home.devCard}
               onPress={() => go("DevotionDetail", devotion)}
               accessibilityRole="button"
               accessibilityLabel={`${tr(appLanguage, position === 0 ? "Today's Devotional" : "Devotional")}: ${devotion.title}`}
             >
-              <Image source={{ uri: devotionImage(devotion) }} style={home.devImage} />
+              <FadeImage uri={devotionImage(devotion)} style={home.devImage} />
               <View style={home.devBody}>
                 <View style={home.devPill}>
                   <Text style={home.devPillText}>
@@ -188,7 +204,7 @@ function DevotionCarousel({ devotions, go, appLanguage }) {
                   </View>
                 ) : null}
               </View>
-            </Pressable>
+            </PressableScale>
           </View>
         ))}
       </ScrollView>
@@ -229,51 +245,73 @@ function ProgressBits({ progressEntry, downloadEntry, appLanguage }) {
   );
 }
 
-function VideoTile({ item, width, onPress, progressEntry, downloadEntry, appLanguage }) {
+// Inside a CarouselRail the artwork drifts (parallax) and the card at the
+// front gets an ambient glow; elsewhere the tile renders statically.
+function TileArt({ uri, motion, aspectRatio, width, children }) {
+  const parallax = useParallax(motion?.scrollX ?? STATIC_SCROLL, motion?.index ?? 0, motion?.step ?? 1);
+  const frontness = useFrontness(motion?.scrollX ?? STATIC_SCROLL, motion?.index ?? 0, motion?.step ?? 1);
+  const artHeight = aspectRatio ? Math.round(width / aspectRatio) : width;
+
   return (
-    <Pressable
+    <View>
+      {motion ? <AmbientGlow uri={uri} width={width} height={artHeight} blur={22} drop={10} intensity={0.8} animatedStyle={frontness} /> : null}
+      <View style={[home.videoThumbWrap, aspectRatio ? { aspectRatio } : { width, height: width }]}>
+        <Animated.View style={[StyleSheet.absoluteFill, motion ? parallax : null]}>
+          <FadeImage uri={uri} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+        {children}
+      </View>
+    </View>
+  );
+}
+
+function VideoTile({ item, width, onPress, progressEntry, downloadEntry, appLanguage, motion }) {
+  return (
+    <PressableScale
       onPress={onPress}
-      style={({ pressed }) => [{ width }, pressed && { opacity: 0.8 }]}
+      style={{ width }}
       accessibilityRole="button"
       accessibilityLabel={`Video sermon, ${item.title}`}
     >
-      <View style={home.videoThumbWrap}>
-        <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={home.videoThumb} />
+      <TileArt uri={sermonThumbnail(item, PHASE1_IMAGES.sermon)} motion={motion} width={width} aspectRatio={16 / 9}>
         {item.live ? (
           <View style={home.liveTag}>
             <Text style={home.livePillText}>LIVE</Text>
           </View>
         ) : null}
-      </View>
+      </TileArt>
       <Text style={home.tileTitle} numberOfLines={2}>{item.title}</Text>
       <ProgressBits progressEntry={progressEntry} downloadEntry={downloadEntry} appLanguage={appLanguage} />
-    </Pressable>
+    </PressableScale>
   );
 }
 
-function SquareTile({ item, width, onPress, progressEntry, downloadEntry, appLanguage, badge }) {
+function SquareTile({ item, width, onPress, progressEntry, downloadEntry, appLanguage, badge, motion }) {
+  const frontness = useFrontness(motion?.scrollX ?? STATIC_SCROLL, motion?.index ?? 0, motion?.step ?? 1);
+
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
-      style={({ pressed }) => [{ width }, pressed && { opacity: 0.8 }]}
+      style={{ width }}
       accessibilityRole="button"
       accessibilityLabel={item.title}
     >
-      <View>
-        {item.type === "audio" ? (
+      {item.type === "audio" ? (
+        <View>
+          {motion ? <Animated.View pointerEvents="none" style={[home.goldGlow, frontness]} /> : null}
           <AudioArt item={item} size={width} />
-        ) : (
-          <Image source={{ uri: sermonThumbnail(item, PHASE1_IMAGES.sermon) }} style={[home.squareArt, { width, height: width }]} />
-        )}
-        {badge ? (
-          <View style={home.squareBadge}>
-            <Ionicons name={badge} size={14} color={C.textOnAccent} />
-          </View>
-        ) : null}
-      </View>
+        </View>
+      ) : (
+        <TileArt uri={sermonThumbnail(item, PHASE1_IMAGES.sermon)} motion={motion} width={width} />
+      )}
+      {badge ? (
+        <View style={home.squareBadge}>
+          <Ionicons name={badge} size={14} color={C.textOnAccent} />
+        </View>
+      ) : null}
       <Text style={home.tileTitle} numberOfLines={2}>{item.title}</Text>
       <ProgressBits progressEntry={progressEntry} downloadEntry={downloadEntry} appLanguage={appLanguage} />
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -427,6 +465,10 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
           />
         }
       >
+        <View style={home.backdropWrap} pointerEvents="none">
+          <AmbientBackdrop uri={devotions[0] ? devotionImage(devotions[0]) : undefined} height={560} background={C.background} strength={0.6} />
+        </View>
+
         {data.live?.isLive ? (
           <LivePreview
             live={data.live}
@@ -455,34 +497,44 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
 
         {videos.length > 0 ? (
           <>
-            <SectionHeader title="Latest Video Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
-            <Rail itemWidth={videoWidth}>
-              {videos.slice(0, 10).map(item => (
-                <VideoTile key={item.id} width={videoWidth} {...tileProps(item)} />
-              ))}
-            </Rail>
+            <RevealHeader index={1} title="Latest Video Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
+            <CarouselRail
+              data={videos.slice(0, 10)}
+              itemWidth={videoWidth}
+              keyExtractor={item => item.id}
+              renderItem={({ item, index, scrollX, step }) => (
+                <VideoTile width={videoWidth} motion={{ scrollX, index, step }} {...tileProps(item)} />
+              )}
+            />
           </>
         ) : null}
 
         {audio.length > 0 ? (
           <>
-            <SectionHeader title="Latest Audio Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
-            <Rail itemWidth={squareWidth}>
-              {audio.slice(0, 10).map(item => (
-                <SquareTile key={item.id} width={squareWidth} {...tileProps(item)} />
-              ))}
-            </Rail>
+            <RevealHeader index={2} title="Latest Audio Sermons" onPress={() => go("Sermons")} appLanguage={appLanguage} />
+            <CarouselRail
+              data={audio.slice(0, 10)}
+              itemWidth={squareWidth}
+              depth={0.8}
+              keyExtractor={item => item.id}
+              renderItem={({ item, index, scrollX, step }) => (
+                <SquareTile width={squareWidth} motion={{ scrollX, index, step }} {...tileProps(item)} />
+              )}
+            />
           </>
         ) : null}
 
         {playableClips.length > 0 ? (
           <>
-            <SectionHeader title="Recaps" onPress={() => go("Sermons")} appLanguage={appLanguage} />
-            <Rail itemWidth={clipWidth}>
-              {playableClips.slice(0, 10).map(item => (
-                <VideoTile key={item.id} width={clipWidth} {...tileProps(item)} />
-              ))}
-            </Rail>
+            <RevealHeader index={3} title="Recaps" onPress={() => go("Sermons")} appLanguage={appLanguage} />
+            <CarouselRail
+              data={playableClips.slice(0, 10)}
+              itemWidth={clipWidth}
+              keyExtractor={item => item.id}
+              renderItem={({ item, index, scrollX, step }) => (
+                <VideoTile width={clipWidth} motion={{ scrollX, index, step }} {...tileProps(item)} />
+              )}
+            />
           </>
         ) : null}
 
@@ -490,7 +542,7 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
 
         {events.length > 0 ? (
           <>
-            <SectionHeader title="Upcoming Events" onPress={() => go("Events")} appLanguage={appLanguage} />
+            <RevealHeader index={4} title="Upcoming Events" onPress={() => go("Events")} appLanguage={appLanguage} />
             <Rail itemWidth={eventWidth}>
               {events.slice(0, 6).map(item => (
                 <EventTile key={item.id} item={item} width={eventWidth} onPress={() => go("EventDetail", item)} />
@@ -501,7 +553,7 @@ export function HomeScreen({ go, openDrawer, openSermon, appLanguage = "en" }) {
 
         {updates.length > 0 ? (
           <>
-            <SectionHeader title="Latest Updates" onPress={() => go("Updates")} appLanguage={appLanguage} />
+            <RevealHeader index={5} title="Latest Updates" onPress={() => go("Updates")} appLanguage={appLanguage} />
             {updates.slice(0, 3).map(item => (
               <UpdateRow key={item.id} item={item} go={go} />
             ))}
@@ -576,6 +628,20 @@ const home = makeThemedStyles(C => ({
   dotActive: { width: 18, backgroundColor: C.gold },
 
   videoThumbWrap: { borderRadius: 14, overflow: "hidden", backgroundColor: C.surface2 },
+  backdropWrap: { position: "absolute", top: -60, left: -16, right: -16 },
+  goldGlow: {
+    position: "absolute",
+    left: 6,
+    right: 6,
+    top: 10,
+    bottom: -12,
+    borderRadius: 22,
+    backgroundColor: "rgba(212,175,55,0.35)",
+    shadowColor: "#D4AF37",
+    shadowOpacity: 0.9,
+    shadowRadius: 24,
+    elevation: 18
+  },
   videoThumb: { width: "100%", aspectRatio: 16 / 9 },
   squareArt: { borderRadius: 14, backgroundColor: C.surface2 },
   squareBadge: { position: "absolute", right: 8, bottom: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: C.gold, alignItems: "center", justifyContent: "center" },
