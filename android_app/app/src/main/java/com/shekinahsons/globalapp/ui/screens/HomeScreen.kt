@@ -1,6 +1,18 @@
 package com.shekinahsons.globalapp.ui.screens
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.shekinahsons.globalapp.data.Event
+import com.shekinahsons.globalapp.data.Update
+import com.shekinahsons.globalapp.playback.VideoCache
+import com.shekinahsons.globalapp.ui.components.offsetOf
+import com.shekinahsons.globalapp.ui.components.scrollEntrance
+import com.shekinahsons.globalapp.ui.theme.Cinzel
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -88,6 +100,8 @@ class HomeActions(
     val seeAudio: () -> Unit,
     val seeRecaps: () -> Unit,
     val seeDevotions: () -> Unit,
+    val seeEvents: () -> Unit,
+    val seeUpdates: () -> Unit,
 )
 
 // Phaneroo's home order: today's devotional, then (when on air) the live
@@ -118,13 +132,18 @@ fun HomeScreen(content: HomeContent, actions: HomeActions) {
 
         LazyColumn(state = list, contentPadding = PaddingValues(bottom = NavBarHeight + 120.dp), modifier = Modifier.fillMaxSize()) {
             item { HomeTopBar(actions.openMenu) }
-            devotion?.let { d -> item { DevotionCard(d, hasMore = content.devotions.size > 1) { actions.openDevotion(d) } } }
+            if (content.devotions.isNotEmpty()) item { DevotionCarousel(content.devotions, actions.openDevotion) }
             if (content.live.isLive) item { LiveCard(content, actions.openLive) }
 
             if (videos.isNotEmpty()) {
                 item { RailHeader("Latest Video Sermons", actions.seeVideos) }
                 item {
-                    val cardW = screenW * 0.62f
+                    val cardW = screenW * 0.54f
+                    // Fetch the first seconds of the sermon in front (and the next) so it starts instantly.
+                    LaunchedEffect(videoPager.settledPage) {
+                        VideoCache.warm(videos.getOrNull(videoPager.settledPage)?.mediaUrl)
+                        VideoCache.warm(videos.getOrNull(videoPager.settledPage + 1)?.mediaUrl)
+                    }
                     CoverFlowRail(videos, cardW, spacing = 4.dp, depth = 0.7f, state = videoPager, startAligned = true) { s, offset ->
                         VideoCard(s, cardW, offset) { actions.openVideo(s, videos) }
                     }
@@ -146,6 +165,24 @@ fun HomeScreen(content: HomeContent, actions: HomeActions) {
                     }
                 }
             }
+            if (content.scripture.verse.isNotBlank()) item { ScriptureCard(content) }
+            if (content.events.isNotEmpty()) {
+                item { RailHeader("Upcoming Events", actions.seeEvents) }
+                item {
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        items(content.events, key = { it.id }) { e -> EventCard(e) { actions.seeEvents() } }
+                    }
+                }
+            }
+            if (content.updates.isNotEmpty()) {
+                item { RailHeader("Latest Updates", actions.seeUpdates) }
+                content.updates.take(3).forEachIndexed { i, u ->
+                    item(key = "update-${u.id}") {
+                        val index = list.layoutInfo.totalItemsCount - content.updates.take(3).size + i
+                        UpdateRow(u, Modifier.scrollEntrance(list, index)) { actions.seeUpdates() }
+                    }
+                }
+            }
         }
         // Keeps scrolled content from colliding with the clock and icons.
         Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(Color(0xF2000000)))
@@ -162,8 +199,13 @@ private fun HomeTopBar(onMenu: () -> Unit) {
             Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onMenu),
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Rounded.Menu, "Menu", tint = Brand.White, modifier = Modifier.size(28.dp)) }
-        Spacer(Modifier.width(10.dp))
-        Image(painterResource(R.drawable.dove_mark), "Shekinah Sons Global", Modifier.size(42.dp))
+        Spacer(Modifier.width(6.dp))
+        Image(painterResource(R.drawable.dove_mark), null, Modifier.size(40.dp))
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = "Shekinah Sons Global" }) {
+            Text("SHEKINAH", fontFamily = Cinzel, fontSize = 21.sp, lineHeight = 22.sp, letterSpacing = 1.5.sp, color = Brand.Gold)
+            Text("SONS GLOBAL", fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 8.5.sp, lineHeight = 10.sp, letterSpacing = 3.2.sp, color = Brand.Text2)
+        }
     }
 }
 
@@ -186,7 +228,7 @@ private fun RailHeader(title: String, onViewAll: () -> Unit) {
 // Today's devotional: picture on the left, words on the right, with the
 // next day's card peeking out underneath like a stack.
 @Composable
-private fun DevotionCard(d: Devotion, hasMore: Boolean, onOpen: () -> Unit) {
+private fun DevotionCard(d: Devotion, hasMore: Boolean, isToday: Boolean, onOpen: () -> Unit) {
     Box(Modifier.padding(horizontal = 16.dp).padding(top = 8.dp, bottom = if (hasMore) 12.dp else 0.dp)) {
         if (hasMore) {
             Box(
@@ -201,10 +243,10 @@ private fun DevotionCard(d: Devotion, hasMore: Boolean, onOpen: () -> Unit) {
                 .border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(22.dp))
                 .pressable(onOpen),
         ) {
-            FadeImage(d.imageUrl, Modifier.fillMaxHeight().width(124.dp))
+            FadeImage(d.imageUrl, Modifier.fillMaxHeight().width(124.dp), label = "DEVOTION")
             Column(Modifier.weight(1f).padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 12.dp)) {
                 Text(
-                    "Today's Devotional", color = Brand.Black, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                    if (isToday) "Today's Devotional" else "Devotional", color = Brand.Black, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
                     modifier = Modifier.background(Brand.GoldGradient, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 5.dp),
                 )
                 Spacer(Modifier.height(9.dp))
@@ -295,7 +337,7 @@ private fun AudioCard(s: Sermon, onOpen: () -> Unit) {
 private fun RecapCard(c: Clip, onOpen: () -> Unit) {
     Column(Modifier.width(132.dp).padding(top = 14.dp)) {
         Box(Modifier.fillMaxWidth().aspectRatio(9 / 15f).clip(RoundedCornerShape(16.dp)).pressable(onOpen)) {
-            FadeImage(c.image, Modifier.fillMaxSize())
+            FadeImage(c.image, Modifier.fillMaxSize(), label = "RECAP")
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color(0xD9000000))))
             Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(28.dp).background(Color(0x66000000), CircleShape), contentAlignment = Alignment.Center) {
                 Icon(Icons.Rounded.PlayArrow, null, tint = Color.White, modifier = Modifier.size(18.dp))
@@ -306,5 +348,105 @@ private fun RecapCard(c: Clip, onOpen: () -> Unit) {
         }
         Spacer(Modifier.height(10.dp))
         Text(c.title, fontFamily = Inter, fontSize = 14.sp, lineHeight = 19.sp, color = Brand.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+// Devotions swipe sideways; the next card peeks underneath, and dots show
+// where you are (Phaneroo uses page_view_dot_indicator here).
+@Composable
+private fun DevotionCarousel(devotions: List<Devotion>, open: (Devotion) -> Unit) {
+    val pager = rememberPagerState { devotions.size }
+    Column {
+        HorizontalPager(
+            state = pager,
+            contentPadding = PaddingValues(horizontal = 0.dp),
+            beyondViewportPageCount = 1,
+        ) { page ->
+            val offset = pager.offsetOf(page)
+            Box(Modifier.graphicsLayer {
+                val t = abs(offset).coerceAtMost(1f)
+                scaleX = 1f - 0.08f * t; scaleY = scaleX
+                alpha = 1f - 0.5f * t
+            }) {
+                DevotionCard(devotions[page], hasMore = page < devotions.lastIndex, isToday = page == 0) { open(devotions[page]) }
+            }
+        }
+        if (devotions.size > 1) {
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.Center) {
+                devotions.indices.forEach { i ->
+                    val on = i == pager.currentPage
+                    val w by animateDpAsState(if (on) 20.dp else 7.dp, label = "dot")
+                    Box(Modifier.padding(horizontal = 3.dp).height(7.dp).width(w).clip(CircleShape).background(if (on) Brand.Gold else Color(0x40FFFFFF)))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScriptureCard(content: HomeContent) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val s = content.scripture
+    Column(
+        Modifier.padding(horizontal = 16.dp).padding(top = 32.dp).fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF2A2009), Color(0xFF15120A), Color(0xFF0E1526))))
+            .border(1.dp, Brush.linearGradient(listOf(Brand.Gold.copy(alpha = 0.6f), Color(0x00D4AF37), Brand.Blue.copy(alpha = 0.45f))), RoundedCornerShape(22.dp))
+            .padding(22.dp),
+    ) {
+        Text(s.title.ifBlank { "Scripture of the Day" }.uppercase(), style = Type.Label, color = Brand.Gold)
+        Spacer(Modifier.height(12.dp))
+        Text("\u201C${s.verse}\u201D", style = Type.Verse, color = Brand.White)
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(s.reference, color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).background(Color(0x1FFFFFFF)).pressable {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_TEXT, "\u201C${s.verse}\u201D \u2014 ${s.reference}\n\nShekinah Sons Global")
+                    context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
+                },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Rounded.Share, "Share verse", tint = Brand.White, modifier = Modifier.size(18.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun EventCard(e: Event, onOpen: () -> Unit) {
+    val parts = e.date.split(" ")
+    Column(Modifier.width(250.dp).padding(top = 14.dp).pressable(onOpen)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16 / 10f).clip(RoundedCornerShape(16.dp))) {
+            FadeImage(e.imageUrl, Modifier.fillMaxSize(), label = "EVENT")
+            Column(
+                Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xE6000000)).padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(parts.getOrNull(1)?.trim(',') ?: "", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 18.sp, lineHeight = 20.sp)
+                Text(parts.getOrNull(0)?.take(3)?.uppercase() ?: "", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(e.title, fontFamily = Inter, fontSize = 15.sp, lineHeight = 20.sp, color = Brand.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(listOf(e.time, e.location).filter { it.isNotBlank() }.joinToString(" \u00B7 "), style = Type.Meta, color = Brand.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun UpdateRow(u: Update, modifier: Modifier, onOpen: () -> Unit) {
+    Row(
+        modifier.padding(horizontal = 16.dp, vertical = 7.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF131315)).pressable(onOpen).padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FadeImage(u.image, Modifier.size(86.dp).clip(RoundedCornerShape(12.dp)), label = "UPDATE")
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(u.date.uppercase(), style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold)
+            Spacer(Modifier.height(3.dp))
+            Text(u.title, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Brand.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(3.dp))
+            Text(u.excerpt, style = Type.Meta.copy(fontSize = 13.sp, lineHeight = 18.sp), color = Brand.Text2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
     }
 }

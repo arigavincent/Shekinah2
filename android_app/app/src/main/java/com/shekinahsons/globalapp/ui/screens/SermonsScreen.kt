@@ -29,6 +29,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.shekinahsons.globalapp.ui.components.scrollEntrance
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -153,8 +156,9 @@ fun SermonsScreen(
             when (t) {
                 "Audio" -> {
                     val list = content.audioSermons.filter { it.matches(query) }.shelved().sorted(sort)
-                    LazyColumn(contentPadding = PaddingValues(bottom = NavBarHeight + 110.dp)) {
-                        items(list, key = { it.id }) { s -> AudioRow(s, library) { openAudio(s, list) } }
+                    val state = rememberLazyListState()
+                    LazyColumn(state = state, contentPadding = PaddingValues(bottom = NavBarHeight + 110.dp)) {
+                        itemsIndexed(list, key = { _, it -> it.id }) { i, s -> AudioRow(s, library, Modifier.scrollEntrance(state, i)) { openAudio(s, list) } }
                         if (list.isEmpty()) item { EmptyNote(shelf, "No audio sermons found") }
                     }
                 }
@@ -168,7 +172,7 @@ fun SermonsScreen(
                     ) {
                         items(list, key = { it.id }) { c ->
                             Column(Modifier.pressable { openClip(c) }) {
-                                FadeImage(c.image, Modifier.fillMaxWidth().aspectRatio(9 / 14f).clip(RoundedCornerShape(14.dp)))
+                                FadeImage(c.image, Modifier.fillMaxWidth().aspectRatio(9 / 14f).clip(RoundedCornerShape(14.dp)), label = "RECAP")
                                 Spacer(Modifier.height(8.dp))
                                 Text(c.title, fontFamily = Inter, fontSize = 14.sp, lineHeight = 19.sp, color = Brand.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 if (c.duration.isNotBlank()) Text(c.duration, style = Type.Meta, color = Brand.Muted)
@@ -178,8 +182,9 @@ fun SermonsScreen(
                 }
                 else -> {
                     val list = content.videoSermons.filter { it.matches(query) && (category == null || it.category.equals(category, true)) }.shelved().sorted(sort)
-                    LazyColumn(contentPadding = PaddingValues(bottom = NavBarHeight + 110.dp)) {
-                        items(list, key = { it.id }) { s -> VideoRow(s) { openVideo(s, list) } }
+                    val state = rememberLazyListState()
+                    LazyColumn(state = state, contentPadding = PaddingValues(bottom = NavBarHeight + 110.dp)) {
+                        itemsIndexed(list, key = { _, it -> it.id }) { i, s -> VideoRow(s, Modifier.scrollEntrance(state, i)) { openVideo(s, list) } }
                         if (list.isEmpty()) item { EmptyNote(shelf, "No sermons found") }
                     }
                 }
@@ -273,8 +278,8 @@ private fun EmptyNote(shelf: Shelf, fallback: String) {
 }
 
 @Composable
-private fun VideoRow(s: Sermon, onOpen: () -> Unit) {
-    Column(Modifier.fillMaxWidth().pressable(onOpen)) {
+private fun VideoRow(s: Sermon, modifier: Modifier, onOpen: () -> Unit) {
+    Column(modifier.fillMaxWidth().pressable(onOpen)) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             SermonPoster(s, Modifier.width(128.dp).aspectRatio(16 / 10.5f).clip(RoundedCornerShape(12.dp)), compact = true)
             Spacer(Modifier.width(14.dp))
@@ -292,13 +297,13 @@ private fun VideoRow(s: Sermon, onOpen: () -> Unit) {
 }
 
 @Composable
-private fun AudioRow(s: Sermon, library: Library, onOpen: () -> Unit) {
+private fun AudioRow(s: Sermon, library: Library, modifier: Modifier, onOpen: () -> Unit) {
     val context = LocalContext.current
     var more by remember { mutableStateOf(false) }
     val saved = library.isSaved(s.id)
     val busy = s.id in library.downloading
     val done = !busy && library.isDownloaded(s)
-    Column(Modifier.fillMaxWidth()) {
+    Column(modifier.fillMaxWidth()) {
         Row(Modifier.clickable(onClick = onOpen).padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
             AudioCover(s, Modifier.size(84.dp).clip(RoundedCornerShape(12.dp)))
             Spacer(Modifier.width(14.dp))

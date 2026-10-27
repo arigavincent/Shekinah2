@@ -59,4 +59,13 @@ class Library(private val context: Context) {
     }
 
     fun delete(s: Sermon) { fileFor(s).delete(); downloading.remove(s.id) }
+
+    // Where each sermon was left, so it resumes instead of starting over.
+    private val progress = context.getSharedPreferences("progress", Context.MODE_PRIVATE)
+    fun savePosition(id: String, positionMs: Long, durationMs: Long) {
+        // Near the end counts as finished: next time it starts from the top.
+        val keep = positionMs > 10_000 && (durationMs <= 0 || positionMs < durationMs - 20_000)
+        progress.edit().apply { if (keep) putLong(id, positionMs) else remove(id) }.apply()
+    }
+    fun position(id: String): Long = progress.getLong(id, 0L)
 }

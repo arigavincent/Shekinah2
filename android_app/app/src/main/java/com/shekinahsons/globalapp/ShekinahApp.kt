@@ -18,6 +18,7 @@ class ShekinahApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         content = ContentRepository(this)
         library = Library(this)
+        com.shekinahsons.globalapp.playback.VideoCache.init(this)
     }
 
     override fun newImageLoader(context: PlatformContext) =

@@ -93,6 +93,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        com.shekinahsons.globalapp.playback.PipState.active = isInPictureInPictureMode
+    }
 }
 
 private fun Route.key(): String = when (this) {
@@ -150,6 +155,8 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                             seeAudio = { openSermons("Audio") },
                             seeRecaps = { openSermons("Recaps") },
                             seeDevotions = { nav.select(Tab.Devotions) },
+                            seeEvents = { nav.push(Route.Page("Events")) },
+                            seeUpdates = { nav.push(Route.Page("Updates")) },
                         ),
                     )
                     Tab.Sermons -> SermonsScreen(content, library, sermonsStartTab, { menuOpen = true }, openVideo, openAudio, openClip)
@@ -157,7 +164,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                     Tab.Devotions -> DevotionsScreen(content) { nav.push(Route.DevotionRead(it)) }
                     Tab.Live -> LiveScreen(content)
                 }
-                is Route.Video -> VideoPlayerScreen(r.sermon, r.queue, library::playableUri, onOpen = { nav.back(); nav.push(Route.Video(it, r.queue)) }, onBack = { nav.back() })
+                is Route.Video -> VideoPlayerScreen(r.sermon, r.queue, library, onOpen = { nav.back(); nav.push(Route.Video(it, r.queue)) }, onBack = { nav.back() })
                 is Route.Audio -> AudioPlayerScreen(r.sermon, r.queue, audio) { nav.back() }
                 is Route.DevotionRead -> DevotionReader(r.devotion) { nav.back() }
                 is Route.Page -> MenuPage(r.page, content, library, openVideo, openAudio) { nav.back() }

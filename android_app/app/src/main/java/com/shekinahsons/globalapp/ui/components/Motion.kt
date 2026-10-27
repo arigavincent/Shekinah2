@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -33,6 +34,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.shekinahsons.globalapp.ui.theme.Brand
@@ -103,27 +105,26 @@ fun ColorGlow(color: Color, modifier: Modifier = Modifier, blur: Dp = 38.dp) {
     }
 }
 
-// Image that fades in over a soft placeholder instead of popping in.
+// Phaneroo's loading effect (cached_network_image): a branded card stands
+// in for every picture; when the real one arrives it fades in over the card
+// while the card fades away. Pictures already on the phone appear at once.
 @Composable
-fun FadeImage(url: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
+fun FadeImage(url: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop, label: String = "SERMON") {
     val painter = coil3.compose.rememberAsyncImagePainter(url, contentScale = contentScale)
     val state by painter.state.collectAsState()
     val loaded = state is AsyncImagePainter.State.Success
-    val alpha by animateFloatAsState(if (loaded) 1f else 0f, label = "fade")
+    // A picture already on the phone resolves within a frame or two: show it
+    // straight away. Only one still missing after ~0.1 s gets the branded card
+    // and the fade.
+    var waiting by remember(url) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(url) { kotlinx.coroutines.delay(90); waiting = true }
+    val alpha by animateFloatAsState(
+        if (loaded) 1f else 0f,
+        if (waiting) androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.LinearOutSlowInEasing) else androidx.compose.animation.core.snap(),
+        label = "fade",
+    )
     Box(modifier.background(Brand.Surface2)) {
-        // Until the photo arrives (or if it never does) show a branded card,
-        // never a grey hole; the photo fades in over it.
-        if (alpha < 1f) {
-            Box(
-                Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF3A2C0A), Color(0xFF15120A), Color(0xFF0E1A3A)))),
-                contentAlignment = androidx.compose.ui.Alignment.Center,
-            ) {
-                androidx.compose.foundation.Image(
-                    androidx.compose.ui.res.painterResource(com.shekinahsons.globalapp.R.drawable.dove_mark), null,
-                    Modifier.fillMaxSize(0.32f).graphicsLayer { this.alpha = 0.55f },
-                )
-            }
-        }
+        if (waiting && alpha < 1f) BrandPlaceholder(label, Modifier.fillMaxSize().graphicsLayer { this.alpha = 1f - alpha * alpha })
         androidx.compose.foundation.Image(
             painter = painter,
             contentDescription = null,
@@ -131,6 +132,57 @@ fun FadeImage(url: String?, modifier: Modifier = Modifier, contentScale: Content
             modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha },
         )
     }
+}
+
+// The stand-in card: dark, washed gold to blue from the corners, with the
+// ministry name and what is loading in big letters, and the dove behind.
+@Composable
+fun BrandPlaceholder(label: String, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier.background(Brush.linearGradient(listOf(Color(0xFF4A3608), Color(0xFF17140D), Color(0xFF101114), Color(0xFF0D1E48)))),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        val w = maxWidth.value
+        androidx.compose.foundation.Image(
+            androidx.compose.ui.res.painterResource(com.shekinahsons.globalapp.R.drawable.dove_mark), null,
+            Modifier.fillMaxSize(0.9f).graphicsLayer { alpha = 0.07f },
+        )
+        androidx.compose.foundation.layout.Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+            androidx.compose.material3.Text(
+                "SHEKINAH SONS GLOBAL",
+                color = Color.Black,
+                fontFamily = com.shekinahsons.globalapp.ui.theme.Inter,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                fontSize = (w * 0.032f).coerceIn(6f, 12f).sp,
+                letterSpacing = (w * 0.004f).coerceAtMost(1.5f).sp,
+                modifier = Modifier.background(Brand.GoldGradient, androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .padding(horizontal = (w * 0.03f).dp, vertical = (w * 0.008f).dp),
+            )
+            androidx.compose.material3.Text(
+                label,
+                color = Color.White,
+                fontFamily = com.shekinahsons.globalapp.ui.theme.Poster,
+                fontSize = (w * 0.12f).sp,
+                letterSpacing = (w * 0.01f).sp,
+            )
+        }
+    }
+}
+
+// Phaneroo's scroll entrance: a row rising into view from the bottom edge
+// starts smaller and grows to full size as it settles on screen.
+fun Modifier.scrollEntrance(state: androidx.compose.foundation.lazy.LazyListState, index: Int): Modifier = graphicsLayer {
+    val info = state.layoutInfo
+    val item = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return@graphicsLayer
+    val end = info.viewportEndOffset.toFloat()
+    val zone = end * 0.3f
+    val fromBottom = end - item.offset.toFloat()
+    val t = (fromBottom / zone).coerceIn(0f, 1f)
+    val eased = 1f - (1f - t) * (1f - t)
+    val scale = 0.72f + 0.28f * eased
+    scaleX = scale; scaleY = scale
+    alpha = 0.35f + 0.65f * eased
+    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
 }
 
 @Composable
