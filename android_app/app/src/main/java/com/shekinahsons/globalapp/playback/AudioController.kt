@@ -68,7 +68,7 @@ class AudioController(private val context: Context) {
 
     fun toggle() { controller?.let { if (it.isPlaying) it.pause() else it.play() } }
     fun seekTo(ms: Long) { controller?.seekTo(ms); position = ms }
-    fun back15() = controller?.seekBack()
+    fun back10() = controller?.seekBack()
     fun forward30() = controller?.seekForward()
     fun next() = controller?.seekToNextMediaItem()
     fun previous() = controller?.seekToPreviousMediaItem()

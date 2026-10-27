@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -73,6 +74,7 @@ import com.shekinahsons.globalapp.ui.components.SermonPoster
 import com.shekinahsons.globalapp.ui.components.TopBar
 import com.shekinahsons.globalapp.ui.components.audioGlowColor
 import com.shekinahsons.globalapp.ui.components.pressable
+import com.shekinahsons.globalapp.ui.components.outset
 import com.shekinahsons.globalapp.ui.theme.Brand
 import com.shekinahsons.globalapp.ui.theme.Inter
 import com.shekinahsons.globalapp.ui.theme.Type
@@ -122,7 +124,7 @@ fun AudioPlayerScreen(sermon: Sermon, queue: List<Sermon>, audio: AudioControlle
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                     RoundIcon(Icons.Rounded.SkipPrevious, "Previous", 26) { audio.previous() }
-                    RoundIcon(Icons.Rounded.Replay10, "Back 15 seconds", 30) { audio.back15() }
+                    RoundIcon(Icons.Rounded.Replay10, "Back 10 seconds", 30) { audio.back10() }
                     Box(
                         Modifier.size(76.dp).clip(CircleShape).background(Brand.GoldGradient).pressable { audio.toggle() },
                         contentAlignment = Alignment.Center,
@@ -204,15 +206,15 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, onOpen: (Sermon) -> U
 
     val upNext = queue.filter { it.id != sermon.id }
     Box(Modifier.fillMaxSize().background(Brand.Black)) {
-        Box(Modifier.fillMaxWidth().height(560.dp)) {
-            AmbientGlow(sermon.thumbnail, Modifier.fillMaxSize(), blur = 90.dp, alpha = 0.5f)
+        Box(Modifier.fillMaxWidth().height(560.dp).clipToBounds()) {
+            AmbientGlow(sermon.thumbnail, Modifier.fillMaxSize(), blur = 70.dp, alpha = 0.85f)
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x55000000), 1f to Brand.Black)))
         }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 40.dp)) {
             item { TopBar(title = "", onBack = onBack) }
             item {
                 Box(Modifier.padding(horizontal = 12.dp)) {
-                    AmbientGlow(sermon.thumbnail, Modifier.matchParentSize().padding(top = 14.dp, start = 8.dp, end = 8.dp), blur = 30.dp)
+                    AmbientGlow(sermon.thumbnail, Modifier.matchParentSize().outset(4.dp, drop = 14.dp), blur = 30.dp)
                     video(Modifier.fillMaxWidth().aspectRatio(16 / 9f).clip(RoundedCornerShape(16.dp)))
                 }
             }

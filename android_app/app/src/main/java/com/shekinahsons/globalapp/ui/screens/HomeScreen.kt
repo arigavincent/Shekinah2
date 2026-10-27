@@ -39,6 +39,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -65,6 +69,7 @@ import com.shekinahsons.globalapp.ui.components.SermonPoster
 import com.shekinahsons.globalapp.ui.components.TopBar
 import com.shekinahsons.globalapp.ui.components.audioGlowColor
 import com.shekinahsons.globalapp.ui.components.pressable
+import com.shekinahsons.globalapp.ui.components.outset
 import com.shekinahsons.globalapp.ui.theme.Brand
 import com.shekinahsons.globalapp.ui.theme.Inter
 import com.shekinahsons.globalapp.ui.theme.Type
@@ -102,9 +107,9 @@ fun HomeScreen(content: HomeContent, actions: HomeActions) {
 
     Box(Modifier.fillMaxSize().background(Brand.Black)) {
         Crossfade(focused, animationSpec = tween(700), label = "backdrop") { url ->
-            Box(Modifier.fillMaxWidth().height(620.dp).graphicsLayer { alpha = 1f - scrolled * 0.8f }) {
-                AmbientGlow(url, Modifier.fillMaxSize(), blur = 90.dp, alpha = 0.55f)
-                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x33000000), 0.5f to Color(0x99000000), 1f to Brand.Black)))
+            Box(Modifier.fillMaxWidth().height(620.dp).clipToBounds().graphicsLayer { alpha = 1f - scrolled * 0.8f }) {
+                AmbientGlow(url, Modifier.fillMaxSize(), blur = 70.dp, alpha = 0.9f)
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x1A000000), 0.45f to Color(0x66000000), 1f to Brand.Black)))
             }
         }
 
@@ -150,13 +155,15 @@ fun HomeScreen(content: HomeContent, actions: HomeActions) {
                 items(content.events, key = { it.id }) { EventRow(it) }
             }
         }
+        // Keeps scrolled content from colliding with the clock and icons.
+        Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(Brush.verticalGradient(listOf(Color(0xFA000000), Color(0xE0000000)))))
     }
 }
 
 @Composable
 private fun LiveCard(content: HomeContent, onOpen: () -> Unit) {
     Box(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-        ColorGlow(Brand.Red.copy(alpha = 0.55f * com.shekinahsons.globalapp.ui.components.Breathing()), Modifier.matchParentSize().padding(6.dp), blur = 30.dp)
+        ColorGlow(Brand.Red.copy(alpha = 0.8f * com.shekinahsons.globalapp.ui.components.Breathing()), Modifier.matchParentSize().outset(4.dp, drop = 8.dp), blur = 30.dp)
         Box(
             Modifier.fillMaxWidth().aspectRatio(16 / 9f).clip(RoundedCornerShape(20.dp))
                 .border(1.dp, Brand.Red.copy(alpha = 0.6f), RoundedCornerShape(20.dp)).pressable(onOpen),
@@ -176,7 +183,7 @@ private fun LiveCard(content: HomeContent, onOpen: () -> Unit) {
 private fun DevotionHero(d: Devotion, onOpen: () -> Unit) {
     Column(Modifier.padding(horizontal = 20.dp).padding(top = 18.dp)) {
         Box {
-            AmbientGlow(d.imageUrl, Modifier.matchParentSize().padding(top = 18.dp, start = 10.dp, end = 10.dp), blur = 34.dp, alpha = 0.9f)
+            AmbientGlow(d.imageUrl, Modifier.matchParentSize().outset(6.dp, drop = 16.dp), blur = 30.dp)
             Box(Modifier.fillMaxWidth().aspectRatio(1.45f).clip(RoundedCornerShape(22.dp)).pressable(onOpen)) {
                 FadeImage(d.imageUrl, Modifier.fillMaxSize())
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.3f to Color.Transparent, 1f to Color(0xF0000000))))
@@ -237,7 +244,7 @@ private fun VideoRailCard(s: Sermon, width: androidx.compose.ui.unit.Dp, offset:
     val focus = (1f - abs(offset)).coerceIn(0f, 1f)
     Column(Modifier.width(width).padding(vertical = 26.dp)) {
         Box {
-            AmbientGlow(s.thumbnail, Modifier.matchParentSize().padding(top = 16.dp, start = 12.dp, end = 12.dp).graphicsLayer { alpha = focus }, blur = 30.dp)
+            AmbientGlow(s.thumbnail, Modifier.matchParentSize().outset(4.dp, drop = 14.dp), blur = 28.dp, alpha = focus)
             Box(Modifier.fillMaxWidth().aspectRatio(16 / 9f).clip(RoundedCornerShape(18.dp)).pressable(onOpen)) {
                 SermonPoster(s, Modifier.fillMaxSize())
                 if (s.duration.isNotBlank()) {
@@ -259,11 +266,11 @@ private fun AudioRailCard(s: Sermon, offset: Float, onOpen: () -> Unit) {
     val focus = (1f - abs(offset)).coerceIn(0f, 1f)
     Column(Modifier.width(196.dp).padding(vertical = 24.dp)) {
         Box {
-            ColorGlow(audioGlowColor(s).copy(alpha = 0.75f * focus), Modifier.matchParentSize().padding(top = 18.dp, start = 14.dp, end = 14.dp), blur = 28.dp)
+            ColorGlow(audioGlowColor(s).copy(alpha = 0.9f * focus), Modifier.matchParentSize().outset(2.dp, drop = 14.dp), blur = 26.dp)
             Box(Modifier.size(196.dp).clip(RoundedCornerShape(18.dp)).pressable(onOpen)) {
                 AudioCover(s, Modifier.fillMaxSize())
                 Box(
-                    Modifier.align(Alignment.BottomEnd).padding(10.dp).size(38.dp).background(Color(0xE6000000), CircleShape).graphicsLayer { alpha = focus },
+                    Modifier.align(Alignment.BottomEnd).padding(10.dp).graphicsLayer { alpha = focus }.size(38.dp).background(Color(0xE6000000), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Rounded.PlayArrow, "Play", tint = Brand.Gold, modifier = Modifier.size(24.dp)) }
             }

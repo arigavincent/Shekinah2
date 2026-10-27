@@ -74,10 +74,17 @@ private fun CodeChip(code: String, bg: Color = Brand.Gold, fg: Color = Brand.Bla
 // curated, not repeated) adds the type treatment.
 @Composable
 fun SermonPoster(sermon: Sermon, modifier: Modifier = Modifier, compact: Boolean = false) {
+    // Uploaded thumbnails are already edited posters; show them untouched.
+    if (sermon.thumbnail.isNotBlank()) {
+        Box(modifier.background(Brand.Surface2)) {
+            FadeImage(sermon.thumbnail, Modifier.fillMaxSize())
+            CodeChip(displayCode(sermon), modifier = Modifier.align(Alignment.TopStart).padding(10.dp))
+        }
+        return
+    }
     val style = pick(sermon.id, 3)
-    BoxWithConstraints(modifier.background(Brand.Surface2)) {
+    BoxWithConstraints(modifier.background(Brush.linearGradient(listOf(Color(0xFF2A2108), Color(0xFF0B0B0D), Color(0xFF0B1630))))) {
         val big = (maxWidth.value / if (compact) 10.5f else 9f).sp
-        FadeImage(sermon.thumbnail, Modifier.fillMaxSize())
         when (style) {
             // Spotlight: speaker stays on the right, title set in the dark left third.
             0 -> {

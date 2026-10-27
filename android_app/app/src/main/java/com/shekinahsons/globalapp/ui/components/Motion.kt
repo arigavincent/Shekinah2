@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,16 @@ fun Modifier.pressable(onClick: () -> Unit): Modifier = composed {
         }
 }
 
+// Lets a glow layer grow past the card it sits behind (and drop a little
+// lower, like light falling on a surface) while the card keeps its size.
+fun Modifier.outset(spread: Dp, drop: Dp = 0.dp): Modifier = layout { measurable, constraints ->
+    val e = spread.roundToPx()
+    val w = constraints.maxWidth
+    val h = constraints.maxHeight
+    val placeable = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(w + 2 * e, h + 2 * e))
+    layout(w, h) { placeable.place(-e, -e + drop.roundToPx()) }
+}
+
 private fun saturation(amount: Float) = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(amount) })
 
 // "Ambient mode": a blurred, colour-boosted copy of the artwork glowing
@@ -65,15 +77,16 @@ fun AmbientGlow(
     alpha: Float = 0.95f,
     fallback: Color = Brand.Gold,
 ) {
+    // Alpha goes on the painter, not a layer: a layer with alpha would clip
+    // the blur to the card's bounds and kill the spill.
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !imageUrl.isNullOrBlank()) {
         AsyncImage(
             model = imageUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            colorFilter = saturation(1.8f),
-            modifier = modifier
-                .graphicsLayer { this.alpha = alpha }
-                .blur(blur, BlurredEdgeTreatment.Unbounded),
+            alpha = alpha,
+            colorFilter = saturation(1.9f),
+            modifier = modifier.blur(blur, BlurredEdgeTreatment.Unbounded),
         )
     } else {
         ColorGlow(fallback.copy(alpha = 0.55f * alpha), modifier, blur)
@@ -93,14 +106,28 @@ fun ColorGlow(color: Color, modifier: Modifier = Modifier, blur: Dp = 38.dp) {
 // Image that fades in over a soft placeholder instead of popping in.
 @Composable
 fun FadeImage(url: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
-    var loaded by remember(url) { mutableStateOf(false) }
+    val painter = coil3.compose.rememberAsyncImagePainter(url, contentScale = contentScale)
+    val state by painter.state.collectAsState()
+    val loaded = state is AsyncImagePainter.State.Success
     val alpha by animateFloatAsState(if (loaded) 1f else 0f, label = "fade")
     Box(modifier.background(Brand.Surface2)) {
-        AsyncImage(
-            model = url,
+        // Until the photo arrives (or if it never does) show a branded card,
+        // never a grey hole; the photo fades in over it.
+        if (alpha < 1f) {
+            Box(
+                Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF3A2C0A), Color(0xFF15120A), Color(0xFF0E1A3A)))),
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+            ) {
+                androidx.compose.foundation.Image(
+                    androidx.compose.ui.res.painterResource(com.shekinahsons.globalapp.R.drawable.dove_mark), null,
+                    Modifier.fillMaxSize(0.32f).graphicsLayer { this.alpha = 0.55f },
+                )
+            }
+        }
+        androidx.compose.foundation.Image(
+            painter = painter,
             contentDescription = null,
             contentScale = contentScale,
-            onState = { if (it is AsyncImagePainter.State.Success) loaded = true },
             modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha },
         )
     }

@@ -35,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -85,6 +86,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun Route.key(): String = when (this) {
+    is Route.Root -> "tab:${tab.name}"
+    is Route.Video -> "video:${sermon.id}"
+    is Route.Audio -> "audio:${sermon.id}"
+    is Route.DevotionRead -> "devotion:${devotion.id}"
+}
+
 private fun Clip.asSermon() = Sermon(id = id, title = title, thumbnail = image, mediaUrl = mediaUrl, duration = duration, category = "Recap")
 
 @Composable
@@ -93,6 +101,7 @@ private fun AppShell(content: HomeContent, audio: AudioController) {
     BackHandler(enabled = nav.stack.size > 1 || nav.tab != Tab.Home) { nav.back() }
 
     val route = nav.current
+    val saveable = rememberSaveableStateHolder()
     val openVideo = { s: Sermon, q: List<Sermon> -> nav.push(Route.Video(s, q)) }
     val openAudio = { s: Sermon, q: List<Sermon> -> nav.push(Route.Audio(s, q)) }
     val openClip = { c: Clip -> nav.push(Route.Video(c.asSermon(), content.clips.map { it.asSermon() })) }
@@ -111,6 +120,8 @@ private fun AppShell(content: HomeContent, audio: AudioController) {
             },
             label = "route",
         ) { r ->
+          // Each screen keeps its scroll position and rail page when you come back to it.
+          saveable.SaveableStateProvider(r.key()) {
             when (r) {
                 is Route.Root -> when (r.tab) {
                     Tab.Home -> HomeScreen(
@@ -133,6 +144,7 @@ private fun AppShell(content: HomeContent, audio: AudioController) {
                 is Route.Audio -> AudioPlayerScreen(r.sermon, r.queue, audio) { nav.back() }
                 is Route.DevotionRead -> DevotionReader(r.devotion) { nav.back() }
             }
+          }
         }
 
         if (route is Route.Root) {
