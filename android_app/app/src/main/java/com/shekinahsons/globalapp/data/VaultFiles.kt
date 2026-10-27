@@ -51,12 +51,15 @@ object VaultFiles {
     }
 
     // Streams the sermon from the network straight into an encrypted file.
-    fun save(context: Context, id: String, url: String, progress: (Float) -> Unit) {
+    fun save(context: Context, id: String, url: String, progress: (Float) -> Unit) = save(context, id, url, emptyMap(), progress)
+
+    fun save(context: Context, id: String, url: String, headers: Map<String, String>, progress: (Float) -> Unit) {
         val target = file(context, id)
         val part = File(target.path + ".part")
         val iv = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance("AES/CTR/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key(context), IvParameterSpec(iv)) }
-        Api.http.newCall(Request.Builder().url(url).build()).execute().use { response ->
+        val request = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }.build()
+        Api.http.newBuilder().readTimeout(3, java.util.concurrent.TimeUnit.MINUTES).build().newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("HTTP ${response.code}")
             val body = response.body ?: error("empty")
             val total = body.contentLength()
@@ -147,4 +150,22 @@ object VaultFiles {
             override fun close() { active?.close(); active = null }
         }
     }
+}
+
+// Opens an encrypted file as a plain temporary copy in the app's private
+// cache (for the PDF reader, which needs a real file); delete it when done.
+fun VaultFiles.decryptToTemp(context: Context, id: String): File {
+    val out = File(context.noBackupFilesDir, "reading").apply { mkdirs() }.let { File(it, "${id.hashCode()}.pdf") }
+    val source = VaultFiles.Source(context)
+    source.open(DataSpec(Uri.parse(uri(id))))
+    out.outputStream().use { o ->
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            val n = source.read(buf, 0, buf.size)
+            if (n == C.RESULT_END_OF_INPUT || n <= 0) break
+            o.write(buf, 0, n)
+        }
+    }
+    source.close()
+    return out
 }

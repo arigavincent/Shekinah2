@@ -53,7 +53,7 @@ import com.shekinahsons.globalapp.ui.theme.Type
 
 val MenuPageTitles = mapOf(
     "Profile" to "Profile", "Giving" to "Giving", "Updates" to "Updates", "Notifications" to "Notifications",
-    "Downloads" to "Downloads", "Library" to "Library", "Platforms" to "Our Platforms",
+    "Downloads" to "Downloads", "Library" to "Books & Library", "Platforms" to "Our Platforms",
     "Prayer" to "Prayer Request", "Events" to "Events", "ReadingPlans" to "Reading Plans", "Chat" to "Chat",
     "Testimonies" to "Testimonies", "Serve" to "Serve", "Branches" to "Branches", "CheckIn" to "QR Check-In",
     "About" to "About & Contact",
@@ -72,6 +72,7 @@ fun MenuPage(
     onBack: () -> Unit,
 ) {
     if (page == "Chat") { ChatScreen(session, onSignIn = openProfile, onBack = onBack); return }
+    if (page == "Library") { com.shekinahsons.globalapp.books.LibraryScreen(session, openProfile, onBack); return }
     Column(Modifier.fillMaxSize().background(Brand.Black)) {
         TopBar(title = MenuPageTitles[page] ?: page, onBack = onBack)
         when (page) {

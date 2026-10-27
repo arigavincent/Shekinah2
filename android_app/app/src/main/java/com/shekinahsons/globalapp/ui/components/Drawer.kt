@@ -76,7 +76,7 @@ val MenuGroups: List<Pair<String, List<MenuItem>>> = listOf(
     ),
     "MEDIA" to listOf(
         MenuItem("Downloads", "Downloads", Icons.Outlined.Download),
-        MenuItem("Library", "Library", Icons.Outlined.LocalLibrary),
+        MenuItem("Books & Library", "Library", Icons.Outlined.LocalLibrary),
         MenuItem("Our Platforms", "Platforms", Icons.Outlined.Public),
     ),
     "CONNECT" to listOf(

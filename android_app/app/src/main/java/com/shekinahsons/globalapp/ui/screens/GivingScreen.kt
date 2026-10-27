@@ -122,8 +122,11 @@ private fun money(v: Int) = "KSh ${"%,d".format(v)}"
 
 // Giving, one step at a time: pick how, pick how much, follow the payment
 // card on your own phone or bank, then confirm with the transaction code.
+// A purchase made with the giving payment flow (a library book).
+data class Purchase(val itemId: String, val title: String, val price: Int)
+
 @Composable
-fun GivingPage(session: Session) {
+fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("giving", Context.MODE_PRIVATE) }
@@ -131,8 +134,8 @@ fun GivingPage(session: Session) {
     var loadError by remember { mutableStateOf<String?>(null) }
     var step by remember { mutableStateOf(Step.Method) }
     var way by remember { mutableStateOf(Way.Mpesa) }
-    var category by remember { mutableStateOf("Tithe") }
-    var amount by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf(if (purchase != null) "Book" else "Tithe") }
+    var amount by remember { mutableStateOf(purchase?.price?.toString() ?: "") }
     var code by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf(prefs.getString("phone", "") ?: "") }
     var name by remember { mutableStateOf(session.member?.name ?: prefs.getString("name", "") ?: "") }
@@ -153,12 +156,12 @@ fun GivingPage(session: Session) {
         }
     }
     BackHandler(enabled = step != Step.Method && step != Step.Done) {
-        step = when (step) { Step.Amount -> Step.Method; Step.Pay -> Step.Amount; Step.Confirm -> Step.Pay; else -> Step.Method }
+        step = when (step) { Step.Amount -> Step.Method; Step.Pay -> if (purchase != null) Step.Method else Step.Amount; Step.Confirm -> Step.Pay; else -> Step.Method }
     }
 
     val d = details
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(16.dp)) {
-        if (step != Step.Done) Stepper(step)
+        if (step != Step.Done) Stepper(step, purchase != null)
         Spacer(Modifier.height(14.dp))
         when {
             d == null && loadError == null -> Text("Loading…", style = Type.Body, color = Brand.Muted)
@@ -237,7 +240,7 @@ fun GivingPage(session: Session) {
                                     busy = true; error = null
                                     prefs.edit().putString("phone", phone).putString("name", name).apply()
                                     runCatching {
-                                        val res = Api.post("/giving/confirm", mapOf("method" to way.key, "category" to category, "amount" to (amount.toIntOrNull() ?: 0), "reference" to code, "phone" to phone, "name" to name))
+                                        val res = Api.post("/giving/confirm", mapOf("method" to way.key, "category" to category, "amount" to (amount.toIntOrNull() ?: 0), "reference" to code, "phone" to phone, "name" to name, "itemId" to (purchase?.itemId ?: "")))
                                         val gift = Api.decode<Gift>(res["transaction"])
                                         prefs.edit().putString("ids", (prefs.getString("ids", "") + "," + gift.id).trim(',')).apply()
                                     }.onSuccess { step = Step.Done; reload++ }.onFailure { error = it.message }
@@ -245,14 +248,14 @@ fun GivingPage(session: Session) {
                                 }
                             }
                         }
-                        Step.Done -> ThankYou(money(amount.toIntOrNull() ?: 0), category) {
+                        Step.Done -> if (purchase != null) BookPending(purchase, onPurchased) else ThankYou(money(amount.toIntOrNull() ?: 0), category) {
                             step = Step.Method; amount = ""; code = ""
                         }
                     }
                 }
             }
         }
-        if (history.isNotEmpty() && (step == Step.Method || step == Step.Done)) {
+        if (purchase == null && history.isNotEmpty() && (step == Step.Method || step == Step.Done)) {
             Spacer(Modifier.height(26.dp))
             Text("Your giving", style = Type.Title, color = Brand.White)
             Spacer(Modifier.height(10.dp))
@@ -263,12 +266,13 @@ fun GivingPage(session: Session) {
 }
 
 @Composable
-private fun Stepper(step: Step) {
-    val labels = listOf("Method", "Amount", "Pay", "Confirm")
+private fun Stepper(step: Step, purchase: Boolean) {
+    val labels = if (purchase) listOf("Method", "Pay", "Confirm") else listOf("Method", "Amount", "Pay", "Confirm")
+    val current = if (purchase && step.ordinal >= Step.Pay.ordinal) step.ordinal - 1 else step.ordinal
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         labels.forEachIndexed { i, label ->
-            val done = i < step.ordinal
-            val on = i == step.ordinal
+            val done = i < current
+            val on = i == current
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     Modifier.size(28.dp).clip(CircleShape).background(if (on || done) Brand.GoldGradient else SolidColor(Color(0x22FFFFFF))),
@@ -466,5 +470,21 @@ private fun HistoryRow(g: Gift) {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("${BuildConfig.API_BASE}/api/v1/giving/transactions/${g.id}/receipt.pdf")))
             }.padding(6.dp))
         }
+    }
+}
+
+@Composable
+private fun BookPending(purchase: Purchase, done: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(96.dp).lifted(CircleShape, 22.dp, Brand.Gold).clip(CircleShape).background(Brand.GoldGradient), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.HourglassTop, null, tint = Brand.Black, modifier = Modifier.size(50.dp))
+        }
+        Spacer(Modifier.height(18.dp))
+        Text("Payment received", style = Type.Display, color = Brand.White)
+        Spacer(Modifier.height(6.dp))
+        Text("\u201C${purchase.title}\u201D opens on your shelf as soon as the finance team confirms your payment. We'll keep it ready for you.",
+            style = Type.Body, color = Brand.Text2, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(22.dp))
+        GoldButton("Back to the library", onClick = done)
     }
 }
