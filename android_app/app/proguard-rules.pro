@@ -1,0 +1,3 @@
+-keepattributes *Annotation*, InnerClasses
+-keepclassmembers class com.shekinahsons.globalapp.data.** { *** Companion; *; }
+-keep,includedescriptorclasses class com.shekinahsons.globalapp.data.**$$serializer { *; }
