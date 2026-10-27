@@ -142,6 +142,8 @@ type ConfirmRequest struct {
 	Phone     string `json:"phone"`
 	Name      string `json:"name"`
 	Note      string `json:"note"`
+	// Buying a book from the library with this payment.
+	ItemID string `json:"itemId"`
 }
 
 var referencePattern = regexp.MustCompile(`^[A-Z0-9]{6,20}$`)
@@ -158,7 +160,7 @@ func (h Handler) Confirm(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Choose M-Pesa, Airtel Money or bank"})
 		return
 	}
-	if req.Amount <= 0 || req.Amount > 10_000_000 {
+	if req.ItemID == "" && (req.Amount <= 0 || req.Amount > 10_000_000) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Enter the amount you paid"})
 		return
 	}
@@ -170,6 +172,31 @@ func (h Handler) Confirm(c *gin.Context) {
 	category := clean(req.Category, 40)
 	if category == "" {
 		category = "Offering"
+	}
+	itemID := strings.TrimSpace(req.ItemID)
+	note := clean(req.Note, 300)
+	if itemID != "" {
+		// A purchase: must be signed in, the amount is the book's price.
+		buyer, ok := auth.UserIDFromContext(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Sign in to buy this book"})
+			return
+		}
+		var title string
+		var price int
+		if err := h.db.QueryRow(c.Request.Context(), `SELECT title, price FROM library_items WHERE id = $1`, itemID).Scan(&title, &price); err != nil || price <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "This book isn't for sale"})
+			return
+		}
+		var already bool
+		_ = h.db.QueryRow(c.Request.Context(), `SELECT EXISTS (SELECT 1 FROM giving_transactions WHERE item_id = $1 AND user_id::text = $2 AND status IN ('success','awaiting_verification'))`, itemID, buyer).Scan(&already)
+		if already {
+			c.JSON(http.StatusConflict, gin.H{"message": "You already have this book (or its payment is being confirmed)."})
+			return
+		}
+		req.Amount = price
+		category = "Book"
+		note = title
 	}
 
 	var exists bool
@@ -186,9 +213,9 @@ func (h Handler) Confirm(c *gin.Context) {
 	provider := map[string]string{"mpesa_paybill": "mpesa", "airtel_paybill": "airtel", "bank": "bank"}[method]
 	id := "giv-" + strings.ToLower(strconvBase36(time.Now().UnixNano()))
 	_, err := h.db.Exec(c.Request.Context(), `
-		INSERT INTO giving_transactions (id, category, method, phone, amount, note, status, provider, provider_reference, email, user_id, payer_name)
-		VALUES ($1, $2, $3, $4, $5, $6, 'awaiting_verification', $7, $8, '', $9, $10)
-	`, id, category, method, clean(req.Phone, 20), req.Amount, clean(req.Note, 300), provider, reference, userID, clean(req.Name, 80))
+		INSERT INTO giving_transactions (id, category, method, phone, amount, note, status, provider, provider_reference, email, user_id, payer_name, item_id)
+		VALUES ($1, $2, $3, $4, $5, $6, 'awaiting_verification', $7, $8, '', $9, $10, $11)
+	`, id, category, method, clean(req.Phone, 20), req.Amount, note, provider, reference, userID, clean(req.Name, 80), itemID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not record your confirmation. Please try again."})
 		return

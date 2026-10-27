@@ -17,6 +17,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/apibible"
 	"github.com/ariga/shekinah-backend/internal/auth"
 	"github.com/ariga/shekinah-backend/internal/bibleversions"
+	"github.com/ariga/shekinah-backend/internal/books"
 	"github.com/ariga/shekinah-backend/internal/checkins"
 	"github.com/ariga/shekinah-backend/internal/community"
 	"github.com/ariga/shekinah-backend/internal/config"
@@ -184,7 +185,11 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.PATCH("/reading-plans/:id/reminder", auth.RequireAuth(authService), readingPlanHandler.UpdateReminder)
 		api.GET("/checkin/code", auth.RequireAuth(authService), checkinHandler.MemberCode)
 		api.GET("/checkin/history", auth.RequireAuth(authService), checkinHandler.Mine)
-		api.GET("/library", libraryHandler.List)
+		booksHandler := books.NewHandler(db, perms)
+		api.GET("/library", auth.OptionalAuth(authService), booksHandler.List)
+		api.GET("/library/:id/file", auth.OptionalAuth(authService), booksHandler.File)
+		api.POST("/library", auth.RequireAuth(authService), perms.Require(permissions.BooksPublish), booksHandler.Publish)
+		api.PATCH("/library/:id", auth.RequireAuth(authService), perms.Require(permissions.BooksPublish), booksHandler.Update)
 		api.GET("/library/:id", libraryHandler.Detail)
 		api.GET("/settings/serve", settingsHandler.GetServe)
 		api.POST("/serve/request-pdf", serveHandler.UploadRequestPDF)
