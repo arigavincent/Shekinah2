@@ -149,7 +149,7 @@ private fun RoundIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
 }
 
 @Composable
-fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, onOpen: (Sermon) -> Unit, onBack: () -> Unit) {
+fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, uriFor: (Sermon) -> String, onOpen: (Sermon) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val activity = context as Activity
     var fullscreen by remember { mutableStateOf(false) }
@@ -157,7 +157,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, onOpen: (Sermon) -> U
         ExoPlayer.Builder(context).setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(10_000).build()
     }
     LaunchedEffect(sermon.id) {
-        player.setMediaItem(MediaItem.fromUri(sermon.mediaUrl))
+        player.setMediaItem(MediaItem.fromUri(uriFor(sermon)))
         player.prepare()
         player.playWhenReady = true
     }

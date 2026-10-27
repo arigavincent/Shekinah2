@@ -65,6 +65,12 @@ fun ShekinahTheme(content: @Composable () -> Unit) {
             onSurface = Brand.White,
             error = Brand.Red,
         ),
+        // Plain Text() inherits bodyLarge; keep it tight Inter, not Material's tracked default.
+        typography = androidx.compose.material3.Typography(
+            bodyLarge = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 22.sp, letterSpacing = 0.sp),
+            bodyMedium = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp, letterSpacing = 0.sp),
+            labelLarge = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 14.sp, letterSpacing = 0.sp),
+        ),
         content = content,
     )
 }

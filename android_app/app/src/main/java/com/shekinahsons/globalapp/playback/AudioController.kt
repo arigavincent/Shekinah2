@@ -16,7 +16,8 @@ import androidx.media3.session.SessionToken
 import com.shekinahsons.globalapp.data.Sermon
 
 // App-wide handle on the playback service, observable from Compose.
-class AudioController(private val context: Context) {
+// uriFor lets a downloaded copy play instead of streaming.
+class AudioController(private val context: Context, private val uriFor: (Sermon) -> String = { it.mediaUrl }) {
     private var controller: MediaController? = null
     private var pending: (() -> Unit)? = null
 
@@ -59,7 +60,7 @@ class AudioController(private val context: Context) {
             val c = controller!!
             queue = list.ifEmpty { listOf(sermon) }
             current = sermon
-            c.setMediaItems(queue.map { it.toMediaItem() }, queue.indexOfFirst { it.id == sermon.id }.coerceAtLeast(0), 0)
+            c.setMediaItems(queue.map { it.toMediaItem(uriFor(it)) }, queue.indexOfFirst { it.id == sermon.id }.coerceAtLeast(0), 0)
             c.prepare()
             c.play()
         }
@@ -74,9 +75,9 @@ class AudioController(private val context: Context) {
     fun previous() = controller?.seekToPreviousMediaItem()
 }
 
-private fun Sermon.toMediaItem() = MediaItem.Builder()
+private fun Sermon.toMediaItem(uri: String) = MediaItem.Builder()
     .setMediaId(id)
-    .setUri(mediaUrl)
+    .setUri(uri)
     .setMediaMetadata(
         MediaMetadata.Builder()
             .setTitle(title)

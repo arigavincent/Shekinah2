@@ -29,13 +29,15 @@ fun <T> CoverFlowRail(
     spacing: Dp = 14.dp,
     depth: Float = 1f,
     state: PagerState = rememberPagerState { items.size },
+    // Focused card sits at the left edge (Phaneroo) instead of the centre.
+    startAligned: Boolean = false,
     card: @Composable (item: T, offset: Float) -> Unit,
 ) {
     HorizontalPager(
         state = state,
         pageSize = PageSize.Fixed(cardWidth),
         pageSpacing = spacing,
-        contentPadding = PaddingValues(horizontal = 20.dp),
+        contentPadding = if (startAligned) PaddingValues(start = 16.dp, end = 16.dp) else PaddingValues(horizontal = 20.dp),
         beyondViewportPageCount = 2,
         modifier = modifier.fillMaxWidth(),
     ) { page ->

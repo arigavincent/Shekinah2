@@ -6,14 +6,18 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.request.crossfade
 import com.shekinahsons.globalapp.data.ContentRepository
+import com.shekinahsons.globalapp.data.Library
 
 class ShekinahApp : Application(), SingletonImageLoader.Factory {
     lateinit var content: ContentRepository
+        private set
+    lateinit var library: Library
         private set
 
     override fun onCreate() {
         super.onCreate()
         content = ContentRepository(this)
+        library = Library(this)
     }
 
     override fun newImageLoader(context: PlatformContext) =

@@ -63,6 +63,14 @@ import com.shekinahsons.globalapp.ui.theme.Brand
 import com.shekinahsons.globalapp.ui.theme.ShekinahTheme
 import com.shekinahsons.globalapp.ui.theme.Type
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.shekinahsons.globalapp.data.Library
+import com.shekinahsons.globalapp.ui.components.AppDrawer
+import com.shekinahsons.globalapp.ui.components.LocalOpenMenu
+import com.shekinahsons.globalapp.ui.screens.MenuPage
 
 class MainActivity : ComponentActivity() {
     private lateinit var audio: AudioController
@@ -71,8 +79,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        audio = AudioController(applicationContext).also { it.connect() }
-        val repo = (application as ShekinahApp).content
+        val app = application as ShekinahApp
+        audio = AudioController(applicationContext, app.library::playableUri).also { it.connect() }
+        val repo = app.content
         setContent {
             ShekinahTheme {
                 val content by repo.content.collectAsState()
@@ -80,7 +89,7 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 LaunchedEffect(Unit) { repo.refresh() }
                 val c = content
-                if (c == null) Splash(refreshing) { scope.launch { repo.refresh() } } else AppShell(c, audio)
+                if (c == null) Splash(refreshing) { scope.launch { repo.refresh() } } else AppShell(c, audio, app.library)
             }
         }
     }
@@ -91,21 +100,27 @@ private fun Route.key(): String = when (this) {
     is Route.Video -> "video:${sermon.id}"
     is Route.Audio -> "audio:${sermon.id}"
     is Route.DevotionRead -> "devotion:${devotion.id}"
+    is Route.Page -> "page:$page"
 }
 
 private fun Clip.asSermon() = Sermon(id = id, title = title, thumbnail = image, mediaUrl = mediaUrl, duration = duration, category = "Recap")
 
 @Composable
-private fun AppShell(content: HomeContent, audio: AudioController) {
+private fun AppShell(content: HomeContent, audio: AudioController, library: Library) {
     val nav = remember { Navigator() }
-    BackHandler(enabled = nav.stack.size > 1 || nav.tab != Tab.Home) { nav.back() }
+    val context = LocalContext.current
+    var menuOpen by remember { mutableStateOf(false) }
+    BackHandler(enabled = menuOpen) { menuOpen = false }
+    BackHandler(enabled = !menuOpen && (nav.stack.size > 1 || nav.tab != Tab.Home)) { nav.back() }
 
     val route = nav.current
     val saveable = rememberSaveableStateHolder()
     val openVideo = { s: Sermon, q: List<Sermon> -> nav.push(Route.Video(s, q)) }
     val openAudio = { s: Sermon, q: List<Sermon> -> nav.push(Route.Audio(s, q)) }
     val openClip = { c: Clip -> nav.push(Route.Video(c.asSermon(), content.clips.map { it.asSermon() })) }
+    val openSermons = { tab: String -> sermonsStartTab = tab; saveable.removeState("tab:Sermons"); nav.select(Tab.Sermons) }
 
+    CompositionLocalProvider(LocalOpenMenu provides { menuOpen = true }) {
     Box(Modifier.fillMaxSize().background(Brand.Black)) {
         AnimatedContent(
             targetState = route,
@@ -127,36 +142,54 @@ private fun AppShell(content: HomeContent, audio: AudioController) {
                     Tab.Home -> HomeScreen(
                         content,
                         HomeActions(
+                            openMenu = { menuOpen = true },
                             openVideo = openVideo, openAudio = openAudio,
                             openDevotion = { nav.push(Route.DevotionRead(it)) }, openClip = openClip,
                             openLive = { nav.select(Tab.Live) },
-                            seeSermons = { nav.select(Tab.Sermons) },
-                            seeAudio = { nav.stack.clear(); nav.stack.add(Route.Root(Tab.Sermons)); sermonsStartTab = "Audio" },
+                            seeVideos = { openSermons("Video") },
+                            seeAudio = { openSermons("Audio") },
+                            seeRecaps = { openSermons("Recaps") },
                             seeDevotions = { nav.select(Tab.Devotions) },
                         ),
                     )
-                    Tab.Sermons -> SermonsScreen(content, sermonsStartTab.also { sermonsStartTab = "Video" }, openVideo, openAudio, openClip)
+                    Tab.Sermons -> SermonsScreen(content, library, sermonsStartTab, { menuOpen = true }, openVideo, openAudio, openClip)
                     Tab.Bible -> BibleScreen(content)
                     Tab.Devotions -> DevotionsScreen(content) { nav.push(Route.DevotionRead(it)) }
                     Tab.Live -> LiveScreen(content)
                 }
-                is Route.Video -> VideoPlayerScreen(r.sermon, r.queue, onOpen = { nav.back(); nav.push(Route.Video(it, r.queue)) }, onBack = { nav.back() })
+                is Route.Video -> VideoPlayerScreen(r.sermon, r.queue, library::playableUri, onOpen = { nav.back(); nav.push(Route.Video(it, r.queue)) }, onBack = { nav.back() })
                 is Route.Audio -> AudioPlayerScreen(r.sermon, r.queue, audio) { nav.back() }
                 is Route.DevotionRead -> DevotionReader(r.devotion) { nav.back() }
+                is Route.Page -> MenuPage(r.page, content, library, openVideo, openAudio) { nav.back() }
             }
           }
         }
 
+        AppDrawer(
+            open = menuOpen,
+            onClose = { menuOpen = false },
+            onSelect = { item ->
+                menuOpen = false
+                if (item.page == "Share") {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_TEXT, "Get the Shekinah Sons Global app for sermons, devotions and live services.")
+                    context.startActivity(android.content.Intent.createChooser(send, "Share app"))
+                } else nav.push(Route.Page(item.page))
+            },
+            version = BuildConfig.VERSION_NAME,
+        )
+
         if (route is Route.Root) {
             Column(Modifier.align(Alignment.BottomCenter)) {
-                MiniPlayer(audio, onOpen = { audio.current?.let { nav.push(Route.Audio(it, content.audioSermons)) } })
-                BottomBar(nav.tab, content.live.isLive, onSelect = { nav.select(it) })
+                if (!menuOpen) MiniPlayer(audio, onOpen = { audio.current?.let { nav.push(Route.Audio(it, content.audioSermons)) } })
+                BottomBar(nav.tab, content.live.isLive, onSelect = { menuOpen = false; nav.select(it) })
             }
         }
     }
+    }
 }
 
-// Set by "See all" on Home's audio rail so Sermons opens on the Audio tab.
+// Set by "View All" on Home so Sermons opens on the matching tab.
 private var sermonsStartTab = "Video"
 
 @Composable
