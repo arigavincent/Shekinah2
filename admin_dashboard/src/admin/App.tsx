@@ -22,6 +22,7 @@ import { LibraryPage } from "./pages/LibraryPage";
 import { ReadingPlansPage } from "./pages/ReadingPlansPage";
 import { AppearancePage } from "./pages/AppearancePage";
 import { ServeSettingsPage } from "./pages/ServeSettingsPage";
+import { TeamPage } from "./pages/TeamPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const token = getToken();
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="giving" element={<GivingPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="serve-settings" element={<ServeSettingsPage />} />
+        <Route path="team" element={<TeamPage />} />
         <Route path="appearance" element={<AppearancePage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />

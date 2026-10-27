@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  ShieldCheck,
   LayoutDashboard,
   Mic2,
   BookOpen,
@@ -61,7 +62,8 @@ const navSections: NavSection[] = [
       { label: "Check-In", to: "/checkins", icon: ClipboardCheck },
       { label: "Giving", to: "/giving", icon: Wallet },
       { label: "Notifications", to: "/notifications", icon: BellRing },
-      { label: "Serve Settings", to: "/serve-settings", icon: HandHeart }
+      { label: "Serve Settings", to: "/serve-settings", icon: HandHeart },
+      { label: "Team & Permissions", to: "/team", icon: ShieldCheck }
     ]
   },
   {
