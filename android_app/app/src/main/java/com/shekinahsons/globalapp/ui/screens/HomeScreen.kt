@@ -12,6 +12,9 @@ import com.shekinahsons.globalapp.data.Update
 import com.shekinahsons.globalapp.playback.VideoCache
 import com.shekinahsons.globalapp.ui.components.offsetOf
 import com.shekinahsons.globalapp.ui.components.scrollEntrance
+import com.shekinahsons.globalapp.ui.components.RecapTile
+import com.shekinahsons.globalapp.ui.components.glass
+import com.shekinahsons.globalapp.ui.components.lifted
 import com.shekinahsons.globalapp.ui.theme.Cinzel
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -161,7 +164,7 @@ fun HomeScreen(content: HomeContent, actions: HomeActions) {
                 item { RailHeader("Recaps", actions.seeRecaps) }
                 item {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(content.clips, key = { it.id }) { RecapCard(it) { actions.openClip(it) } }
+                        items(content.clips, key = { it.id }) { c -> RecapTile(c, Modifier.padding(top = 14.dp, bottom = 18.dp).width(150.dp).aspectRatio(3 / 4f)) { actions.openClip(c) } }
                     }
                 }
             }
@@ -219,8 +222,9 @@ private fun RailHeader(title: String, onViewAll: () -> Unit) {
         Text(title, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, letterSpacing = (-0.3).sp, color = Brand.White, modifier = Modifier.weight(1f))
         Text(
             "View All", color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 14.sp,
-            modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0x1FD4AF37)).clickable(onClick = onViewAll)
-                .padding(horizontal = 18.dp, vertical = 10.dp),
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0x1FD4AF37))
+                .border(1.dp, Brush.verticalGradient(listOf(Color(0x55F0D27A), Color(0x0FD4AF37))), RoundedCornerShape(50))
+                .clickable(onClick = onViewAll).padding(horizontal = 18.dp, vertical = 10.dp),
         )
     }
 }
@@ -238,7 +242,7 @@ private fun DevotionCard(d: Devotion, hasMore: Boolean, isToday: Boolean, onOpen
         }
         AmbientGlow(d.imageUrl, Modifier.matchParentSize().outset(0.dp, drop = 10.dp), blur = 26.dp, alpha = 0.75f)
         Row(
-            Modifier.fillMaxWidth().height(172.dp).clip(RoundedCornerShape(22.dp))
+            Modifier.fillMaxWidth().height(172.dp).lifted(RoundedCornerShape(22.dp), 18.dp).clip(RoundedCornerShape(22.dp))
                 .background(Brush.horizontalGradient(listOf(Color(0xFF1C1A14), Color(0xFF141416))))
                 .border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(22.dp))
                 .pressable(onOpen),
@@ -296,7 +300,7 @@ private fun VideoCard(s: Sermon, width: Dp, offset: Float, onOpen: () -> Unit) {
     Column(Modifier.width(width).padding(top = 14.dp, bottom = 22.dp)) {
         Box {
             AmbientGlow(s.thumbnail, Modifier.matchParentSize().outset(2.dp, drop = 12.dp), blur = 24.dp, alpha = focus)
-            Box(Modifier.fillMaxWidth().aspectRatio(16 / 9f).clip(RoundedCornerShape(16.dp)).pressable(onOpen)) {
+            Box(Modifier.fillMaxWidth().aspectRatio(16 / 9f).lifted(RoundedCornerShape(16.dp), 16.dp).clip(RoundedCornerShape(16.dp)).pressable(onOpen)) {
                 SermonPoster(s, Modifier.fillMaxSize())
                 if (s.duration.isNotBlank()) {
                     Text(
@@ -320,7 +324,7 @@ private fun AudioCard(s: Sermon, onOpen: () -> Unit) {
     Column(Modifier.width(136.dp).padding(top = 14.dp)) {
         Box {
             ColorGlow(audioGlowColor(s).copy(alpha = 0.55f), Modifier.matchParentSize().outset(0.dp, drop = 10.dp), blur = 18.dp)
-            Box(Modifier.size(136.dp).clip(RoundedCornerShape(16.dp)).pressable(onOpen)) {
+            Box(Modifier.size(136.dp).lifted(RoundedCornerShape(16.dp), 14.dp, audioGlowColor(s)).clip(RoundedCornerShape(16.dp)).pressable(onOpen)) {
                 AudioCover(s, Modifier.fillMaxSize())
                 Box(
                     Modifier.align(Alignment.BottomEnd).padding(8.dp).size(32.dp).background(Color(0xD9000000), CircleShape),
@@ -333,26 +337,6 @@ private fun AudioCard(s: Sermon, onOpen: () -> Unit) {
     }
 }
 
-@Composable
-private fun RecapCard(c: Clip, onOpen: () -> Unit) {
-    Column(Modifier.width(132.dp).padding(top = 14.dp)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(9 / 15f).clip(RoundedCornerShape(16.dp)).pressable(onOpen)) {
-            FadeImage(c.image, Modifier.fillMaxSize(), label = "RECAP")
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color(0xD9000000))))
-            Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(28.dp).background(Color(0x66000000), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Rounded.PlayArrow, null, tint = Color.White, modifier = Modifier.size(18.dp))
-            }
-            if (c.duration.isNotBlank()) {
-                Text(c.duration, style = Type.Meta.copy(fontSize = 11.sp), color = Brand.GoldLight, modifier = Modifier.align(Alignment.BottomStart).padding(10.dp))
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(c.title, fontFamily = Inter, fontSize = 14.sp, lineHeight = 19.sp, color = Brand.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-// Devotions swipe sideways; the next card peeks underneath, and dots show
-// where you are (Phaneroo uses page_view_dot_indicator here).
 @Composable
 private fun DevotionCarousel(devotions: List<Devotion>, open: (Devotion) -> Unit) {
     val pager = rememberPagerState { devotions.size }
@@ -416,7 +400,7 @@ private fun ScriptureCard(content: HomeContent) {
 private fun EventCard(e: Event, onOpen: () -> Unit) {
     val parts = e.date.split(" ")
     Column(Modifier.width(250.dp).padding(top = 14.dp).pressable(onOpen)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16 / 10f).clip(RoundedCornerShape(16.dp))) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16 / 10f).lifted(RoundedCornerShape(16.dp), 12.dp).clip(RoundedCornerShape(16.dp))) {
             FadeImage(e.imageUrl, Modifier.fillMaxSize(), label = "EVENT")
             Column(
                 Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xE6000000)).padding(horizontal = 10.dp, vertical = 6.dp),
@@ -435,8 +419,8 @@ private fun EventCard(e: Event, onOpen: () -> Unit) {
 @Composable
 private fun UpdateRow(u: Update, modifier: Modifier, onOpen: () -> Unit) {
     Row(
-        modifier.padding(horizontal = 16.dp, vertical = 7.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF131315)).pressable(onOpen).padding(10.dp),
+        modifier.padding(horizontal = 16.dp, vertical = 7.dp).fillMaxWidth().lifted(RoundedCornerShape(18.dp), 10.dp).glass(RoundedCornerShape(18.dp), 0.7f)
+            .background(Color(0xCC111113)).pressable(onOpen).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         FadeImage(u.image, Modifier.size(86.dp).clip(RoundedCornerShape(12.dp)), label = "UPDATE")

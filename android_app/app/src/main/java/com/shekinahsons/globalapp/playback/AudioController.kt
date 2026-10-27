@@ -49,7 +49,7 @@ class AudioController(private val context: Context, private val uriFor: (Sermon)
         isBuffering = c.playbackState == Player.STATE_BUFFERING
         position = c.currentPosition.coerceAtLeast(0)
         duration = c.duration.takeIf { it > 0 } ?: 0
-        current = queue.getOrNull(c.currentMediaItemIndex) ?: current
+        if (queue.isNotEmpty()) current = queue.getOrNull(c.currentMediaItemIndex) ?: current
     }
 
     fun tick() = sync()
@@ -65,6 +65,12 @@ class AudioController(private val context: Context, private val uriFor: (Sermon)
             c.play()
         }
         if (controller == null) { pending = action; connect() } else action()
+    }
+
+    // Stops playback and lets the mini player go away.
+    fun close() {
+        controller?.run { stop(); clearMediaItems() }
+        queue = emptyList(); current = null; isPlaying = false; position = 0; duration = 0
     }
 
     fun toggle() { controller?.let { if (it.isPlaying) it.pause() else it.play() } }

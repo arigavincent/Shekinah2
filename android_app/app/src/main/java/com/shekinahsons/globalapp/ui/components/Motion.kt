@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import coil3.request.transformations
 import com.shekinahsons.globalapp.ui.theme.Brand
 
 // Springy press: the card sinks slightly under the finger and bounces back.
@@ -105,31 +107,52 @@ fun ColorGlow(color: Color, modifier: Modifier = Modifier, blur: Dp = 38.dp) {
     }
 }
 
-// Phaneroo's loading effect (cached_network_image): a branded card stands
-// in for every picture; when the real one arrives it fades in over the card
-// while the card fades away. Pictures already on the phone appear at once.
+// Pictures already revealed in this session: coming back to them shows
+// them at once instead of replaying the effect.
+private val revealed = java.util.Collections.synchronizedSet(HashSet<String>())
+
+// Phaneroo's loading effect (cached_network_image): the first time a
+// picture is shown, a branded card holds the spot for a beat, then the real
+// picture fades in over it while the card dissolves. Baked-in black bars
+// are trimmed off the picture.
 @Composable
 fun FadeImage(url: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop, label: String = "SERMON") {
-    val painter = coil3.compose.rememberAsyncImagePainter(url, contentScale = contentScale)
+    val context = coil3.compose.LocalPlatformContext.current
+    val request = remember(url) {
+        coil3.request.ImageRequest.Builder(context).data(url).transformations(TrimBlackBars).build()
+    }
+    val painter = coil3.compose.rememberAsyncImagePainter(request, contentScale = contentScale)
     val state by painter.state.collectAsState()
     val loaded = state is AsyncImagePainter.State.Success
-    // A picture already on the phone resolves within a frame or two: show it
-    // straight away. Only one still missing after ~0.1 s gets the branded card
-    // and the fade.
-    var waiting by remember(url) { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(url) { kotlinx.coroutines.delay(90); waiting = true }
+    val firstSight = remember(url) { !url.isNullOrBlank() && url !in revealed }
+    val shownAt = remember(url) { System.currentTimeMillis() }
+    var show by remember(url) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(url, loaded) {
+        if (!loaded) return@LaunchedEffect
+        // Let the branded card be seen for a moment before the reveal.
+        if (firstSight) kotlinx.coroutines.delay((650 - (System.currentTimeMillis() - shownAt)).coerceAtLeast(0))
+        show = true
+        url?.let { revealed += it }
+    }
     val alpha by animateFloatAsState(
-        if (loaded) 1f else 0f,
-        if (waiting) androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.LinearOutSlowInEasing) else androidx.compose.animation.core.snap(),
+        if (show) 1f else 0f,
+        if (firstSight) androidx.compose.animation.core.tween(700, easing = androidx.compose.animation.core.LinearOutSlowInEasing) else androidx.compose.animation.core.snap(),
         label = "fade",
     )
-    Box(modifier.background(Brand.Surface2)) {
-        if (waiting && alpha < 1f) BrandPlaceholder(label, Modifier.fillMaxSize().graphicsLayer { this.alpha = 1f - alpha * alpha })
+    Box(modifier.clipToBounds().background(Brand.Surface2)) {
+        if (alpha < 1f && (firstSight || url.isNullOrBlank() || state is AsyncImagePainter.State.Error)) {
+            BrandPlaceholder(label, Modifier.fillMaxSize().graphicsLayer { this.alpha = 1f - alpha * alpha })
+        }
         androidx.compose.foundation.Image(
             painter = painter,
             contentDescription = null,
             contentScale = contentScale,
-            modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha },
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                this.alpha = alpha
+                // A gentle settle as it appears, like a print coming into focus.
+                val s = 1.04f - 0.04f * alpha
+                scaleX = s; scaleY = s
+            },
         )
     }
 }

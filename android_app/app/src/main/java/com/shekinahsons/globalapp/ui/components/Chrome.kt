@@ -45,6 +45,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -70,53 +74,55 @@ private fun Tab.icons(): Pair<ImageVector, ImageVector> = when (this) {
     Tab.Live -> Icons.Rounded.Sensors to Icons.Outlined.Sensors
 }
 
-val NavBarHeight = 72.dp
+val NavBarHeight = 66.dp
 
-// Floating pill bar. The active tab sits in a wide gold-tinted pill with
-// its icon and label, as in Phaneroo.
+// Docked tab bar, AJStream style: flush with the bottom edge, a frosted
+// dark surface with a lit top rim and a shadow cast upward, and the active
+// tab's icon sitting in a gold-tinted indicator.
 @Composable
 fun BottomBar(current: Tab, isLive: Boolean, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
-    Row(
+    Column(
         modifier
-            .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 10.dp)
-            .shadow(24.dp, RoundedCornerShape(34.dp), ambientColor = Color.Black, spotColor = Color.Black)
-            .clip(RoundedCornerShape(34.dp))
-            .background(Color(0xF5161618))
-            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(34.dp))
             .fillMaxWidth()
-            .height(NavBarHeight)
-            .padding(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .shadow(28.dp, RectangleShape, ambientColor = Color.Black, spotColor = Color.Black)
+            .background(Brush.verticalGradient(listOf(Color(0xF71A1A1D), Color(0xFF0E0E10))))
+            .drawBehind {
+                drawLine(
+                    Brush.horizontalGradient(listOf(Color(0x00FFFFFF), Color(0x40F0D27A), Color(0x00FFFFFF))),
+                    Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx(),
+                )
+            }
+            .navigationBarsPadding(),
     ) {
-        Tab.entries.forEach { tab ->
-            val active = tab == current
-            val tint by animateColorAsState(if (active) Brand.Gold else Brand.Muted, label = "tint")
-            val pill by animateColorAsState(if (active) Color(0x2ED4AF37) else Color.Transparent, label = "pill")
-            val (filled, outline) = tab.icons()
-            Column(
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(pill)
-                    .semantics { selected = active; contentDescription = if (tab == Tab.Live && isLive) "Live, on air now" else tab.label }
-                    .clickable(remember { MutableInteractionSource() }, null, role = Role.Tab) {
-                        if (!active) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onSelect(tab)
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Box {
-                    Icon(if (active) filled else outline, null, tint = tint, modifier = Modifier.size(24.dp))
-                    if (tab == Tab.Live && isLive) {
-                        Box(Modifier.align(Alignment.TopEnd).size(8.dp).background(Brand.Red, CircleShape).border(1.5.dp, Color(0xFF161618), CircleShape))
+        Row(Modifier.fillMaxWidth().height(NavBarHeight).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Tab.entries.forEach { tab ->
+                val active = tab == current
+                val tint by animateColorAsState(if (active) Brand.Gold else Brand.Muted, label = "tint")
+                val pill by animateDpAsState(if (active) 60.dp else 30.dp, label = "pill")
+                val pillColor by animateColorAsState(if (active) Color(0x33D4AF37) else Color.Transparent, label = "pillColor")
+                val (filled, outline) = tab.icons()
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .semantics { selected = active; contentDescription = if (tab == Tab.Live && isLive) "Live, on air now" else tab.label }
+                        .clickable(remember { MutableInteractionSource() }, null, role = Role.Tab) {
+                            if (!active) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onSelect(tab)
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Box(Modifier.width(pill).height(30.dp).clip(RoundedCornerShape(15.dp)).background(pillColor), contentAlignment = Alignment.Center) {
+                        Icon(if (active) filled else outline, null, tint = tint, modifier = Modifier.size(23.dp))
+                        if (tab == Tab.Live && isLive) {
+                            Box(Modifier.align(Alignment.TopEnd).padding(top = 3.dp, end = 14.dp).size(8.dp).background(Brand.Red, CircleShape).border(1.5.dp, Color(0xFF16161A), CircleShape))
+                        }
                     }
+                    Spacer(Modifier.height(4.dp))
+                    Text(tab.label, color = if (active) Brand.GoldLight else Brand.Muted, fontFamily = Inter, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, fontSize = 11.sp, maxLines = 1)
                 }
-                Spacer(Modifier.height(3.dp))
-                Text(tab.label, color = tint, fontFamily = Inter, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, fontSize = 11.sp, maxLines = 1)
             }
         }
     }

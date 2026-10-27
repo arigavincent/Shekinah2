@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Forward30
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay10
@@ -74,6 +75,8 @@ import com.shekinahsons.globalapp.ui.components.SermonPoster
 import com.shekinahsons.globalapp.ui.components.TopBar
 import com.shekinahsons.globalapp.ui.components.audioGlowColor
 import com.shekinahsons.globalapp.ui.components.pressable
+import com.shekinahsons.globalapp.ui.components.lifted
+import androidx.compose.foundation.border
 import com.shekinahsons.globalapp.ui.components.outset
 import com.shekinahsons.globalapp.ui.theme.Brand
 import com.shekinahsons.globalapp.ui.theme.Inter
@@ -163,23 +166,39 @@ fun SermonRow(s: Sermon, audio: Boolean = false, onOpen: () -> Unit) {
     }
 }
 
-// Shown at the bottom of tab screens while audio is loaded.
+// Shown above the tab bar while audio is loaded: a frosted pane with the
+// cover, a thin progress line, play/pause and a close button.
 @Composable
 fun MiniPlayer(audio: AudioController, onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val s = audio.current ?: return
-    Row(
-        modifier.padding(horizontal = 14.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
-            .background(Color(0xF21E1B12)).pressable(onOpen).padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AudioCover(s, Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(s.title, style = Type.CardTitle.copy(fontSize = 14.sp), color = Brand.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(s.speaker, style = Type.Meta, color = Brand.GoldLight, maxLines = 1)
-        }
-        Box(Modifier.size(44.dp).clip(CircleShape).background(Brand.Gold).pressable { audio.toggle() }, contentAlignment = Alignment.Center) {
-            Icon(if (audio.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (audio.isPlaying) "Pause" else "Play", tint = Brand.Black)
+    LaunchedEffect(s.id) { while (true) { audio.tick(); delay(1000) } }
+    val shape = RoundedCornerShape(20.dp)
+    Box(modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth().lifted(shape, 18.dp)) {
+        Column(
+            Modifier.fillMaxWidth().clip(shape)
+                .background(Brush.linearGradient(listOf(Color(0xF2272114), Color(0xF2141418))))
+                .border(1.dp, Brush.verticalGradient(listOf(Color(0x40F0D27A), Color(0x0FFFFFFF))), shape),
+        ) {
+            Row(Modifier.pressable(onOpen).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                AudioCover(s, Modifier.size(46.dp).clip(RoundedCornerShape(11.dp)))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(s.title, style = Type.CardTitle.copy(fontSize = 14.sp), color = Brand.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(s.speaker, style = Type.Meta, color = Brand.GoldLight, maxLines = 1)
+                }
+                Box(Modifier.size(42.dp).clip(CircleShape).background(Brand.GoldGradient).pressable { audio.toggle() }, contentAlignment = Alignment.Center) {
+                    if (audio.isBuffering) CircularProgressIndicator(color = Brand.Black, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    else Icon(if (audio.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (audio.isPlaying) "Pause" else "Play", tint = Brand.Black)
+                }
+                Spacer(Modifier.width(4.dp))
+                Box(Modifier.size(40.dp).clip(CircleShape).pressable { audio.close() }, contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Close, "Close player", tint = Brand.Text2, modifier = Modifier.size(22.dp))
+                }
+            }
+            val progress = if (audio.duration > 0) (audio.position.toFloat() / audio.duration).coerceIn(0f, 1f) else 0f
+            Box(Modifier.fillMaxWidth().height(2.dp).background(Color(0x22FFFFFF))) {
+                Box(Modifier.fillMaxWidth(progress).height(2.dp).background(Brand.GoldGradient))
+            }
         }
     }
 }

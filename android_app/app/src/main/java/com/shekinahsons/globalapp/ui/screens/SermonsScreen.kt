@@ -32,6 +32,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.shekinahsons.globalapp.ui.components.scrollEntrance
+import com.shekinahsons.globalapp.ui.components.RecapTile
+import com.shekinahsons.globalapp.ui.components.glass
+import com.shekinahsons.globalapp.ui.components.lifted
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -168,15 +171,10 @@ fun SermonsScreen(
                     LazyVerticalGrid(
                         GridCells.Fixed(2),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = NavBarHeight + 110.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         items(list, key = { it.id }) { c ->
-                            Column(Modifier.pressable { openClip(c) }) {
-                                FadeImage(c.image, Modifier.fillMaxWidth().aspectRatio(9 / 14f).clip(RoundedCornerShape(14.dp)), label = "RECAP")
-                                Spacer(Modifier.height(8.dp))
-                                Text(c.title, fontFamily = Inter, fontSize = 14.sp, lineHeight = 19.sp, color = Brand.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                if (c.duration.isNotBlank()) Text(c.duration, style = Type.Meta, color = Brand.Muted)
-                            }
+                            RecapTile(c, Modifier.fillMaxWidth().aspectRatio(3 / 4f)) { openClip(c) }
                         }
                     }
                 }
@@ -226,7 +224,7 @@ private fun SearchBox(query: String, hint: String, sort: Sort, onSort: (Sort) ->
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.padding(horizontal = 16.dp, vertical = 14.dp).fillMaxWidth().height(52.dp)
-            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(50)).padding(start = 18.dp, end = 6.dp),
+            .glass(RoundedCornerShape(50), 0.8f).padding(start = 18.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Rounded.Search, null, tint = Brand.Text2, modifier = Modifier.size(22.dp))
@@ -281,7 +279,7 @@ private fun EmptyNote(shelf: Shelf, fallback: String) {
 private fun VideoRow(s: Sermon, modifier: Modifier, onOpen: () -> Unit) {
     Column(modifier.fillMaxWidth().pressable(onOpen)) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            SermonPoster(s, Modifier.width(128.dp).aspectRatio(16 / 10.5f).clip(RoundedCornerShape(12.dp)), compact = true)
+            SermonPoster(s, Modifier.width(128.dp).aspectRatio(16 / 10.5f).lifted(RoundedCornerShape(12.dp), 10.dp).clip(RoundedCornerShape(12.dp)), compact = true)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -305,7 +303,7 @@ private fun AudioRow(s: Sermon, library: Library, modifier: Modifier, onOpen: ()
     val done = !busy && library.isDownloaded(s)
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.clickable(onClick = onOpen).padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
-            AudioCover(s, Modifier.size(84.dp).clip(RoundedCornerShape(12.dp)))
+            AudioCover(s, Modifier.size(84.dp).lifted(RoundedCornerShape(12.dp), 10.dp, com.shekinahsons.globalapp.ui.components.audioGlowColor(s)).clip(RoundedCornerShape(12.dp)))
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(s.title, fontFamily = Inter, fontSize = 15.5.sp, lineHeight = 21.sp, color = Brand.White, maxLines = 2, overflow = TextOverflow.Ellipsis)

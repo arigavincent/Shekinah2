@@ -109,6 +109,9 @@ import com.shekinahsons.globalapp.ui.components.AmbientGlow
 import com.shekinahsons.globalapp.ui.components.FadeImage
 import com.shekinahsons.globalapp.ui.components.TopBar
 import com.shekinahsons.globalapp.ui.components.outset
+import com.shekinahsons.globalapp.ui.components.glass
+import com.shekinahsons.globalapp.ui.components.lifted
+import androidx.compose.foundation.border
 import com.shekinahsons.globalapp.ui.theme.Brand
 import com.shekinahsons.globalapp.ui.theme.Inter
 import com.shekinahsons.globalapp.ui.theme.Type
@@ -134,7 +137,8 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
     var controls by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
     var unlockHint by remember { mutableStateOf(false) }
-    var fill by remember { mutableStateOf(true) }
+    // Whole picture by default so nothing on screen (verses, captions) is cut; pinch or tap to fill.
+    var fill by remember { mutableStateOf(false) }
     var speed by remember { mutableFloatStateOf(1f) }
     var speedMenu by remember { mutableStateOf(false) }
     var flash by remember { mutableStateOf<String?>(null) }
@@ -389,7 +393,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
             item {
                 Box(Modifier.padding(horizontal = 12.dp)) {
                     AmbientGlow(sermon.thumbnail, Modifier.matchParentSize().outset(4.dp, drop = 14.dp), blur = 30.dp)
-                    video(Modifier.fillMaxWidth().aspectRatio(16 / 9f).clip(RoundedCornerShape(16.dp)))
+                    video(Modifier.fillMaxWidth().aspectRatio(16 / 9f).lifted(RoundedCornerShape(16.dp), 20.dp).clip(RoundedCornerShape(16.dp)))
                 }
             }
             item {
@@ -442,8 +446,8 @@ private fun OverlayIcon(icon: ImageVector, label: String, onClick: () -> Unit) {
 @Composable
 private fun ActionChip(icon: ImageVector, label: String, on: Boolean = false, onClick: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(50)).background(if (on) Color(0x33D4AF37) else Color(0x1AFFFFFF)).clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
+        (if (on) Modifier.clip(RoundedCornerShape(50)).background(Color(0x33D4AF37)).border(1.dp, Color(0x55D4AF37), RoundedCornerShape(50)) else Modifier.glass())
+            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = if (on) Brand.Gold else Brand.White, modifier = Modifier.size(18.dp))
