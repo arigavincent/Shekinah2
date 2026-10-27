@@ -2,7 +2,6 @@ package com.shekinahsons.globalapp.bible
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.speech.tts.TextToSpeech
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -47,6 +46,13 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.EditNote
@@ -109,7 +115,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import okhttp3.Request
-import java.util.Locale
 import java.util.zip.ZipInputStream
 
 // Where the Bible should open next (a reading plan or Home's verse of the day).
@@ -254,21 +259,46 @@ private fun NumberGrid(title: String, label: String, count: Int, onBack: () -> U
 @Composable
 private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: Int, startVerse: Int, onBack: () -> Unit, openLibrary: () -> Unit, openSearch: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val chapters = remember(book.id) { bible.chapterCount(book.id) }
     val pager = rememberPagerState(initialPage = startChapter - 1) { chapters }
     val chapter = pager.currentPage + 1
     val versions = remember(store.version) { bible.versions() }
     val s = store.state.also { store.version }
-    var speaking by remember { mutableStateOf(false) }
-    val tts = remember { mutableStateOf<TextToSpeech?>(null) }
-    DisposableEffect(Unit) {
-        val engine = TextToSpeech(context) {}
-        tts.value = engine
-        onDispose { engine.stop(); engine.shutdown() }
+    val narrator = remember { Narrator(context.applicationContext) }
+    DisposableEffect(Unit) { onDispose { narrator.shutdown() } }
+    // Which version is read aloud; in side-by-side either column can be chosen.
+    var listenId by remember { mutableStateOf(if (s.sideBySide) s.right else s.single) }
+    var readingChapter by remember { mutableStateOf(0) }
+    var advancing by remember { mutableStateOf(false) }
+
+    fun versionOf(id: String) = versions.firstOrNull { it.id == id }
+    fun heading(id: String, ch: Int): String {
+        val lang = versionOf(id)?.language.orEmpty()
+        return if (lang.startsWith("sw")) "${book.swahili}, sura ya $ch." else "${book.english}, chapter $ch."
     }
-    LaunchedEffect(pager.settledPage) { store.visit(book.id, pager.settledPage + 1); tts.value?.stop(); speaking = false }
+    fun readChapter(ch: Int, from: Int) {
+        val id = listenId
+        readingChapter = ch
+        narrator.read(versionOf(id)?.language ?: "en", heading(id, ch), bible.chapter(id, book.id, ch), from) {
+            // Carry on into the next chapter, turning the page with it.
+            if (ch < chapters) scope.launch {
+                advancing = true
+                pager.animateScrollToPage(ch)
+                advancing = false
+                readChapter(ch + 1, 1)
+            } else narrator.stop()
+        }
+    }
+
+    LaunchedEffect(pager.settledPage) {
+        store.visit(book.id, pager.settledPage + 1)
+        // Swiping to another chapter by hand stops the reading.
+        if (narrator.active && !advancing && pager.settledPage + 1 != readingChapter) narrator.stop()
+    }
     val favourite = s.favourites.contains(Place(book.id, chapter))
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().height(58.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Brand.White, modifier = Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onBack).padding(10.dp))
@@ -281,16 +311,9 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
                     val p = Place(book.id, chapter)
                     store.update { st -> st.copy(favourites = if (p in st.favourites) st.favourites - p else listOf(p) + st.favourites) }
                 }.padding(10.dp))
-            Icon(if (speaking) Icons.Rounded.Stop else Icons.AutoMirrored.Rounded.VolumeUp, if (speaking) "Stop reading" else "Read aloud", tint = if (speaking) Brand.Gold else Brand.White,
+            Icon(if (narrator.active) Icons.Rounded.Stop else Icons.AutoMirrored.Rounded.VolumeUp, if (narrator.active) "Stop reading" else "Listen to this chapter", tint = if (narrator.active) Brand.Gold else Brand.White,
                 modifier = Modifier.size(42.dp).clip(CircleShape).clickable {
-                    val engine = tts.value ?: return@clickable
-                    if (speaking) { engine.stop(); speaking = false; return@clickable }
-                    val id = if (s.sideBySide) s.right else s.single
-                    val lang = versions.firstOrNull { it.id == id }?.language ?: "en"
-                    engine.language = Locale(if (lang.startsWith("sw")) "sw" else lang.take(2))
-                    val text = bible.chapter(id, book.id, chapter).joinToString(" ") { it.text }
-                    text.chunked(3500).forEachIndexed { i, part -> engine.speak(part, if (i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, "ch$i") }
-                    speaking = true
+                    if (narrator.active) narrator.stop() else readChapter(chapter, 1)
                 }.padding(10.dp))
             Icon(Icons.Rounded.TextFields, "Text size", tint = Brand.White, modifier = Modifier.size(42.dp).clip(CircleShape).clickable {
                 store.update { st -> st.copy(textScale = listOf(0.85f, 1f, 1.15f, 1.3f, 1.5f).let { l -> l[(l.indexOf(st.textScale).coerceAtLeast(0) + 1) % l.size] }) }
@@ -300,7 +323,7 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
         // Reading mode: two versions side by side, or one.
         LazyRow(contentPadding = PaddingValues(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 6.dp)) {
             item { ModeChip("Side by side", s.sideBySide) { store.update { it.copy(sideBySide = true) } } }
-            items(versions, key = { it.id }) { v -> ModeChip(v.abbreviation, !s.sideBySide && s.single == v.id) { store.update { it.copy(sideBySide = false, single = v.id) } } }
+            items(versions, key = { it.id }) { v -> ModeChip(v.abbreviation, !s.sideBySide && s.single == v.id) { store.update { it.copy(sideBySide = false, single = v.id) }; listenId = v.id } }
             item { ModeChip("+ More", false) { openLibrary() } }
         }
         if (s.sideBySide) {
@@ -310,7 +333,86 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
             }
         }
         HorizontalPager(pager, modifier = Modifier.weight(1f), beyondViewportPageCount = 1) { page ->
-            ChapterPage(bible, store, book, page + 1, if (page + 1 == startChapter) startVerse else 1)
+            val ch = page + 1
+            ChapterPage(
+                bible, store, book, ch, if (ch == startChapter) startVerse else 1,
+                speaking = if (narrator.active && readingChapter == ch) narrator.verse else -1,
+                listenOne = { n, id ->
+                    listenId = id
+                    bible.chapter(id, book.id, ch).firstOrNull { it.number == n }?.let { v -> readingChapter = ch; narrator.readOne(versionOf(id)?.language ?: "en", v) }
+                },
+                listenFrom = { n, id -> listenId = id; readChapter(ch, n) },
+            )
+        }
+    }
+    if (narrator.active) {
+        ListenBar(
+            narrator, Modifier.align(Alignment.BottomCenter),
+            where = "${book.english} $readingChapter" + if (narrator.verse > 0) ":${narrator.verse}" else "",
+            versionLabel = versionOf(listenId)?.abbreviation ?: "",
+            switchVersion = if (s.sideBySide) ({
+                listenId = if (listenId == s.right) s.left else s.right
+                readChapter(readingChapter, narrator.verse.coerceAtLeast(1))
+            }) else null,
+        )
+    }
+    }
+}
+
+// The floating "now reading" bar: where we are, voice, speed and controls.
+@Composable
+private fun ListenBar(narrator: Narrator, modifier: Modifier, where: String, versionLabel: String, switchVersion: (() -> Unit)?) {
+    val context = LocalContext.current
+    var voiceMenu by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(22.dp)
+    Column(
+        modifier.navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = NavBarHeight + 10.dp).fillMaxWidth()
+            .lifted(shape, 20.dp).clip(shape)
+            .background(Brush.linearGradient(listOf(Color(0xF52A2210), Color(0xF5141418))))
+            .border(1.dp, Brush.verticalGradient(listOf(Color(0x55F0D27A), Color(0x10FFFFFF))), shape)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("NOW READING", style = Type.Label.copy(fontSize = 9.5.sp), color = Brand.Gold)
+                Text(where, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Brand.White, maxLines = 1)
+            }
+            if (versionLabel.isNotBlank()) {
+                Text(versionLabel + if (switchVersion != null) " ⇄" else "", color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 12.sp,
+                    modifier = Modifier.glass().clickable(enabled = switchVersion != null) { switchVersion?.invoke() }.padding(horizontal = 10.dp, vertical = 5.dp))
+            }
+            Icon(Icons.Rounded.Close, "Stop reading", tint = Brand.Text2, modifier = Modifier.padding(start = 6.dp).size(34.dp).clip(CircleShape).clickable { narrator.stop() }.padding(6.dp))
+        }
+        if (narrator.missingLanguage) {
+            Text("This phone has no voice for this language yet. Tap to add one in speech settings.", style = Type.Meta, color = Color(0xFFFFD58A),
+                modifier = Modifier.padding(top = 6.dp).clickable {
+                    runCatching { context.startActivity(android.content.Intent("com.android.settings.TTS_SETTINGS").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                })
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box {
+                Row(Modifier.glass().clickable { voiceMenu = true }.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.RecordVoiceOver, null, tint = Brand.GoldLight, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Voice", color = Brand.White, fontSize = 12.5.sp)
+                }
+                DropdownMenu(voiceMenu, { voiceMenu = false }, containerColor = Brand.Surface2) {
+                    narrator.voices.take(12).forEachIndexed { i, v ->
+                        DropdownMenuItem(text = { Text(narrator.label(v, i), color = if (v == narrator.voice) Brand.Gold else Brand.White, fontSize = 13.sp) }, onClick = { voiceMenu = false; narrator.chooseVoice(v) })
+                    }
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Icon(Icons.Rounded.SkipPrevious, "Previous verse", tint = Brand.White, modifier = Modifier.size(42.dp).clip(CircleShape).clickable { narrator.previous() }.padding(8.dp))
+            Box(Modifier.padding(horizontal = 6.dp).size(50.dp).clip(CircleShape).background(Brand.GoldGradient).clickable { narrator.toggle() }, contentAlignment = Alignment.Center) {
+                Icon(if (narrator.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (narrator.playing) "Pause" else "Play", tint = Brand.Black, modifier = Modifier.size(28.dp))
+            }
+            Icon(Icons.Rounded.SkipNext, "Next verse", tint = Brand.White, modifier = Modifier.size(42.dp).clip(CircleShape).clickable { narrator.next() }.padding(8.dp))
+            Spacer(Modifier.weight(1f))
+            val speeds = listOf(0.8f, 0.95f, 1.1f, 1.25f)
+            Text("${"%.2f".format(narrator.rate).trimEnd('0').trimEnd('.')}x", color = Brand.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.glass().clickable { narrator.changeRate(speeds[(speeds.indexOf(narrator.rate).coerceAtLeast(0) + 1) % speeds.size]) }.padding(horizontal = 12.dp, vertical = 6.dp))
         }
     }
 }
@@ -342,7 +444,10 @@ private fun ColumnPicker(versions: List<BibleVersion>, selected: String, modifie
 }
 
 @Composable
-private fun ChapterPage(bible: BibleDb, store: BibleStore, book: Book, chapter: Int, focusVerse: Int) {
+private fun ChapterPage(
+    bible: BibleDb, store: BibleStore, book: Book, chapter: Int, focusVerse: Int,
+    speaking: Int, listenOne: (Int, String) -> Unit, listenFrom: (Int, String) -> Unit,
+) {
     val s = store.state.also { store.version }
     val left = remember(s.left, book.id, chapter) { bible.chapter(s.left, book.id, chapter) }
     val right = remember(s.right, book.id, chapter) { bible.chapter(s.right, book.id, chapter) }
@@ -350,21 +455,34 @@ private fun ChapterPage(bible: BibleDb, store: BibleStore, book: Book, chapter: 
     val numbers = if (s.sideBySide) (left.map { it.number } + right.map { it.number }).distinct().sorted() else single.map { it.number }
     val list = rememberLazyListState(initialFirstVisibleItemIndex = (focusVerse - 1).coerceIn(0, (numbers.size - 1).coerceAtLeast(0)))
     var sheet by remember { mutableStateOf<Int?>(null) }
+    var selected by remember { mutableStateOf<Int?>(null) }
     val size = 18f * s.textScale
+    val readId = if (s.sideBySide) s.right else s.single
 
-    LazyColumn(state = list, contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = NavBarHeight + 60.dp)) {
+    // Follow the voice down the page.
+    LaunchedEffect(speaking) {
+        val i = numbers.indexOf(speaking)
+        if (i >= 0) list.animateScrollToItem(i, -220)
+    }
+
+    LazyColumn(state = list, contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = NavBarHeight + 190.dp)) {
         items(numbers, key = { it }) { n ->
             val key = ref(book.id, chapter, n)
             val tint = highlightOf(s.highlights[key])
             val focused = n == focusVerse && focusVerse > 1
+            val reading = n == speaking
+            val shape = RoundedCornerShape(12.dp)
             Column(
-                Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(12.dp))
-                    .background(tint ?: if (focused) Color(0x1AD4AF37) else Color.Transparent)
-                    .combinedClickable(onClick = {}, onLongClick = { sheet = n }).padding(horizontal = 8.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(shape)
+                    .background(if (reading) Color(0x2ED4AF37) else tint ?: if (focused || selected == n) Color(0x14D4AF37) else Color.Transparent)
+                    .border(1.dp, if (reading) Color(0x88D4AF37) else Color.Transparent, shape)
+                    .combinedClickable(onClick = { selected = if (selected == n) null else n }, onLongClick = { selected = null; sheet = n })
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
             ) {
                 if (s.sideBySide) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("$n", color = Brand.Gold, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        if (reading) Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, tint = Brand.Gold, modifier = Modifier.padding(start = 6.dp).size(14.dp))
                         if (key in s.bookmarks) Icon(Icons.Rounded.Bookmark, null, tint = Brand.Gold, modifier = Modifier.padding(start = 4.dp).size(14.dp))
                         if (s.notes[key] != null) Icon(Icons.Rounded.EditNote, null, tint = Brand.BlueText, modifier = Modifier.padding(start = 4.dp).size(15.dp))
                     }
@@ -379,15 +497,32 @@ private fun ChapterPage(bible: BibleDb, store: BibleStore, book: Book, chapter: 
                         append(text)
                     }, fontFamily = Scripture, fontSize = (size * 1.12f).sp, lineHeight = (size * 1.75f).sp, color = Brand.White)
                 }
-                s.notes[key]?.let { Text("✎ $it", style = Type.Meta, color = Brand.BlueText, modifier = Modifier.padding(top = 6.dp)) }
+                s.notes[key]?.let { Text("\u270E $it", style = Type.Meta, color = Brand.BlueText, modifier = Modifier.padding(top = 6.dp)) }
+                // Tap a verse: quick actions appear right under it.
+                if (selected == n) {
+                    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        QuickChip(Icons.AutoMirrored.Rounded.VolumeUp, "Listen") { selected = null; listenOne(n, readId) }
+                        QuickChip(Icons.Rounded.PlayArrow, "Read from here") { selected = null; listenFrom(n, readId) }
+                        QuickChip(Icons.Rounded.MoreHoriz, "More") { selected = null; sheet = n }
+                    }
+                }
             }
         }
     }
-    sheet?.let { n -> VerseSheet(bible, store, book, chapter, n) { sheet = null } }
+    sheet?.let { n -> VerseSheet(bible, store, book, chapter, n, listen = { listenOne(n, readId) }, listenFromHere = { listenFrom(n, readId) }) { sheet = null } }
 }
 
 @Composable
-private fun VerseSheet(bible: BibleDb, store: BibleStore, book: Book, chapter: Int, verse: Int, close: () -> Unit) {
+private fun QuickChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Row(Modifier.clip(RoundedCornerShape(50)).background(Color(0x26D4AF37)).border(1.dp, Color(0x40D4AF37), RoundedCornerShape(50)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = Brand.Gold, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, color = Brand.White, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun VerseSheet(bible: BibleDb, store: BibleStore, book: Book, chapter: Int, verse: Int, listen: () -> Unit, listenFromHere: () -> Unit, close: () -> Unit) {
     val context = LocalContext.current
     val s = store.state
     val key = ref(book.id, chapter, verse)
@@ -410,6 +545,8 @@ private fun VerseSheet(bible: BibleDb, store: BibleStore, book: Book, chapter: I
                 Icon(Icons.Rounded.FormatColorReset, "Remove highlight", tint = Brand.Text2, modifier = Modifier.size(36.dp).clip(CircleShape).clickable { store.update { it.copy(highlights = it.highlights - key) }; close() }.padding(6.dp))
             }
             Spacer(Modifier.height(10.dp))
+            SheetAction(Icons.AutoMirrored.Rounded.VolumeUp, "Listen to this verse") { close(); listen() }
+            SheetAction(Icons.Rounded.PlayArrow, "Listen from here to the end") { close(); listenFromHere() }
             val marked = key in s.bookmarks
             SheetAction(if (marked) Icons.Rounded.Bookmark else Icons.Outlined.BookmarkBorder, if (marked) "Remove bookmark" else "Bookmark") {
                 store.update { it.copy(bookmarks = if (marked) it.bookmarks - key else listOf(key) + it.bookmarks) }; close()
