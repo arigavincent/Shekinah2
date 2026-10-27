@@ -44,6 +44,20 @@ type Handler struct {
 
 	mu      sync.Mutex
 	viewers map[string]time.Time
+
+	// Paid lives: who may watch (checked by the video server per request).
+	tokens  TokenParser
+	staff   func(ctx context.Context, userID string) bool
+	allowMu sync.Mutex
+	allowed map[string]time.Time // token|session -> until
+}
+
+type TokenParser interface{ ParseToken(string) (string, error) }
+
+// UseAccess tells the handler how to read sign-in tokens and who counts as
+// staff (hosts, moderators, admins watch paid lives free).
+func (h *Handler) UseAccess(tokens TokenParser, staff func(ctx context.Context, userID string) bool) {
+	h.tokens, h.staff = tokens, staff
 }
 
 func env(key, fallback string) string {
@@ -73,6 +87,9 @@ type Session struct {
 	CreatedAt   time.Time  `json:"createdAt"`
 	PlaybackURL string     `json:"playbackUrl"`
 	Viewers     int        `json:"viewers"`
+	// A paid live: viewers need access (paid, or staff) to watch.
+	Price  int  `json:"price"`
+	Access bool `json:"access"`
 }
 
 func (h *Handler) playbackURL() string { return h.hlsBase + "/" + path + "/index.m3u8" }
@@ -81,10 +98,10 @@ func (h *Handler) current(ctx context.Context) (*Session, string, string, error)
 	var s Session
 	var key, broadcasterID string
 	err := h.db.QueryRow(ctx, `
-		SELECT l.id, l.title, l.status, COALESCE(u.name, ''), l.started_at, l.created_at, l.stream_key, COALESCE(l.broadcaster_id::text, '')
+		SELECT l.id, l.title, l.status, COALESCE(u.name, ''), l.started_at, l.created_at, l.stream_key, COALESCE(l.broadcaster_id::text, ''), l.price
 		FROM live_sessions l LEFT JOIN users u ON u.id = l.broadcaster_id
 		WHERE l.status IN ('starting', 'live') ORDER BY l.created_at DESC LIMIT 1
-	`).Scan(&s.ID, &s.Title, &s.Status, &s.Broadcaster, &s.StartedAt, &s.CreatedAt, &key, &broadcasterID)
+	`).Scan(&s.ID, &s.Title, &s.Status, &s.Broadcaster, &s.StartedAt, &s.CreatedAt, &key, &broadcasterID, &s.Price)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, "", "", nil
 	}
@@ -107,8 +124,13 @@ func (h *Handler) Start(c *gin.Context) {
 	userID, _ := auth.UserIDFromContext(c)
 	var req struct {
 		Title string `json:"title"`
+		Price int    `json:"price"`
 	}
 	_ = c.ShouldBindJSON(&req)
+	if req.Price < 0 || req.Price > 1_000_000 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Check the price"})
+		return
+	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		title = "Live Service"
@@ -133,7 +155,7 @@ func (h *Handler) Start(c *gin.Context) {
 	id := "live-" + randomKey()[:12]
 	// Each new live starts with chat on.
 	_, _ = h.db.Exec(ctx, `UPDATE app_settings SET value = (value::jsonb || '{"chatOff": false}'::jsonb)::text WHERE key = 'live_chat'`)
-	if _, err := h.db.Exec(ctx, `INSERT INTO live_sessions (id, title, broadcaster_id, stream_key) VALUES ($1, $2, $3, $4)`, id, title, userID, key); err != nil {
+	if _, err := h.db.Exec(ctx, `INSERT INTO live_sessions (id, title, broadcaster_id, stream_key, price) VALUES ($1, $2, $3, $4, $5)`, id, title, userID, key, req.Price); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not start the live"})
 		return
 	}
@@ -189,7 +211,28 @@ func (h *Handler) Current(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load live"})
 		return
 	}
+	if session != nil {
+		userID, _ := auth.UserIDFromContext(c)
+		session.Access = h.canWatch(c.Request.Context(), session, userID)
+	}
 	c.JSON(http.StatusOK, gin.H{"session": session})
+}
+
+// canWatch: free lives are open to all; a paid one to those who paid
+// (confirmed by finance) and to staff.
+func (h *Handler) canWatch(ctx context.Context, s *Session, userID string) bool {
+	if s.Price <= 0 {
+		return true
+	}
+	if userID == "" {
+		return false
+	}
+	if h.staff != nil && h.staff(ctx, userID) {
+		return true
+	}
+	var paid bool
+	_ = h.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM giving_transactions WHERE item_id = $1 AND user_id::text = $2 AND status = 'success')`, s.ID, userID).Scan(&paid)
+	return paid
 }
 
 // POST /live/heartbeat {"viewerId": "..."}: each watching phone checks in every 15 s.
@@ -226,9 +269,20 @@ func (h *Handler) MediaMTXAuth(c *gin.Context) {
 		Action string `json:"action"`
 		Path   string `json:"path"`
 		Query  string `json:"query"`
+		Token  string `json:"token"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Status(http.StatusUnauthorized)
+		return
+	}
+	if req.Action == "read" || req.Action == "playback" {
+		// A paid live's picture only goes to those allowed to watch it. The
+		// app sends the member's sign-in token with every request.
+		if h.readAllowed(c.Request.Context(), req.Token, req.Query) {
+			c.Status(http.StatusOK)
+		} else {
+			c.Status(http.StatusUnauthorized)
+		}
 		return
 	}
 	if req.Action != "publish" {
@@ -247,6 +301,47 @@ func (h *Handler) MediaMTXAuth(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusOK)
+}
+
+func (h *Handler) readAllowed(ctx context.Context, token, query string) bool {
+	session, _, _, err := h.current(ctx)
+	if err != nil || session == nil || session.Price <= 0 {
+		return true
+	}
+	if token == "" {
+		for _, part := range strings.Split(query, "&") {
+			if strings.HasPrefix(part, "jwt=") {
+				token = strings.TrimPrefix(part, "jwt=")
+			}
+		}
+	}
+	if token == "" || h.tokens == nil {
+		return false
+	}
+	// Segments are requested every second or two; remember answers briefly.
+	cacheKey := token + "|" + session.ID
+	h.allowMu.Lock()
+	if h.allowed == nil {
+		h.allowed = map[string]time.Time{}
+	}
+	until, ok := h.allowed[cacheKey]
+	h.allowMu.Unlock()
+	if ok && time.Now().Before(until) {
+		return true
+	}
+	userID, err := h.tokens.ParseToken(token)
+	if err != nil || !h.canWatch(ctx, session, userID) {
+		return false
+	}
+	h.allowMu.Lock()
+	for k, t := range h.allowed {
+		if time.Now().After(t) {
+			delete(h.allowed, k)
+		}
+	}
+	h.allowed[cacheKey] = time.Now().Add(60 * time.Second)
+	h.allowMu.Unlock()
+	return true
 }
 
 // Watch checks MediaMTX every few seconds and moves sessions along.

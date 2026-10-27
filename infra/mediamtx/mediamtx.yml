@@ -4,12 +4,11 @@
 logLevel: info
 
 # Every publish is checked with the backend, which only accepts the key of
-# the current live session. Watching is open to everyone.
+# the current live session. Watching is checked too: free lives are open to
+# all, a paid live only to members who paid (the app sends their token).
 authMethod: http
 authHTTPAddress: http://host.docker.internal:3000/api/v1/live/mediamtx-auth
 authHTTPExclude:
-  - action: read
-  - action: playback
   - action: api
   - action: metrics
   - action: pprof

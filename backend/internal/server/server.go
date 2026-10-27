@@ -28,6 +28,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/library"
 	"github.com/ariga/shekinah-backend/internal/live"
 	"github.com/ariga/shekinah-backend/internal/notifications"
+	"github.com/ariga/shekinah-backend/internal/eventreg"
 	"github.com/ariga/shekinah-backend/internal/overview"
 	"github.com/ariga/shekinah-backend/internal/permissions"
 	"github.com/ariga/shekinah-backend/internal/prayers"
@@ -116,8 +117,12 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	notificationHandler := notifications.NewHandler(db)
 	prayerHandler := prayers.NewHandler(db)
 	perms := permissions.New(db)
+	eventReg := eventreg.NewHandler(db)
 	communityHandler := community.NewHandler(db, perms)
 	liveHandler := live.NewHandler(db, notificationHandler, communityHandler)
+	liveHandler.UseAccess(authService, func(ctx context.Context, userID string) bool {
+		return perms.Has(ctx, userID, permissions.LiveBroadcast) || perms.Has(ctx, userID, permissions.LiveModerate)
+	})
 	// Moves broadcasts from "starting" to "live" and ends dropped ones.
 	go liveHandler.Watch(context.Background())
 	testimonyHandler := testimonies.NewHandler(db)
@@ -157,7 +162,10 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.GET("/prayer-requests/mine", auth.RequireAuth(authService), prayerHandler.ListMine)
 		api.POST("/prayer-requests/:id/pray", auth.RequireAuth(authService), prayerHandler.Pray)
 		api.GET("/permissions/me", auth.RequireAuth(authService), perms.Mine)
-		api.GET("/live/current", liveHandler.Current)
+		api.GET("/live/current", auth.OptionalAuth(authService), liveHandler.Current)
+		api.GET("/events/:id/registration", auth.OptionalAuth(authService), eventReg.Get)
+		api.POST("/events/:id/register", auth.RequireAuth(authService), eventReg.Register)
+		api.DELETE("/events/:id/register", auth.RequireAuth(authService), eventReg.Cancel)
 		api.POST("/live/heartbeat", liveHandler.Heartbeat)
 		api.POST("/live/mediamtx-auth", liveHandler.MediaMTXAuth)
 		api.POST("/live/start", auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast), liveHandler.Start)
@@ -290,6 +298,9 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.GET("/members", perms.AdminListMembers)
 			adminGroup.PATCH("/members/:id/permissions", perms.AdminSetPermissions)
 			adminGroup.GET("/permissions/log", perms.AdminPermissionLog)
+			adminGroup.PUT("/events/:id/registration", eventReg.AdminSetup)
+			adminGroup.GET("/events/:id/registrations", eventReg.AdminList)
+			adminGroup.GET("/events/:id/registrations.csv", eventReg.AdminCSV)
 			adminGroup.GET("/overview", overview.Handle(db))
 			adminGroup.GET("/giving/transactions", givingHandler.ListTransactions)
 			adminGroup.GET("/giving/details", givingHandler.Details)

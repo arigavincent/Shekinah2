@@ -1,6 +1,7 @@
 package giving
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -176,26 +177,26 @@ func (h Handler) Confirm(c *gin.Context) {
 	itemID := strings.TrimSpace(req.ItemID)
 	note := clean(req.Note, 300)
 	if itemID != "" {
-		// A purchase: must be signed in, the amount is the book's price.
+		// A purchase (a book, an event ticket or a paid live): must be signed
+		// in, and the amount is the item's price.
 		buyer, ok := auth.UserIDFromContext(c)
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"message": "Sign in to buy this book"})
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Sign in to pay for this"})
 			return
 		}
-		var title string
-		var price int
-		if err := h.db.QueryRow(c.Request.Context(), `SELECT title, price FROM library_items WHERE id = $1`, itemID).Scan(&title, &price); err != nil || price <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "This book isn't for sale"})
+		title, price, kind, err := h.itemPrice(c.Request.Context(), itemID)
+		if err != nil || price <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "This isn't for sale"})
 			return
 		}
 		var already bool
 		_ = h.db.QueryRow(c.Request.Context(), `SELECT EXISTS (SELECT 1 FROM giving_transactions WHERE item_id = $1 AND user_id::text = $2 AND status IN ('success','awaiting_verification'))`, itemID, buyer).Scan(&already)
 		if already {
-			c.JSON(http.StatusConflict, gin.H{"message": "You already have this book (or its payment is being confirmed)."})
+			c.JSON(http.StatusConflict, gin.H{"message": "You've already paid for this (or your payment is being confirmed)."})
 			return
 		}
 		req.Amount = price
-		category = "Book"
+		category = kind
 		note = title
 	}
 
@@ -284,4 +285,20 @@ func strconvBase36(v int64) string {
 		v /= 36
 	}
 	return string(out)
+}
+
+// itemPrice: what a purchase is for, by its id: a book, an event or a live.
+func (h Handler) itemPrice(ctx context.Context, itemID string) (title string, price int, kind string, err error) {
+	switch {
+	case strings.HasPrefix(itemID, "evt-"):
+		kind = "Event"
+		err = h.db.QueryRow(ctx, `SELECT title, price FROM events WHERE id = $1`, itemID).Scan(&title, &price)
+	case strings.HasPrefix(itemID, "live-"):
+		kind = "Live"
+		err = h.db.QueryRow(ctx, `SELECT title, price FROM live_sessions WHERE id = $1 AND status IN ('starting', 'live')`, itemID).Scan(&title, &price)
+	default:
+		kind = "Book"
+		err = h.db.QueryRow(ctx, `SELECT title, price FROM library_items WHERE id = $1`, itemID).Scan(&title, &price)
+	}
+	return title, price, kind, err
 }

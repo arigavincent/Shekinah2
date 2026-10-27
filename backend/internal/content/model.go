@@ -79,6 +79,10 @@ type Event struct {
 	Image       string `json:"image"`
 	ImageURL    string `json:"imageUrl"`
 	Description string `json:"description"`
+	// How to sign up: none, form (in the app) or link (an outside form).
+	Registration string `json:"registration"`
+	Price        int    `json:"price"`
+	EventDate    string `json:"eventDate"`
 }
 
 type Branch struct {

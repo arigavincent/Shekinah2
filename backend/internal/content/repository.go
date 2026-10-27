@@ -243,7 +243,10 @@ func (r Repository) Events(ctx context.Context) ([]Event, error) {
 			event_time,
 			location,
 			image_url,
-			description
+			description,
+			registration,
+			price,
+			to_char(event_date, 'YYYY-MM-DD')
 		FROM events
 		ORDER BY event_date ASC
 	`
@@ -267,6 +270,9 @@ func (r Repository) Events(ctx context.Context) ([]Event, error) {
 			&item.Location,
 			&item.Image,
 			&item.Description,
+			&item.Registration,
+			&item.Price,
+			&item.EventDate,
 		); err != nil {
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
