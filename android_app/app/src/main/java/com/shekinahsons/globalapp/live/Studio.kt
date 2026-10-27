@@ -194,6 +194,7 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
                 factory = { ctx ->
                     val stream = Broadcast.get(ctx)
                     SurfaceView(ctx).also { view ->
+                        Broadcast.preview = view
                         view.holder.addCallback(object : SurfaceHolder.Callback {
                             override fun surfaceCreated(holder: SurfaceHolder) {}
                             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -204,7 +205,7 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
                                 stream.getGlInterface().setPreviewResolution(width, height)
                             }
                             // Leaving the screen only stops the preview; the broadcast carries on.
-                            override fun surfaceDestroyed(holder: SurfaceHolder) { if (stream.isOnPreview) stream.stopPreview() }
+                            override fun surfaceDestroyed(holder: SurfaceHolder) { if (stream.isOnPreview) stream.stopPreview(); if (Broadcast.preview === view) Broadcast.preview = null }
                         })
                     }
                 },
@@ -215,6 +216,26 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
                 Text("Camera and microphone are needed to go live.", color = Brand.White, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(14.dp))
                 GoldButton("Allow") { ask.launch(needed) }
+            }
+        }
+
+        // While sharing the screen, cover the preview (it would show itself
+        // endlessly), like Meet's "You're presenting".
+        if (live && Broadcast.showing == Showing.Screen) {
+            Column(
+                Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0E1A3A), Color(0xFF050508)))),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+            ) {
+                Box(Modifier.size(84.dp).clip(CircleShape).background(Color(0x331A73E8)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.ScreenShare, null, tint = Color(0xFF8AB4F8), modifier = Modifier.size(44.dp))
+                }
+                Spacer(Modifier.height(18.dp))
+                Text("You're presenting your screen", style = Type.Title, color = Color.White)
+                Text("Open any app. Everything on the screen, and its sound, goes to everyone watching.", style = Type.Meta, color = Brand.Text2,
+                    textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 40.dp, vertical = 8.dp))
+                Spacer(Modifier.height(10.dp))
+                Text("Stop presenting", color = Color.White, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF1A73E8)).clickable { Broadcast.showCamera(context) }.padding(horizontal = 22.dp, vertical = 12.dp))
             }
         }
 
@@ -263,7 +284,7 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
         }
 
         if (live) {
-            if (!chatOpen) FloatingComments(chat, Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = 110.dp).widthIn(max = 330.dp))
+            if (!chatOpen) FloatingComments(chat, Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = if (Broadcast.bannerOn) 230.dp else 110.dp).widthIn(max = 330.dp))
             AnimatedVisibility(controlsVisible, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter)) {
                 ControlBar(
                     openPresent = { sheet = "present" }, openEffects = { sheet = "effects" }, openChat = { chatOpen = true },

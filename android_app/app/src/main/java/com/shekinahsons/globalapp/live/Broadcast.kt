@@ -124,8 +124,20 @@ object Broadcast {
     }
 
     // Sets the size and quality; the shape follows how the phone is held.
+    var preview: android.view.SurfaceView? = null
+
     fun prepare(hd: Boolean, portrait: Boolean, rotation: Int): Boolean {
         val s = stream ?: return false
+        if (s.isStreaming) return false
+        // The size can only change with the preview stopped; restart it after.
+        val wasPreviewing = s.isOnPreview
+        if (wasPreviewing) s.stopPreview()
+        val ok = prepareNow(s, hd, portrait, rotation)
+        if (wasPreviewing) preview?.let { s.startPreview(it) }
+        return ok
+    }
+
+    private fun prepareNow(s: GenericStream, hd: Boolean, portrait: Boolean, rotation: Int): Boolean {
         val (w, h, rate) = if (hd) Triple(1280, 720, 2_500_000) else Triple(854, 480, 1_000_000)
         width = if (portrait) h else w; height = if (portrait) w else h
         target = rate
