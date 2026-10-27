@@ -19,9 +19,10 @@ const (
 	LiveBroadcast = "live:broadcast"
 	LiveModerate  = "live:moderate"
 	BooksPublish  = "books:publish"
+	CheckinScan   = "checkin:scan"
 )
 
-var All = []string{LiveBroadcast, LiveModerate, BooksPublish}
+var All = []string{LiveBroadcast, LiveModerate, BooksPublish, CheckinScan}
 
 type Checker struct{ db *pgxpool.Pool }
 

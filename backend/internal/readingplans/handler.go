@@ -42,6 +42,65 @@ type Plan struct {
 	ReminderOn    bool      `json:"reminderOn,omitempty"`
 	ReminderTime  string    `json:"reminderTime,omitempty"`
 	Days          []PlanDay `json:"days,omitempty"`
+	// When this member started (day 1), and which day that makes today.
+	StartedOn string `json:"startedOn,omitempty"`
+	TodayDay  int    `json:"todayDay,omitempty"`
+}
+
+// enrollment fills in when the member started the plan and today's day.
+func (h Handler) enrollment(ctx context.Context, userID string, p *Plan) {
+	var started time.Time
+	if err := h.db.QueryRow(ctx, `SELECT started_on FROM reading_plan_enrollments WHERE plan_id = $1 AND user_id::text = $2`, p.ID, userID).Scan(&started); err != nil {
+		return
+	}
+	p.StartedOn = started.Format("2006-01-02")
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	day := int(today.Sub(time.Date(started.Year(), started.Month(), started.Day(), 0, 0, 0, 0, time.UTC)).Hours()/24) + 1
+	if day > p.DurationDays {
+		day = p.DurationDays
+	}
+	if day < 1 {
+		day = 1
+	}
+	p.TodayDay = day
+}
+
+// POST /reading-plans/:id/start {"restart": bool} — begins the plan today
+// (restarting clears the ticks).
+func (h Handler) Start(c *gin.Context) {
+	userID := currentUserID(c)
+	var req struct {
+		Restart bool `json:"restart"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	ctx := c.Request.Context()
+	planID := c.Param("id")
+	if req.Restart {
+		_, _ = h.db.Exec(ctx, `DELETE FROM reading_plan_progress WHERE plan_id = $1 AND user_id::text = $2`, planID, userID)
+	}
+	if _, err := h.db.Exec(ctx, `INSERT INTO reading_plan_enrollments (plan_id, user_id, started_on) VALUES ($1, $2, CURRENT_DATE)
+		ON CONFLICT (plan_id, user_id) DO UPDATE SET started_on = CASE WHEN $3 THEN CURRENT_DATE ELSE reading_plan_enrollments.started_on END`, planID, userID, req.Restart); err != nil {
+		httpx.Error(c, http.StatusNotFound, "reading_plan_not_found", "reading plan not found")
+		return
+	}
+	httpx.OK(c, gin.H{"ok": true})
+}
+
+// DELETE /reading-plans/:id/start — stops following the plan (keeps notes).
+func (h Handler) Leave(c *gin.Context) {
+	userID := currentUserID(c)
+	ctx := c.Request.Context()
+	_, _ = h.db.Exec(ctx, `DELETE FROM reading_plan_enrollments WHERE plan_id = $1 AND user_id::text = $2`, c.Param("id"), userID)
+	_, _ = h.db.Exec(ctx, `DELETE FROM reading_plan_progress WHERE plan_id = $1 AND user_id::text = $2`, c.Param("id"), userID)
+	httpx.OK(c, gin.H{"ok": true})
+}
+
+// DELETE /reading-plans/:id/days/:day/complete — un-ticks a day.
+func (h Handler) UncompleteDay(c *gin.Context) {
+	userID := currentUserID(c)
+	_, _ = h.db.Exec(c.Request.Context(), `DELETE FROM reading_plan_progress WHERE plan_id = $1 AND user_id::text = $2 AND day_number::text = $3`, c.Param("id"), userID, c.Param("day"))
+	httpx.OK(c, gin.H{"ok": true})
 }
 
 type NoteRequest struct {
@@ -123,6 +182,7 @@ func (h Handler) List(c *gin.Context) {
 	if userID != "" {
 		for idx := range plans {
 			plans[idx].StreakDays = h.streakDays(c.Request.Context(), userID, plans[idx].ID)
+			h.enrollment(c.Request.Context(), userID, &plans[idx])
 		}
 	}
 
@@ -240,6 +300,7 @@ func (h Handler) Detail(c *gin.Context) {
 
 	if userID != "" {
 		plan.StreakDays = h.streakDays(c.Request.Context(), userID, plan.ID)
+		h.enrollment(c.Request.Context(), userID, &plan)
 
 		var reminderEnabled bool
 		var reminderTime string

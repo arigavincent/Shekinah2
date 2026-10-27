@@ -179,3 +179,18 @@ func (h Handler) ChangePassword(c *gin.Context) {
 
 	httpx.OK(c, response)
 }
+
+// AdminSendReset: POST /admin/members/:id/reset-password — emails the member
+// a reset code, for members who can't get into their account.
+func (h Handler) AdminSendReset(c *gin.Context) {
+	user, err := h.service.Me(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Member not found"})
+		return
+	}
+	if err := h.service.RequestPasswordReset(c.Request.Context(), PasswordResetRequest{Email: user.Email}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not send the reset code"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "A reset code was sent to " + user.Email})
+}

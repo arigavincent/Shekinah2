@@ -2,7 +2,7 @@ package auth
 
 import (
 	"crypto/tls"
-	"fmt"
+	"github.com/ariga/shekinah-backend/internal/mail"
 	"log"
 	"net"
 	"net/smtp"
@@ -15,48 +15,18 @@ import (
 type passwordResetMailer struct{}
 
 func (m passwordResetMailer) Send(email string, code string) error {
-	from := env("SMTP_FROM")
-	host := env("SMTP_HOST")
-	port := env("SMTP_PORT")
-	username := env("SMTP_USERNAME")
-	password := env("SMTP_PASSWORD")
-
-	if host == "" || port == "" || from == "" {
+	if !mail.Configured() {
 		log.Printf("password reset SMTP not configured; OTP for %s: %s", email, code)
 		return nil
 	}
-
-	subject := "Shekinah password reset code"
-	body := fmt.Sprintf(
-		"Your Shekinah password reset code is %s.\n\nThis code expires in 15 minutes. If you did not request this, ignore this email.\n",
-		code,
-	)
-
-	message := strings.Join([]string{
-		"From: " + from,
-		"To: " + email,
-		"Subject: " + subject,
-		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=UTF-8",
-		"",
-		body,
-	}, "\r\n")
-
-	addr := host + ":" + port
-	var auth smtp.Auth
-	if username != "" || password != "" {
-		auth = smtp.PlainAuth("", username, password, host)
-	}
-
-	log.Printf("password reset SMTP send start to=%s host=%s port=%s from=%s username_set=%t password_set=%t", email, host, port, from, username != "", password != "")
-
-	if err := sendSMTP(addr, host, port, auth, from, []string{email}, []byte(message)); err != nil {
-		log.Printf("password reset SMTP send failed to=%s host=%s port=%s error=%v; OTP for manual testing: %s", email, host, port, err, code)
-		return fmt.Errorf("send password reset email: %w", err)
-	}
-
-	log.Printf("password reset SMTP send success to=%s host=%s port=%s", email, host, port)
-	return nil
+	return mail.Send(mail.Message{
+		To:        []string{email},
+		Subject:   "Your Shekinah password reset code",
+		Heading:   "Reset your password",
+		Intro:     "Use this code in the Shekinah Sons Global app (or the admin dashboard) to choose a new password.",
+		Highlight: code,
+		Footer:    "The code expires in 15 minutes. If you didn't ask to reset your password, you can ignore this email; your password stays the same.",
+	})
 }
 
 func sendSMTP(addr string, host string, port string, auth smtp.Auth, from string, to []string, message []byte) error {

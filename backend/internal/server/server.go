@@ -28,6 +28,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/library"
 	"github.com/ariga/shekinah-backend/internal/live"
 	"github.com/ariga/shekinah-backend/internal/notifications"
+	"github.com/ariga/shekinah-backend/internal/attendance"
 	"github.com/ariga/shekinah-backend/internal/eventreg"
 	"github.com/ariga/shekinah-backend/internal/overview"
 	"github.com/ariga/shekinah-backend/internal/permissions"
@@ -118,6 +119,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	prayerHandler := prayers.NewHandler(db)
 	perms := permissions.New(db)
 	eventReg := eventreg.NewHandler(db)
+	serveTeams := serve.NewTeams(db)
+	attendanceHandler := attendance.NewHandler(db)
 	communityHandler := community.NewHandler(db, perms)
 	liveHandler := live.NewHandler(db, notificationHandler, communityHandler)
 	liveHandler.UseAccess(authService, func(ctx context.Context, userID string) bool {
@@ -202,6 +205,15 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.PATCH("/library/:id", auth.RequireAuth(authService), perms.Require(permissions.BooksPublish), booksHandler.Update)
 		api.GET("/library/:id", libraryHandler.Detail)
 		api.GET("/settings/serve", settingsHandler.GetServe)
+		api.GET("/serve/teams", auth.OptionalAuth(authService), serveTeams.List)
+		api.POST("/serve/requests", auth.RequireAuth(authService), serveTeams.Request)
+		scan := []gin.HandlerFunc{auth.RequireAuth(authService), perms.Require(permissions.CheckinScan)}
+		api.POST("/attendance/scan", append(scan, attendanceHandler.Scan)...)
+		api.GET("/attendance", append(scan, attendanceHandler.List)...)
+		api.GET("/attendance/report.pdf", append(scan, attendanceHandler.PDF)...)
+		api.POST("/reading-plans/:id/start", auth.RequireAuth(authService), readingPlanHandler.Start)
+		api.DELETE("/reading-plans/:id/start", auth.RequireAuth(authService), readingPlanHandler.Leave)
+		api.DELETE("/reading-plans/:id/days/:day/complete", auth.RequireAuth(authService), readingPlanHandler.UncompleteDay)
 		api.POST("/serve/request-pdf", serveHandler.UploadRequestPDF)
 		api.GET("/bible/versions", bibleVersionsHandler.List)
 		api.GET("/bible/versions/:id/download", bibleVersionsHandler.Download)
@@ -298,6 +310,12 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.GET("/members", perms.AdminListMembers)
 			adminGroup.PATCH("/members/:id/permissions", perms.AdminSetPermissions)
 			adminGroup.GET("/permissions/log", perms.AdminPermissionLog)
+			adminGroup.POST("/members/:id/reset-password", authHandler.AdminSendReset)
+			adminGroup.GET("/serve", serveTeams.AdminOverview)
+			adminGroup.PUT("/serve/teams/:id", serveTeams.AdminSaveTeam)
+			adminGroup.DELETE("/serve/teams/:id", serveTeams.AdminDeleteTeam)
+			adminGroup.PATCH("/serve/requests/:id", serveTeams.AdminUpdateRequest)
+			adminGroup.PUT("/serve/contact", serveTeams.AdminSetContact)
 			adminGroup.PUT("/events/:id/registration", eventReg.AdminSetup)
 			adminGroup.GET("/events/:id/registrations", eventReg.AdminList)
 			adminGroup.GET("/events/:id/registrations.csv", eventReg.AdminCSV)
