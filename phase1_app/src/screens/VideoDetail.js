@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "../components/Icon";
 import { SermonVideoPlayer } from "../components/SermonVideoPlayer";
+import { toggleSermonFavourite, useSermonFavourites } from "../services/sermonFavorites";
 import * as FileSystem from "expo-file-system/legacy";
 
 import { PHASE1_IMAGES } from "../content";
@@ -56,6 +57,8 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
   const { data } = useContent();
   const { width } = useWindowDimensions();
   const [expanded, setExpanded] = useState(false);
+  const { isFavourite } = useSermonFavourites();
+  const saved = isFavourite(sermon?.id);
   const [downloadedUri, setDownloadedUri] = useState("");
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadStatus, setDownloadStatus] = useState("");
@@ -239,6 +242,13 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
         </Pressable>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={vd.chips}>
+          <ActionChip
+            icon={saved ? "heart" : "heart-outline"}
+            label={saved ? "Saved" : "Save"}
+            active={saved}
+            activeColor={C.red}
+            onPress={() => toggleSermonFavourite({ ...sermon, thumbnail })}
+          />
           <ActionChip icon="share-social-outline" label="Share" onPress={() => Share.share({ message: `${sermon?.title}${sermon?.speaker ? ` · ${sermon.speaker}` : ""}` })} />
           {canDownload ? (
             <ActionChip
@@ -285,7 +295,7 @@ export function VideoDetail({ sermon, go, openSermon, setDownloadsTab, appLangua
   );
 }
 
-function ActionChip({ icon, label, onPress, active }) {
+function ActionChip({ icon, label, onPress, active, activeColor }) {
   return (
     <Pressable
       onPress={onPress}
@@ -293,7 +303,7 @@ function ActionChip({ icon, label, onPress, active }) {
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Ionicons name={icon} size={16} color={active ? C.accent : C.white} />
+      <Ionicons name={icon} size={16} color={active ? activeColor || C.accent : C.white} />
       <Text style={[vd.chipText, active && { color: C.accentText }]}>{label}</Text>
     </Pressable>
   );

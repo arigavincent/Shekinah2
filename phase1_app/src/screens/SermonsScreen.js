@@ -22,6 +22,7 @@ import { IconButton } from "../components/IconButton";
 import { Tabs } from "../components/Tabs";
 import { SearchBar } from "../components/SearchBar";
 import { AudioArt } from "../components/AudioArt";
+import { useSermonFavourites } from "../services/sermonFavorites";
 import { useDownloadsMap } from "../hooks/useDownloadsMap";
 import { usePlaybackProgressMap } from "../hooks/usePlaybackProgressMap";
 import {
@@ -240,6 +241,31 @@ function GridTile({ title, subtitle, image, onPress, width, badge, wide }) {
   );
 }
 
+function SavedSermons({ items, renderRow, appLanguage, onClose }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={st.savedHeader}>
+        <Ionicons name="heart" size={18} color={C.red} />
+        <Text style={st.savedTitle}>{tr(appLanguage, "Saved sermons")}</Text>
+        <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button">
+          <Text style={st.savedClose}>{tr(appLanguage, "Show all")}</Text>
+        </Pressable>
+      </View>
+      <ScrollView contentContainerStyle={s.scrollPad} showsVerticalScrollIndicator={false}>
+        {items.length === 0 ? (
+          <EmptyMessage
+            icon="heart-outline"
+            title={tr(appLanguage, "No saved sermons yet")}
+            text={tr(appLanguage, "Tap the heart on a sermon to keep it here.")}
+          />
+        ) : (
+          items.map(renderRow)
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
 function EmptyMessage({ icon, title, text }) {
   return (
     <View style={st.empty}>
@@ -254,6 +280,8 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab, appLang
   const [query, setQuery] = useState("");
   const [oldestFirst, setOldestFirst] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [showSaved, setShowSaved] = useState(false);
+  const { list: savedList } = useSermonFavourites();
   const { data, loading, reload } = useContent();
   const progressMap = usePlaybackProgressMap();
   const downloads = useDownloadsMap();
@@ -341,10 +369,32 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab, appLang
         onMenu={openDrawer}
         appLanguage={appLanguage}
         right={
-          <IconButton name="download-outline" accessibilityLabel="Downloads" onPress={() => go("Downloads")} />
+          <>
+            <IconButton name="download-outline" accessibilityLabel="Downloads" onPress={() => go("Downloads")} />
+            <IconButton
+              name={showSaved ? "heart" : "heart-outline"}
+              color={showSaved ? C.red : C.white}
+              accessibilityLabel={showSaved ? "Show all sermons" : "Show saved sermons"}
+              onPress={() => {
+                setQuery("");
+                setShowSaved(current => !current);
+              }}
+            />
+          </>
         }
       />
 
+      {showSaved ? (
+        <SavedSermons
+          items={savedList.map(saved => sermons.find(item => item.id === saved.id) || saved)}
+          renderRow={renderRow}
+          appLanguage={appLanguage}
+          onClose={() => setShowSaved(false)}
+        />
+      ) : null}
+
+      {showSaved ? null : (
+        <>
       <Tabs tabs={SERMON_TABS} active={activeTab} setActive={handleSetTab} appLanguage={appLanguage} />
 
       <View style={st.searchWrap}>
@@ -469,12 +519,17 @@ export function SermonsScreen({ go, openDrawer, openSermon, tab, setTab, appLang
           visible.map(renderRow)
         )}
       </ScrollView>
+        </>
+      )}
     </Screen>
   );
 }
 
 const st = makeThemedStyles(C => ({
   searchWrap: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 },
+  savedHeader: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.lineStrong },
+  savedTitle: { flex: 1, color: C.white, fontSize: 17, fontFamily: C.fontBold },
+  savedClose: { color: C.gold, fontSize: 14, fontFamily: C.fontBold },
   row: {
     flexDirection: "row",
     alignItems: "center",

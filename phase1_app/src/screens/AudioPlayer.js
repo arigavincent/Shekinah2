@@ -20,6 +20,7 @@ import { ANDROID_STATUS_BAR_HEIGHT, C, makeThemedStyles } from "../constants/the
 import { s } from "../styles/appStyles";
 import { Screen } from "../components/Screen";
 import { AudioArt } from "../components/AudioArt";
+import { toggleSermonFavourite, useSermonFavourites } from "../services/sermonFavorites";
 import { useNav } from "../navigation/NavContext";
 import { PHASE1_IMAGES } from "../content";
 import { useContent } from "../providers/ContentProvider";
@@ -106,6 +107,7 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [trackWidth, setTrackWidth] = useState(1);
+  const { isFavourite } = useSermonFavourites();
   const artScale = React.useRef(new Animated.Value(1)).current;
 
   const [audioState, setAudioState] = useState(getAudioPlaybackState());
@@ -416,6 +418,16 @@ export function AudioPlayer({ sermon, go, setMiniPlayer, setDownloadsTab, appLan
           <Text style={ap.eyebrow}>PLAYING FROM</Text>
           <Text style={ap.headerTitle} numberOfLines={1}>Audio Sermons</Text>
         </View>
+        <Pressable
+          onPress={() => toggleSermonFavourite(sermon)}
+          hitSlop={8}
+          style={({ pressed }) => [ap.control, pressed && { backgroundColor: "rgba(255,255,255,0.12)" }]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isFavourite(sermon.id) }}
+          accessibilityLabel={isFavourite(sermon.id) ? "Remove from saved sermons" : "Save sermon"}
+        >
+          <Ionicons name={isFavourite(sermon.id) ? "heart" : "heart-outline"} size={22} color={isFavourite(sermon.id) ? C.red : "#FFFFFF"} />
+        </Pressable>
         <ControlButton
           icon="share-social-outline"
           label="Share sermon"

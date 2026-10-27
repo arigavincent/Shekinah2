@@ -1,4 +1,8 @@
 const SWAHILI_LABELS = {
+  "Saved sermons": "Mahubiri Yaliyohifadhiwa",
+  "Show all": "Onyesha yote",
+  "No saved sermons yet": "Bado hakuna mahubiri yaliyohifadhiwa",
+  "Tap the heart on a sermon to keep it here.": "Gusa moyo kwenye hubiri ili kulihifadhi hapa.",
   "The live video will appear here shortly.": "Video ya moja kwa moja itaonekana hapa hivi karibuni.",
   "Nothing listed yet": "Bado hakuna kilichoorodheshwa",
   "Raising sons who carry the presence of God to the nations.": "Kuinua wana wanaobeba uwepo wa Mungu kwa mataifa.",

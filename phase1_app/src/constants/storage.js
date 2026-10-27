@@ -1,5 +1,6 @@
 export const STORAGE_KEYS = {
   favouriteDevotions: "shekinah.phase1.favouriteDevotions",
+  favouriteSermons: "shekinah.phase1.favouriteSermons",
   notificationPreferences: "shekinah.phase1.notificationPreferences",
   appLanguage: "shekinah.phase1.appLanguage",
   appTheme: "shekinah.phase1.appTheme",
