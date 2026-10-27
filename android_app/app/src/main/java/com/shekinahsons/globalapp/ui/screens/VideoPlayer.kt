@@ -137,8 +137,9 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
     var controls by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
     var unlockHint by remember { mutableStateOf(false) }
-    // Whole picture by default so nothing on screen (verses, captions) is cut; pinch or tap to fill.
-    var fill by remember { mutableStateOf(false) }
+    // Full screen fills the display; SmartFill eases back whenever a verse
+    // banner is on screen so it is never cut. Pinch or the button for the whole picture.
+    var fill by remember { mutableStateOf(true) }
     var speed by remember { mutableFloatStateOf(1f) }
     var speedMenu by remember { mutableStateOf(false) }
     var flash by remember { mutableStateOf<String?>(null) }
@@ -232,8 +233,10 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
         }
         onDispose {}
     }
-    LaunchedEffect(fullscreen, fill, view) {
-        view?.resizeMode = if (fullscreen && fill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+    LaunchedEffect(fullscreen, fill, view, pip) {
+        val v = view ?: return@LaunchedEffect
+        v.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+        SmartFill.run(v, player, enabled = fullscreen && fill && !pip)
     }
     BackHandler { if (fullscreen) fullscreen = false else onBack() }
 
