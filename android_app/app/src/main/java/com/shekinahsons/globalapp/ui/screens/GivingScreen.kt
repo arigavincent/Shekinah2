@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -106,10 +107,10 @@ data class Gift(
     val createdAt: String = "", val providerReference: String = "", val payerName: String = "",
 )
 
-private enum class Way(val key: String, val title: String, val subtitle: String, val colors: List<Color>, val ink: Color) {
-    Mpesa("mpesa_paybill", "M-Pesa", "Lipa na M-PESA · Paybill", listOf(Color(0xFF3FB64A), Color(0xFF167A2B)), Color.White),
-    Airtel("airtel_paybill", "Airtel Money", "Pay Bill", listOf(Color(0xFFF2343C), Color(0xFF8E0F18)), Color.White),
-    Bank("bank", "Bank transfer", "Deposit or transfer", listOf(Color(0xFFE8C766), Color(0xFF9C7618)), Color(0xFF1A1206)),
+private enum class Way(val key: String, val title: String, val subtitle: String, val colors: List<Color>, val ink: Color, val accent: Color, val mark: String, val note: String) {
+    Mpesa("mpesa_paybill", "M-Pesa", "Lipa na M-PESA · Paybill", listOf(Color(0xFF3FB64A), Color(0xFF167A2B)), Color.White, Color(0xFF4CD964), "M-PESA", "Most used · on any Safaricom line"),
+    Airtel("airtel_paybill", "Airtel Money", "Make Payments · Pay Bill", listOf(Color(0xFFF2343C), Color(0xFF8E0F18)), Color.White, Color(0xFFFF4D57), "airtel", "From any Airtel line"),
+    Bank("bank", "Bank transfer", "Deposit, EFT or RTGS", listOf(Color(0xFFE8C766), Color(0xFF9C7618)), Color(0xFF1A1206), Color(0xFFF0D27A), "BANK", "Best for large gifts"),
 }
 
 private enum class Step { Method, Amount, Pay, Confirm, Done }
@@ -222,7 +223,10 @@ fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> 
                             Spacer(Modifier.height(18.dp))
                             Text("Follow these steps", style = Type.CardTitle, color = Brand.White)
                             Spacer(Modifier.height(10.dp))
-                            instructions(way, d, amount.toIntOrNull() ?: 0, category).forEachIndexed { i, line -> StepLine(i + 1, line) }
+                            val steps = instructions(way, d, amount.toIntOrNull() ?: 0, category)
+                            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.7f).padding(16.dp)) {
+                                steps.forEachIndexed { i, line -> StepLine(i + 1, line, last = i == steps.lastIndex) }
+                            }
                             Spacer(Modifier.height(20.dp))
                             GoldButton("I've paid — confirm") { step = Step.Confirm; error = null }
                         }
@@ -311,23 +315,51 @@ private fun BackRow(title: String, back: () -> Unit) {
     }
 }
 
+// Brand mark: the provider's colour block with its name, like on a card.
+@Composable
+private fun BrandMark(w: Way, height: androidx.compose.ui.unit.Dp = 30.dp) {
+    Box(
+        Modifier.height(height).clip(RoundedCornerShape(8.dp)).background(Brush.linearGradient(w.colors)).padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (w == Way.Bank) Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.AccountBalance, null, tint = w.ink, modifier = Modifier.size(height * 0.5f))
+            Spacer(Modifier.width(4.dp))
+            Text(w.mark, color = w.ink, fontFamily = Inter, fontWeight = FontWeight.Black, fontSize = (height.value * 0.4f).sp, letterSpacing = 1.sp)
+        } else Text(w.mark, color = w.ink, fontFamily = Inter, fontWeight = FontWeight.Black, fontSize = (height.value * 0.42f).sp, letterSpacing = if (w == Way.Mpesa) 0.5.sp else 0.sp)
+    }
+}
+
+// A way to pay: a dark card with the provider's colour as its accent.
 @Composable
 private fun MethodCard(w: Way, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
-    Row(
-        Modifier.fillMaxWidth().lifted(shape, 14.dp, w.colors.first().copy(alpha = 0.6f)).clip(shape)
-            .background(Brush.linearGradient(w.colors)).pressable(onClick).padding(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val shape = RoundedCornerShape(24.dp)
+    Box(
+        Modifier.fillMaxWidth().lifted(shape, 16.dp, w.accent.copy(alpha = 0.35f)).clip(shape)
+            .background(Brush.linearGradient(listOf(Color(0xFF1C1C20), Color(0xFF111114))))
+            .border(1.dp, Brush.linearGradient(listOf(w.accent.copy(alpha = 0.55f), Color(0x14FFFFFF), Color(0x14FFFFFF))), shape)
+            .pressable(onClick),
     ) {
-        Box(Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
-            Icon(if (w == Way.Bank) Icons.Rounded.AccountBalance else Icons.Rounded.PhoneAndroid, null, tint = w.ink, modifier = Modifier.size(28.dp))
+        // The provider's colour glowing from the left edge.
+        Box(Modifier.matchParentSize().background(Brush.horizontalGradient(0f to w.accent.copy(alpha = 0.22f), 0.45f to Color.Transparent)))
+        Box(Modifier.align(Alignment.CenterStart).width(4.dp).height(56.dp).clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp)).background(Brush.verticalGradient(w.colors)))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                BrandMark(w, 28.dp)
+                Spacer(Modifier.height(12.dp))
+                Text(w.title, color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                Text(w.subtitle, color = Brand.Text2, fontSize = 13.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(w.accent))
+                    Spacer(Modifier.width(6.dp))
+                    Text(w.note, color = w.accent.copy(alpha = 0.9f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+            Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0x14FFFFFF)).border(1.dp, Color(0x22FFFFFF), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
         }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(w.title, color = w.ink, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-            Text(w.subtitle, color = w.ink.copy(alpha = 0.8f), fontSize = 13.sp)
-        }
-        Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = w.ink)
     }
 }
 
@@ -361,48 +393,106 @@ private fun AmountBox(amount: String, onChange: (String) -> Unit) {
     }
 }
 
-// The payment details as a card you could hold: big numbers, copy buttons.
+// The payment details as a card you could hold: a dark bank card with the
+// provider's colours, a chip, the number set large, and copy buttons.
 @Composable
 private fun PaymentCard(w: Way, d: GivingDetails, amount: Int, category: String) {
     val context = LocalContext.current
-    val shape = RoundedCornerShape(24.dp)
-    Box(Modifier.fillMaxWidth().aspectRatio(1.55f).lifted(shape, 22.dp, w.colors.first().copy(alpha = 0.6f)).clip(shape).background(Brush.linearGradient(w.colors))) {
-        Image(painterResource(R.drawable.dove_mark), null, Modifier.align(Alignment.BottomEnd).padding(10.dp).size(120.dp).graphicsLayer { alpha = 0.16f })
-        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0x33FFFFFF), Color.Transparent, Color(0x22000000)))))
-        Column(Modifier.fillMaxSize().padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(w.title.uppercase(), color = w.ink, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 13.sp, letterSpacing = 1.5.sp, modifier = Modifier.weight(1f))
-                Text(money(amount), color = w.ink, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            }
-            Spacer(Modifier.weight(1f))
-            if (w == Way.Bank) {
-                CardField("ACCOUNT NUMBER", d.bank.accountNumber, w) { copy(context, "Account", d.bank.accountNumber) }
-                Spacer(Modifier.height(8.dp))
-                Text("${d.bank.bankName}${if (d.bank.branch.isNotBlank()) " · ${d.bank.branch}" else ""}", color = w.ink, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Text(d.bank.accountName, color = w.ink.copy(alpha = 0.85f), fontSize = 13.sp)
-            } else {
-                val p = if (w == Way.Mpesa) d.mpesa else d.airtel
-                Row {
-                    Box(Modifier.weight(1f)) { CardField("PAYBILL", p.paybill, w) { copy(context, "Paybill", p.paybill) } }
-                    Box(Modifier.weight(1f)) { CardField("ACCOUNT", accountFor(p, category), w) { copy(context, "Account", accountFor(p, category)) } }
+    val shape = RoundedCornerShape(26.dp)
+    var copied by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(copied) { if (copied != null) { kotlinx.coroutines.delay(1600); copied = null } }
+    fun copyIt(label: String, value: String) { copy(context, label, value); copied = label }
+    val p = if (w == Way.Mpesa) d.mpesa else d.airtel
+    val number = if (w == Way.Bank) d.bank.accountNumber else p.paybill
+    Column {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(1.586f).lifted(shape, 26.dp, w.accent.copy(alpha = 0.45f)).clip(shape)
+                .background(Brush.linearGradient(listOf(Color(0xFF202024), Color(0xFF0D0D10), w.colors.last().copy(alpha = 0.55f))))
+                .border(1.dp, Color(0x26FFFFFF), shape),
+        ) {
+            // Sheen and the provider's colour wash.
+            Box(Modifier.matchParentSize().background(Brush.radialGradient(listOf(w.accent.copy(alpha = 0.35f), Color.Transparent), radius = 700f, center = androidx.compose.ui.geometry.Offset(900f, 0f))))
+            Box(Modifier.matchParentSize().background(Brush.linearGradient(0.25f to Color.Transparent, 0.42f to Color(0x18FFFFFF), 0.5f to Color.Transparent)))
+            Image(painterResource(R.drawable.dove_mark), null, Modifier.align(Alignment.BottomEnd).padding(14.dp).size(96.dp).graphicsLayer { alpha = 0.12f })
+            Column(Modifier.fillMaxSize().padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BrandMark(w, 26.dp)
+                    Spacer(Modifier.weight(1f))
+                    Text(if (w == Way.Bank) "BANK DEPOSIT" else "PAYBILL", color = Color(0xB3FFFFFF), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(p.name.ifBlank { "Shekinah Sons Global" }, color = w.ink.copy(alpha = 0.85f), fontSize = 13.sp)
+                Spacer(Modifier.height(16.dp))
+                // The chip.
+                Box(Modifier.size(width = 44.dp, height = 32.dp).clip(RoundedCornerShape(7.dp)).background(Brush.linearGradient(listOf(Color(0xFFF7E3A0), Color(0xFFC9A33A), Color(0xFF8C6B16))))) {
+                    Box(Modifier.align(Alignment.Center).fillMaxWidth().height(1.dp).background(Color(0x55000000)))
+                    Box(Modifier.align(Alignment.Center).width(1.dp).fillMaxHeight().background(Color(0x55000000)))
+                    Box(Modifier.align(Alignment.Center).size(width = 18.dp, height = 14.dp).clip(RoundedCornerShape(3.dp)).border(1.dp, Color(0x66000000), RoundedCornerShape(3.dp)))
+                }
+                Spacer(Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { copyIt(if (w == Way.Bank) "Account number" else "Paybill", number) }) {
+                    Text(number.chunked(if (w == Way.Bank) 4 else 3).joinToString("  "), color = Color.White, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold, fontSize = 26.sp, letterSpacing = 1.sp, maxLines = 1)
+                    Spacer(Modifier.width(10.dp))
+                    Icon(Icons.Rounded.ContentCopy, "Copy number", tint = Color(0xCCFFFFFF), modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Column(Modifier.weight(1f)) {
+                        Text(if (w == Way.Bank) "ACCOUNT NAME" else "ACCOUNT", color = Color(0x99FFFFFF), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        Text(if (w == Way.Bank) d.bank.accountName.ifBlank { "Shekinah Sons Global" } else accountFor(p, category),
+                            color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("AMOUNT", color = Color(0x99FFFFFF), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        Text(money(amount), color = w.accent, fontFamily = Inter, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        // Every value, one tap to copy.
+        Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.85f).padding(horizontal = 16.dp, vertical = 6.dp)) {
+            val rows = if (w == Way.Bank) listOfNotNull(
+                "Bank" to d.bank.bankName, "Account name" to d.bank.accountName, "Account number" to d.bank.accountNumber,
+                d.bank.branch.takeIf { it.isNotBlank() }?.let { "Branch" to it }, d.bank.swiftCode.takeIf { it.isNotBlank() }?.let { "SWIFT" to it },
+            ) else listOf("Business number" to p.paybill, "Account number" to accountFor(p, category), "Amount" to "$amount")
+            rows.forEachIndexed { i, (label, value) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(label, style = Type.Meta, color = Brand.Text2)
+                        Text(value, color = Color.White, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    }
+                    val done = copied == label
+                    Row(
+                        Modifier.clip(RoundedCornerShape(50)).background(if (done) w.accent.copy(alpha = 0.2f) else Color(0x14FFFFFF)).clickable { copyIt(label, value) }.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(if (done) Icons.Rounded.CheckCircle else Icons.Rounded.ContentCopy, null, tint = if (done) w.accent else Brand.GoldLight, modifier = Modifier.size(15.dp))
+                        Text(if (done) " Copied" else " Copy", color = if (done) w.accent else Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (i < rows.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x14FFFFFF)))
+            }
+        }
+        if (w != Way.Bank) {
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(50)).background(Brush.horizontalGradient(w.colors))
+                    .clickable { openWallet(context, w) },
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.PhoneAndroid, null, tint = w.ink, modifier = Modifier.size(18.dp))
+                Text("  Open ${w.title}", color = w.ink, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
         }
     }
 }
 
-@Composable
-private fun CardField(label: String, value: String, w: Way, onCopy: () -> Unit) {
-    Column {
-        Text(label, color = w.ink.copy(alpha = 0.75f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable(onClick = onCopy)) {
-            Text(value, color = w.ink, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = 1.sp)
-            Spacer(Modifier.width(8.dp))
-            Icon(Icons.Rounded.ContentCopy, "Copy $label", tint = w.ink.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
-        }
-    }
+// Opens the wallet app if it's installed, otherwise the SIM toolkit menu.
+private fun openWallet(context: Context, w: Way) {
+    val pm = context.packageManager
+    val apps = if (w == Way.Mpesa) listOf("com.safaricom.mpesa.lifestyle", "com.safaricom.mysafaricom") else listOf("com.airtel.africa.selfcare", "com.airtel.money")
+    val launch = (apps + "com.android.stk").firstNotNullOfOrNull { pm.getLaunchIntentForPackage(it) }
+    runCatching { context.startActivity(launch ?: android.content.Intent(android.content.Intent.ACTION_MAIN).setClassName("com.android.stk", "com.android.stk.StkLauncherActivity")) }
 }
 
 // Purchases always use their kind as the account so finance can tell them apart.
@@ -437,13 +527,16 @@ private fun instructions(w: Way, d: GivingDetails, amount: Int, category: String
 }
 
 @Composable
-private fun StepLine(n: Int, text: String) {
-    Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(26.dp).clip(CircleShape).background(Color(0x26D4AF37)).border(1.dp, Color(0x66D4AF37), CircleShape), contentAlignment = Alignment.Center) {
-            Text("$n", color = Brand.Gold, fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+private fun StepLine(n: Int, text: String, last: Boolean = false) {
+    Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(Brand.GoldGradient), contentAlignment = Alignment.Center) {
+                Text("$n", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+            if (!last) Box(Modifier.width(2.dp).weight(1f).background(Brush.verticalGradient(listOf(Color(0x99D4AF37), Color(0x22D4AF37)))))
         }
-        Spacer(Modifier.width(12.dp))
-        Text(text, style = Type.Body.copy(fontSize = 15.sp, lineHeight = 21.sp), color = Brand.White, modifier = Modifier.padding(top = 2.dp))
+        Spacer(Modifier.width(14.dp))
+        Text(text, style = Type.Body.copy(fontSize = 15.sp, lineHeight = 21.sp), color = Brand.White, modifier = Modifier.padding(top = 3.dp, bottom = if (last) 0.dp else 16.dp))
     }
 }
 

@@ -80,13 +80,67 @@ fun AccountPage(session: Session, onDone: (() -> Unit)? = null) {
                 modifier = Modifier.glass().padding(horizontal = 14.dp, vertical = 6.dp))
         }
         Spacer(Modifier.height(28.dp))
-        if (changing) ChangePassword(session) { changing = false }
-        else GhostButton("Change password") { changing = true }
+        var resetting by remember { mutableStateOf(false) }
+        when {
+            resetting -> ResetByEmail(session, member.email) { resetting = false }
+            changing -> {
+                ChangePassword(session) { changing = false }
+                Text("I forgot my current password \u2013 email me a code", color = Brand.BlueText, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 13.5.sp,
+                    modifier = Modifier.padding(top = 12.dp).clickable { changing = false; resetting = true }.padding(6.dp))
+            }
+            else -> GhostButton("Change password") { changing = true }
+        }
         Spacer(Modifier.height(12.dp))
         GhostButton("Sign out") { session.signOut() }
         Spacer(Modifier.height(18.dp))
         Text("Your name is shown with everything you share in the app, like chat messages, prayer requests and testimonies.",
             style = Type.Meta, color = Brand.Muted, textAlign = TextAlign.Center)
+    }
+}
+
+// Reset while signed in, when the current password is forgotten: a code is
+// emailed to the member's address.
+@Composable
+private fun ResetByEmail(session: Session, email: String, done: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var sent by remember { mutableStateOf(false) }
+    var code by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var info by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    fun send() = scope.launch {
+        busy = true; error = null
+        runCatching { session.requestReset(email) }.onSuccess { sent = true; info = "We emailed a 6-digit code to $email. It expires in 15 minutes." }.onFailure { error = it.message }
+        busy = false
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Text("Reset your password", style = Type.Title, color = Brand.White)
+        Spacer(Modifier.height(6.dp))
+        if (!sent) {
+            Text("We'll email a code to $email.", style = Type.Meta, color = Brand.Text2)
+            ErrorNote(error)
+            Spacer(Modifier.height(14.dp))
+            GoldButton("Email me a code", busy = busy) { send() }
+        } else {
+            info?.let { Text(it, style = Type.Meta, color = Brand.Text2) }
+            Spacer(Modifier.height(12.dp))
+            Field("CODE", code, { code = it.filter(Char::isDigit).take(6) }, keyboard = KeyboardType.Number)
+            Spacer(Modifier.height(12.dp))
+            Field("NEW PASSWORD", next, { next = it }, hint = "At least 8 characters", password = true)
+            ErrorNote(error)
+            Spacer(Modifier.height(14.dp))
+            GoldButton("Save new password", busy = busy, enabled = code.length == 6 && next.length >= 8) {
+                scope.launch {
+                    busy = true; error = null
+                    runCatching { session.confirmReset(email, code, next); session.signIn(email, next) }.onSuccess { done() }.onFailure { error = it.message }
+                    busy = false
+                }
+            }
+            Text("Send the code again", color = Brand.BlueText, fontSize = 13.5.sp, modifier = Modifier.padding(top = 10.dp).clickable { send() }.padding(6.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        GhostButton("Cancel", onClick = done)
     }
 }
 
@@ -181,7 +235,7 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
                     }
                     Mode.Forgot -> {
                         Text("Reset your password", style = Type.Title, color = Brand.White)
-                        Text("We will email you a code.", style = Type.Meta, color = Brand.Text2)
+                        Text("Enter your account's email and we'll send you a 6-digit code. Works for members and admins.", style = Type.Meta, color = Brand.Text2)
                         Spacer(Modifier.height(16.dp))
                         Field("EMAIL", email, { email = it }, keyboard = KeyboardType.Email)
                         ErrorNote(error)
@@ -202,6 +256,8 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
                         GoldButton("Set password and sign in", busy = busy, enabled = code.isNotBlank() && password.length >= 8) {
                             run { session.confirmReset(email, code, password); session.signIn(email, password); onDone?.invoke() }
                         }
+                        Text("Didn't get it? Send the code again", color = Brand.BlueText, fontSize = 13.5.sp,
+                            modifier = Modifier.padding(top = 12.dp).clickable { run { session.requestReset(email); info = "A new code was sent to $email" } }.padding(6.dp))
                     }
                 }
             }
