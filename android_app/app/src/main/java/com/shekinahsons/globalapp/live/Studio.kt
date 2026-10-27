@@ -128,6 +128,8 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
 
     var title by remember { mutableStateOf("Sunday Service") }
     var hd by remember { mutableStateOf(true) }
+    var paid by remember { mutableStateOf(false) }
+    var price by remember { mutableStateOf("") }
     var confirmEnd by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var viewers by remember { mutableIntStateOf(0) }
@@ -319,14 +321,25 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
                     Pill("Name banner", Broadcast.bannerOn) { Broadcast.setBanner(!Broadcast.bannerOn, title = title) }
                     Pill("Logo", Broadcast.logoOn) { Broadcast.setLogo(!Broadcast.logoOn) }
                 }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pill("Free for everyone", !paid) { paid = false }
+                    Pill("Paid live", paid) { paid = true }
+                }
+                if (paid) {
+                    Spacer(Modifier.height(8.dp))
+                    Field("PRICE (KSH)", price, { price = it.filter(Char::isDigit).take(7) }, hint = "e.g. 200", keyboard = androidx.compose.ui.text.input.KeyboardType.Number)
+                    Text("Viewers pay with M-Pesa, Airtel Money or bank; the picture unlocks for them once finance confirms. Hosts, moderators and admins watch free.",
+                        style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 4.dp))
+                }
                 Broadcast.error?.let { Text(it, color = Color(0xFFFFB4AE), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp)) }
                 Spacer(Modifier.height(14.dp))
                 Row(
                     Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(50))
                         .background(Brush.horizontalGradient(listOf(Color(0xFFFF5A4E), Color(0xFFD7263D))))
-                        .clickable(enabled = granted && state != "connecting") {
+                        .clickable(enabled = granted && state != "connecting" && (!paid || (price.toIntOrNull() ?: 0) > 0)) {
                             scope.launch {
-                                runCatching { Api.post("/live/start", mapOf("title" to title)) }
+                                runCatching { Api.post("/live/start", mapOf("title" to title, "price" to (if (paid) price.toIntOrNull() ?: 0 else 0))) }
                                     .onSuccess { res ->
                                         val url = (res["publishUrl"] as kotlinx.serialization.json.JsonPrimitive).content
                                         // The stream keeps the shape the phone is held in now.

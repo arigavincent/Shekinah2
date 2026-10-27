@@ -122,8 +122,16 @@ private fun money(v: Int) = "KSh ${"%,d".format(v)}"
 
 // Giving, one step at a time: pick how, pick how much, follow the payment
 // card on your own phone or bank, then confirm with the transaction code.
-// A purchase made with the giving payment flow (a library book).
-data class Purchase(val itemId: String, val title: String, val price: Int)
+// A purchase made with the giving payment flow: a book, an event ticket or a
+// paid live. The kind is also the paybill account (BOOK, EVENT, LIVE) so
+// finance can tell purchases apart.
+data class Purchase(
+    val itemId: String, val title: String, val price: Int, val kind: String = "Book",
+    val after: String = "opens on your shelf as soon as the finance team confirms your payment. We'll keep it ready for you.",
+    val back: String = "Back to the library",
+)
+
+private val purchaseKinds = setOf("Book", "Event", "Live")
 
 @Composable
 fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> Unit = {}) {
@@ -134,7 +142,7 @@ fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> 
     var loadError by remember { mutableStateOf<String?>(null) }
     var step by remember { mutableStateOf(Step.Method) }
     var way by remember { mutableStateOf(Way.Mpesa) }
-    var category by remember { mutableStateOf(if (purchase != null) "Book" else "Tithe") }
+    var category by remember { mutableStateOf(purchase?.kind ?: "Tithe") }
     var amount by remember { mutableStateOf(purchase?.price?.toString() ?: "") }
     var code by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf(prefs.getString("phone", "") ?: "") }
@@ -397,15 +405,15 @@ private fun CardField(label: String, value: String, w: Way, onCopy: () -> Unit) 
     }
 }
 
-// Book purchases always use the account BOOK so finance can tell them apart.
-private fun accountFor(p: Paybill, category: String) = if (category == "Book") "BOOK" else p.account.ifBlank { category.uppercase() }
+// Purchases always use their kind as the account so finance can tell them apart.
+private fun accountFor(p: Paybill, category: String) = if (category in purchaseKinds) category.uppercase() else p.account.ifBlank { category.uppercase() }
 
 private fun instructions(w: Way, d: GivingDetails, amount: Int, category: String): List<String> = when (w) {
     Way.Mpesa -> listOf(
         "Open M-PESA on your phone (SIM toolkit or the M-PESA app).",
         "Choose Lipa na M-PESA, then Pay Bill.",
         "Business number: ${d.mpesa.paybill}",
-        "Account number: ${accountFor(d.mpesa, category)}" + if (category != "Book" && d.mpesa.accountHint.isNotBlank()) " (${d.mpesa.accountHint})" else "",
+        "Account number: ${accountFor(d.mpesa, category)}" + if (category !in purchaseKinds && d.mpesa.accountHint.isNotBlank()) " (${d.mpesa.accountHint})" else "",
         "Amount: ${money(amount)}",
         "Enter your M-PESA PIN and confirm. You'll get an SMS with a transaction code.",
     )
@@ -413,7 +421,7 @@ private fun instructions(w: Way, d: GivingDetails, amount: Int, category: String
         "Open Airtel Money on your phone (the Airtel Money menu or the My Airtel app).",
         "Choose Make Payments, then Pay Bill.",
         "Business number: ${d.airtel.paybill}",
-        "Account number: ${accountFor(d.airtel, category)}" + if (category != "Book" && d.airtel.accountHint.isNotBlank()) " (${d.airtel.accountHint})" else "",
+        "Account number: ${accountFor(d.airtel, category)}" + if (category !in purchaseKinds && d.airtel.accountHint.isNotBlank()) " (${d.airtel.accountHint})" else "",
         "Amount: ${money(amount)}",
         "Enter your Airtel Money PIN and confirm. You'll get an SMS with a transaction ID.",
     )
@@ -491,9 +499,9 @@ private fun BookPending(purchase: Purchase, done: () -> Unit) {
         Spacer(Modifier.height(18.dp))
         Text("Payment received", style = Type.Display, color = Brand.White)
         Spacer(Modifier.height(6.dp))
-        Text("\u201C${purchase.title}\u201D opens on your shelf as soon as the finance team confirms your payment. We'll keep it ready for you.",
+        Text("\u201C${purchase.title}\u201D ${purchase.after}",
             style = Type.Body, color = Brand.Text2, textAlign = TextAlign.Center)
         Spacer(Modifier.height(22.dp))
-        GoldButton("Back to the library", onClick = done)
+        GoldButton(purchase.back, onClick = done)
     }
 }

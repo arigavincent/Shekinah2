@@ -29,6 +29,7 @@ object Api {
     suspend fun post(path: String, body: Map<String, Any?> = emptyMap()): JsonObject = call("POST", path, body)
     suspend fun put(path: String, body: Map<String, Any?> = emptyMap()): JsonObject = call("PUT", path, body)
     suspend fun patch(path: String, body: Map<String, Any?> = emptyMap()): JsonObject = call("PATCH", path, body)
+    suspend fun delete(path: String): JsonObject = call("DELETE", path, null)
 
     inline fun <reified T> decode(element: JsonElement?): T = json.decodeFromJsonElement<T>(element ?: JsonObject(emptyMap()))
 
@@ -46,7 +47,7 @@ object Api {
         val builder = Request.Builder().url("${BuildConfig.API_BASE}/api/v1$path").header("Accept", "application/json")
         token?.let { builder.header("Authorization", "Bearer $it") }
         val payload = body?.let { toJson(it).toString().toRequestBody("application/json".toMediaType()) }
-        builder.method(method, if (method == "GET") null else payload ?: "{}".toRequestBody("application/json".toMediaType()))
+        builder.method(method, if (method == "GET" || (method == "DELETE" && payload == null)) null else payload ?: "{}".toRequestBody("application/json".toMediaType()))
         val response = try {
             http.newCall(builder.build()).execute()
         } catch (e: Exception) {

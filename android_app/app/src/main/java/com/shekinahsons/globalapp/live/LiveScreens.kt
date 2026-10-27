@@ -76,6 +76,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -132,14 +134,36 @@ import java.util.UUID
 data class LiveSession(
     val id: String = "", val title: String = "", val status: String = "", val broadcaster: String = "",
     val startedAt: String? = null, val playbackUrl: String = "", val viewers: Int = 0,
+    // A paid live: access is true once this member has paid (or is staff).
+    val price: Int = 0, val access: Boolean = true,
 )
+
+// The current live session as this member sees it (price and access),
+// refreshed so access appears as soon as a payment is confirmed.
+@Composable
+fun rememberLiveSession(active: Boolean, session: Session): LiveSession? {
+    var current by remember { mutableStateOf<LiveSession?>(null) }
+    LaunchedEffect(active, session.member) {
+        while (active) {
+            runCatching { Api.decode<LiveSession?>(Api.get("/live/current")["session"]) }.onSuccess { current = it }
+            delay(10_000)
+        }
+    }
+    return current
+}
+
+private fun money(n: Int) = "KSh ${"%,d".format(n)}"
 
 // A low-latency player for the live HLS stream.
 @Composable
 fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
     val context = LocalContext.current
-    val player = remember(url) {
-        ExoPlayer.Builder(context).build().apply {
+    val token = com.shekinahsons.globalapp.data.Api.token
+    val player = remember(url, token) {
+        // The member's sign-in goes with every request, so paid lives play for those who paid.
+        val http = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setDefaultRequestProperties(token?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap())
+        ExoPlayer.Builder(context).setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http)).build().apply {
             setMediaItem(MediaItem.Builder().setUri(url).setMimeType(MimeTypes.APPLICATION_M3U8)
                 .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(2500).build()).build())
             prepare()
@@ -194,9 +218,11 @@ fun LiveBadgeRow(viewers: Int, modifier: Modifier = Modifier) {
 
 // Home's "on air" card: the actual live picture, silent, with a red glow.
 @Composable
-fun HomeLivePreview(content: HomeContent, onOpen: () -> Unit) {
+fun HomeLivePreview(content: HomeContent, session: Session, onOpen: () -> Unit) {
     val url = content.live.playbackHlsUrl
     if (url.isBlank()) return
+    val live = rememberLiveSession(true, session)
+    if (live != null && live.price > 0 && !live.access) { LockedLive(live, Modifier.padding(horizontal = 16.dp).padding(top = 22.dp), onOpen); return }
     val player = rememberLivePlayer(url, muted = true)
     val glow = Breathing()
     val shape = RoundedCornerShape(20.dp)
@@ -225,8 +251,70 @@ fun HomeLivePreview(content: HomeContent, onOpen: () -> Unit) {
 // service, and a Go Live button for members allowed to broadcast.
 @Composable
 fun LiveTab(content: HomeContent, session: Session, openGoLive: () -> Unit, openProfile: () -> Unit) {
-    if (content.live.isLive && content.live.playbackHlsUrl.isNotBlank()) LiveWatch(content, session, openProfile)
-    else LiveOffline(content, session, openGoLive)
+    val on = content.live.isLive && content.live.playbackHlsUrl.isNotBlank()
+    val live = rememberLiveSession(on, session)
+    var paying by remember { mutableStateOf(false) }
+    when {
+        !on -> LiveOffline(content, session, openGoLive)
+        live == null -> Box(Modifier.fillMaxSize().background(Brand.Black), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Gold) }
+        live.price > 0 && !live.access && paying -> Column(Modifier.fillMaxSize().background(Brand.Black)) {
+            TopBar(title = "Get access", onBack = { paying = false })
+            com.shekinahsons.globalapp.ui.screens.GivingPage(
+                session,
+                com.shekinahsons.globalapp.ui.screens.Purchase(live.id, live.title, live.price, kind = "Live",
+                    after = "unlocks as soon as the finance team confirms your payment. Stay on the Live tab; it starts by itself.", back = "Back to the live"),
+            ) { paying = false }
+        }
+        live.price > 0 && !live.access -> LivePaywall(live, session, openProfile) { paying = true }
+        else -> LiveWatch(content, session, openProfile)
+    }
+}
+
+// A paid live, before paying: what it is, the price, and the way in.
+@Composable
+private fun LivePaywall(live: LiveSession, session: Session, openProfile: () -> Unit, pay: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(Brand.Black)) {
+        TopBar()
+        Column(Modifier.padding(horizontal = 20.dp)) {
+            LockedLive(live, Modifier, onClick = null)
+            Spacer(Modifier.height(20.dp))
+            Text(live.title, style = Type.Display, color = Brand.White)
+            Text("Hosted by ${live.broadcaster}", style = Type.Meta, color = Brand.GoldLight)
+            Spacer(Modifier.height(10.dp))
+            Text("This is a paid live. Pay once with M-Pesa, Airtel Money or bank and watch the whole broadcast with the live chat.", style = Type.Body, color = Brand.Text2)
+            Spacer(Modifier.height(20.dp))
+            if (session.member == null) GoldButton("Sign in to get access", onClick = openProfile)
+            else GoldButton("Get access \u00B7 ${money(live.price)}", onClick = pay)
+        }
+    }
+}
+
+@Composable
+private fun LockedLive(live: LiveSession, modifier: Modifier, onClick: (() -> Unit)?) {
+    val glow = Breathing()
+    val shape = RoundedCornerShape(20.dp)
+    Box(modifier) {
+        ColorGlow(Brand.Red.copy(alpha = 0.6f * glow), Modifier.matchParentSize().outset(4.dp, drop = 8.dp), blur = 30.dp)
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(16 / 9f).clip(shape).background(Brush.linearGradient(listOf(Color(0xFF3A0D12), Color(0xFF0B0B0D), Color(0xFF2A1F07))))
+                .border(1.dp, Brand.Red.copy(alpha = 0.6f), shape).then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        ) {
+            Image(painterResource(R.drawable.dove_mark), null, Modifier.align(Alignment.Center).size(70.dp).graphicsLayer { alpha = 0.35f })
+            LiveBadgeRow(live.viewers, Modifier.align(Alignment.TopStart).padding(12.dp))
+            Row(Modifier.align(Alignment.TopEnd).padding(12.dp).clip(RoundedCornerShape(50)).background(Brand.GoldGradient).padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Lock, null, tint = Brand.Black, modifier = Modifier.size(14.dp))
+                Text(" ${money(live.price)}", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+            }
+            if (onClick != null) Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(live.title, style = Type.Title, color = Color.White, maxLines = 1)
+                    Text("Paid live \u00B7 tap to get access", style = Type.Meta, color = Color(0xCCFFFFFF))
+                }
+                Text("Watch", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient).padding(horizontal = 18.dp, vertical = 9.dp))
+            }
+        }
+    }
 }
 
 @Composable

@@ -184,6 +184,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                             openProfile = { nav.push(Route.Page("Profile")) },
                             seeHistory = { nav.push(Route.Page("History")) },
                         ),
+                        session = session,
                     )
                     Tab.Sermons -> SermonsScreen(content, library, sermonsStartTab, sermonsStartCategory.also { sermonsStartCategory = null }, { menuOpen = true }, openVideo, openAudio, openClip)
                     Tab.Bible -> BibleScreen()

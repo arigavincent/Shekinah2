@@ -82,6 +82,10 @@ data class Event(
     val location: String = "",
     val imageUrl: String = "",
     val description: String = "",
+    // How to sign up: none, form (in the app) or link (an outside form).
+    val registration: String = "none",
+    val price: Int = 0,
+    val eventDate: String = "",
 )
 
 @Serializable

@@ -72,6 +72,7 @@ fun MenuPage(
     onBack: () -> Unit,
 ) {
     if (page == "Chat") { ChatScreen(session, onSignIn = openProfile, onBack = onBack); return }
+    if (page == "Events") { com.shekinahsons.globalapp.events.EventsScreen(content, session, openProfile, onBack); return }
     if (page == "Library") { com.shekinahsons.globalapp.books.LibraryScreen(session, openProfile, onBack); return }
     Column(Modifier.fillMaxSize().background(Brand.Black)) {
         TopBar(title = MenuPageTitles[page] ?: page, onBack = onBack)

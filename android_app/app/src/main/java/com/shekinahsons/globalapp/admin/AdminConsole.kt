@@ -261,6 +261,7 @@ private fun OverviewPage(session: Session, go: (Section) -> Unit, goLive: () -> 
             item {
                 Text("Quick actions", style = Type.Title, color = Brand.White, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    item { Quick("Events & registrations", Icons.Rounded.Groups) { go(Section.More) } }
                     item { Quick("Send notification", Icons.Rounded.Campaign) { go(Section.More) } }
                     item { Quick("Publish a book", Icons.AutoMirrored.Rounded.MenuBook) { go(Section.Books) } }
                     item { Quick("Give permissions", Icons.Rounded.Groups) { go(Section.Team) } }
@@ -521,11 +522,15 @@ private fun TeamPage() {
 
 @Composable
 private fun MorePage() {
-    var view by rememberSaveable { mutableStateOf("notify") }
+    var view by rememberSaveable { mutableStateOf("events") }
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { PageTitle("More", "Reach everyone, and care for prayer requests") }
-        item { Chips(listOf("notify" to "Send notification", "prayers" to "Prayer requests"), view) { view = it } }
-        if (view == "notify") item { NotifyForm() } else prayers(this)
+        item { PageTitle("More", "Events, notifications and prayer requests") }
+        item { Chips(listOf("events" to "Events", "notify" to "Send notification", "prayers" to "Prayer requests"), view) { view = it } }
+        when (view) {
+            "events" -> item { AdminEventsPane() }
+            "notify" -> item { NotifyForm() }
+            else -> prayers(this)
+        }
     }
 }
 

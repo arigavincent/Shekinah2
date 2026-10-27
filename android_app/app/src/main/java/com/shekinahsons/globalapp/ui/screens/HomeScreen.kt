@@ -120,7 +120,7 @@ class HomeActions(
 // Phaneroo's home order: today's devotional, then (when on air) the live
 // preview, then the video, audio and recap rails.
 @Composable
-fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing: Boolean, actions: HomeActions) {
+fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing: Boolean, actions: HomeActions, session: com.shekinahsons.globalapp.data.Session) {
     val screenW = LocalConfiguration.current.screenWidthDp.dp
     val videos = content.videoSermons
     val audios = content.audioSermons
@@ -159,7 +159,7 @@ fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing:
             item { HomeTopBar(actions.openMenu) }
             item { Greeting(name, actions.openProfile) }
             if (content.devotions.isNotEmpty()) item { DevotionCarousel(content.devotions, actions.openDevotion) }
-            if (content.live.isLive) item { com.shekinahsons.globalapp.live.HomeLivePreview(content, actions.openLive) }
+            if (content.live.isLive) item { com.shekinahsons.globalapp.live.HomeLivePreview(content, session, actions.openLive) }
             else item { ServiceStrip(content.live.nextService) }
 
             if (continuing.isNotEmpty()) {

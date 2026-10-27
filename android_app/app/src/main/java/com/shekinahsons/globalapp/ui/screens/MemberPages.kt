@@ -441,7 +441,7 @@ fun CheckInPage(session: Session, onSignIn: () -> Unit) {
     }
 }
 
-private fun qrBitmap(text: String): Bitmap {
+internal fun qrBitmap(text: String): Bitmap {
     val size = 512
     val matrix = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size, mapOf(com.google.zxing.EncodeHintType.MARGIN to 1))
     val pixels = IntArray(size * size) { i -> if (matrix[i % size, i / size]) 0xFF111111.toInt() else 0xFFFFFFFF.toInt() }
