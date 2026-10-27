@@ -12,6 +12,7 @@ sealed interface Route {
     data class Audio(val sermon: Sermon, val queue: List<Sermon>) : Route
     data class DevotionRead(val devotion: Devotion) : Route
     data class Page(val page: String) : Route
+    data object GoLive : Route
 }
 
 // A tiny back stack: tabs replace the root, details push on top.

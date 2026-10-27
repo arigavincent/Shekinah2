@@ -93,6 +93,9 @@ data class ChatMessage(
     val createdAt: String = "",
     val userId: String = "",
     val replyTo: ChatQuote? = null,
+    val pinned: Boolean = false,
+    // "host" or "moderator" on live chat.
+    val badge: String = "",
     // Local only: still on its way to the server.
     val sending: Boolean = false,
 )

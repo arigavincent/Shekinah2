@@ -78,6 +78,7 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.firebase:firebase-messaging:25.1.3")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("com.github.pedroSG94.RootEncoder:library:2.8.1")
 }
 
 configurations.configureEach {

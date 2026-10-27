@@ -158,7 +158,7 @@ fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing:
             item { HomeTopBar(actions.openMenu) }
             item { Greeting(name, actions.openProfile) }
             if (content.devotions.isNotEmpty()) item { DevotionCarousel(content.devotions, actions.openDevotion) }
-            if (content.live.isLive) item { LiveCard(content, actions.openLive) }
+            if (content.live.isLive) item { com.shekinahsons.globalapp.live.HomeLivePreview(content, actions.openLive) }
             else item { ServiceStrip(content.live.nextService) }
 
             if (continuing.isNotEmpty()) {
@@ -306,29 +306,6 @@ private fun DevotionCard(d: Devotion, hasMore: Boolean, isToday: Boolean, onOpen
     }
 }
 
-@Composable
-private fun LiveCard(content: HomeContent, onOpen: () -> Unit) {
-    Column(Modifier.padding(horizontal = 16.dp).padding(top = 26.dp)) {
-        Box {
-            ColorGlow(Brand.Red.copy(alpha = 0.8f * Breathing()), Modifier.matchParentSize().outset(4.dp, drop = 8.dp), blur = 30.dp)
-            Box(
-                Modifier.fillMaxWidth().aspectRatio(16 / 9f).clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, Brand.Red.copy(alpha = 0.6f), RoundedCornerShape(20.dp)).pressable(onOpen),
-            ) {
-                FadeImage(content.videoSermons.firstOrNull()?.thumbnail, Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x88000000), 0.4f to Color.Transparent, 1f to Color(0xE6000000))))
-                LiveBadge(Modifier.align(Alignment.TopStart).padding(12.dp))
-                Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
-                    Text(content.live.title.ifBlank { "Live Service" }, style = Type.Title, color = Color.White, maxLines = 1)
-                    Text("Tap to watch and join the service", style = Type.Meta, color = Color(0xCCFFFFFF))
-                }
-            }
-        }
-    }
-}
-
-// Video sermon: the edited thumbnail with its own glow, the title in two
-// plain lines beneath (Phaneroo's style).
 @Composable
 private fun VideoCard(s: Sermon, width: Dp, offset: Float, onOpen: () -> Unit) {
     val focus = (1f - abs(offset)).coerceIn(0f, 1f)

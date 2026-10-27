@@ -19,6 +19,20 @@ class Session(private val context: Context) {
 
     val firstName get() = member?.name?.trim()?.split(" ")?.firstOrNull().orEmpty()
 
+    // What an admin has allowed this member to do (go live, moderate, publish).
+    var permissions by mutableStateOf<List<String>>(prefs.getStringSet("permissions", emptySet()).orEmpty().toList())
+        private set
+    val canBroadcast get() = "live:broadcast" in permissions
+    val canModerate get() = "live:moderate" in permissions
+    val canPublish get() = "books:publish" in permissions
+
+    private suspend fun loadPermissions() {
+        runCatching { Api.decode<List<String>>(Api.get("/permissions/me")["permissions"]) }.onSuccess {
+            permissions = it
+            prefs.edit().putStringSet("permissions", it.toSet()).apply()
+        }
+    }
+
     init {
         val sealed = prefs.getString("token", null)
         val token = sealed?.let { runCatching { Vault.open(it) }.getOrNull() }
@@ -37,6 +51,7 @@ class Session(private val context: Context) {
     suspend fun signIn(email: String, password: String) {
         val res = Api.post("/auth/login", mapOf("email" to email.trim(), "password" to password))
         save(Api.decode<String>(res["token"]), Api.decode(res["user"]))
+        loadPermissions()
     }
 
     suspend fun register(name: String, email: String, password: String) {
@@ -60,6 +75,7 @@ class Session(private val context: Context) {
         try {
             val res = Api.get("/auth/me")
             member = Api.decode(res["user"])
+            loadPermissions()
         } catch (e: ApiException) {
             if (e.status == 401) signOut()
         }
@@ -68,6 +84,7 @@ class Session(private val context: Context) {
     fun signOut() {
         Api.token = null
         member = null
+        permissions = emptyList()
         prefs.edit().clear().apply()
     }
 }

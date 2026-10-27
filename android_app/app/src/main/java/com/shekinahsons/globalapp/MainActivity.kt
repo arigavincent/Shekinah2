@@ -56,7 +56,6 @@ import com.shekinahsons.globalapp.ui.screens.DevotionReader
 import com.shekinahsons.globalapp.ui.screens.DevotionsScreen
 import com.shekinahsons.globalapp.ui.screens.HomeActions
 import com.shekinahsons.globalapp.ui.screens.HomeScreen
-import com.shekinahsons.globalapp.ui.screens.LiveScreen
 import com.shekinahsons.globalapp.ui.screens.MiniPlayer
 import com.shekinahsons.globalapp.ui.screens.SermonsScreen
 import com.shekinahsons.globalapp.ui.screens.VideoPlayerScreen
@@ -89,6 +88,8 @@ class MainActivity : ComponentActivity() {
                 val refreshing by repo.refreshing.collectAsState()
                 val scope = rememberCoroutineScope()
                 LaunchedEffect(Unit) { repo.refresh(); app.session.refresh() }
+                // Keep Home current (a service going live shows up by itself).
+                LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(20_000); repo.refresh() } }
                 val c = content
                 if (c == null) Splash(refreshing) { scope.launch { repo.refresh() } } else AppShell(c, audio, app.library, app.session, refreshing) { scope.launch { repo.refresh() } }
             }
@@ -107,6 +108,7 @@ private fun Route.key(): String = when (this) {
     is Route.Audio -> "audio:${sermon.id}"
     is Route.DevotionRead -> "devotion:${devotion.id}"
     is Route.Page -> "page:$page"
+    Route.GoLive -> "golive"
 }
 
 
@@ -173,11 +175,12 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                     Tab.Sermons -> SermonsScreen(content, library, sermonsStartTab, sermonsStartCategory.also { sermonsStartCategory = null }, { menuOpen = true }, openVideo, openAudio, openClip)
                     Tab.Bible -> BibleScreen()
                     Tab.Devotions -> DevotionsScreen(content) { nav.push(Route.DevotionRead(it)) }
-                    Tab.Live -> LiveScreen(content)
+                    Tab.Live -> com.shekinahsons.globalapp.live.LiveTab(content, session, openGoLive = { nav.push(Route.GoLive) }, openProfile = { nav.push(Route.Page("Profile")) })
                 }
                 is Route.Video -> VideoPlayerScreen(r.sermon, r.queue, library, onOpen = { nav.back(); nav.push(Route.Video(it, r.queue)) }, onBack = { nav.back() })
                 is Route.Audio -> AudioPlayerScreen(r.sermon, r.queue, audio) { nav.back() }
                 is Route.DevotionRead -> DevotionReader(r.devotion) { nav.back() }
+                Route.GoLive -> com.shekinahsons.globalapp.live.GoLiveScreen(session) { nav.back(); refresh() }
                 is Route.Page -> MenuPage(
                     r.page, content, library, session, openVideo, openAudio,
                     openProfile = { nav.push(Route.Page("Profile")) },

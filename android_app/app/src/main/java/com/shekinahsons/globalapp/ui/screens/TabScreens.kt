@@ -142,31 +142,3 @@ fun DevotionReader(d: Devotion, onBack: () -> Unit) {
     }
 }
 
-@Composable
-fun LiveScreen(content: HomeContent) {
-    val live = content.live
-    val glow = Breathing(3600, 0.45f, 1f)
-    Column(Modifier.fillMaxSize().background(Brand.Black)) {
-        TopBar()
-        ScreenTitle("Live", if (live.isLive) "We are live right now" else "Join us for the next service")
-        Spacer(Modifier.height(20.dp))
-        Box(Modifier.padding(horizontal = 20.dp)) {
-            ColorGlow((if (live.isLive) Brand.Red else Brand.Gold).copy(alpha = 0.45f * glow), Modifier.matchParentSize().padding(10.dp), blur = 40.dp)
-            Box(
-                Modifier.fillMaxWidth().aspectRatio(16 / 10f).clip(RoundedCornerShape(22.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF241B06), Color(0xFF0B0B0D), Color(0xFF0B1630))))
-                    .border(1.dp, Brand.Gold.copy(alpha = 0.35f), RoundedCornerShape(22.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-                    Text(if (live.isLive) "ON AIR" else "NEXT SERVICE", style = Type.Label, color = if (live.isLive) Brand.Red else Brand.Gold)
-                    Spacer(Modifier.height(10.dp))
-                    Text(if (live.isLive) live.title.ifBlank { "Live Service" } else live.nextService.ifBlank { "Sunday Service" }, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Services stream here live. You will get a notification when we go on air.", style = Type.Meta.copy(fontSize = 13.sp), color = Brand.Text2, textAlign = TextAlign.Center)
-                }
-            }
-        }
-    }
-}
-
