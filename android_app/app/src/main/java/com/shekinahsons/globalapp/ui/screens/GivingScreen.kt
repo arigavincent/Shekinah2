@@ -178,12 +178,18 @@ fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> 
                 Column(Modifier.fillMaxWidth()) {
                     when (st) {
                         Step.Method -> {
-                            Text("How would you like to give?", style = Type.Title, color = Brand.White)
-                            Spacer(Modifier.height(4.dp))
-                            Text("“God loves a cheerful giver.” 2 Corinthians 9:7", fontFamily = Scripture, fontSize = 15.sp, color = Brand.GoldLight)
+                            if (purchase != null) {
+                                Text("How would you like to pay?", style = Type.Title, color = Brand.White)
+                                Spacer(Modifier.height(4.dp))
+                                Text("${purchase.title} · ${money(purchase.price)}", color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                            } else {
+                                Text("How would you like to give?", style = Type.Title, color = Brand.White)
+                                Spacer(Modifier.height(4.dp))
+                                Text("“God loves a cheerful giver.” 2 Corinthians 9:7", fontFamily = Scripture, fontSize = 15.sp, color = Brand.GoldLight)
+                            }
                             Spacer(Modifier.height(16.dp))
                             listOf(Way.Mpesa to d.mpesa.enabled, Way.Airtel to d.airtel.enabled, Way.Bank to d.bank.enabled).filter { it.second }.forEach { (w, _) ->
-                                MethodCard(w) { way = w; error = null; step = Step.Amount }
+                                MethodCard(w) { way = w; error = null; step = if (purchase != null) Step.Pay else Step.Amount }
                                 Spacer(Modifier.height(12.dp))
                             }
                             if (d.note.isNotBlank()) Text(d.note, style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 4.dp))
@@ -203,7 +209,7 @@ fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> 
                             GoldButton("Continue", enabled = (amount.toIntOrNull() ?: 0) > 0) { step = Step.Pay }
                         }
                         Step.Pay -> {
-                            BackRow("Pay ${money(amount.toIntOrNull() ?: 0)} · $category") { step = Step.Amount }
+                            BackRow(if (purchase != null) "Pay ${money(purchase.price)} · ${purchase.title}" else "Pay ${money(amount.toIntOrNull() ?: 0)} · $category") { step = if (purchase != null) Step.Method else Step.Amount }
                             PaymentCard(way, d, amount.toIntOrNull() ?: 0, category)
                             Spacer(Modifier.height(18.dp))
                             Text("Follow these steps", style = Type.CardTitle, color = Brand.White)
@@ -213,7 +219,7 @@ fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> 
                             GoldButton("I've paid — confirm") { step = Step.Confirm; error = null }
                         }
                         Step.Confirm -> {
-                            BackRow("Confirm your gift") { step = Step.Pay }
+                            BackRow(if (purchase != null) "Confirm your payment" else "Confirm your gift") { step = Step.Pay }
                             Text(
                                 if (way == Way.Bank) "Enter the reference on your bank slip or transfer confirmation."
                                 else "Enter the transaction code from the ${way.title} message you received (e.g. SJK4XY7Z2P).",
@@ -370,7 +376,7 @@ private fun PaymentCard(w: Way, d: GivingDetails, amount: Int, category: String)
                 val p = if (w == Way.Mpesa) d.mpesa else d.airtel
                 Row {
                     Box(Modifier.weight(1f)) { CardField("PAYBILL", p.paybill, w) { copy(context, "Paybill", p.paybill) } }
-                    Box(Modifier.weight(1f)) { CardField("ACCOUNT", p.account.ifBlank { category.uppercase() }, w) { copy(context, "Account", p.account.ifBlank { category.uppercase() }) } }
+                    Box(Modifier.weight(1f)) { CardField("ACCOUNT", accountFor(p, category), w) { copy(context, "Account", accountFor(p, category)) } }
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(p.name.ifBlank { "Shekinah Sons Global" }, color = w.ink.copy(alpha = 0.85f), fontSize = 13.sp)
@@ -391,12 +397,15 @@ private fun CardField(label: String, value: String, w: Way, onCopy: () -> Unit) 
     }
 }
 
+// Book purchases always use the account BOOK so finance can tell them apart.
+private fun accountFor(p: Paybill, category: String) = if (category == "Book") "BOOK" else p.account.ifBlank { category.uppercase() }
+
 private fun instructions(w: Way, d: GivingDetails, amount: Int, category: String): List<String> = when (w) {
     Way.Mpesa -> listOf(
         "Open M-PESA on your phone (SIM toolkit or the M-PESA app).",
         "Choose Lipa na M-PESA, then Pay Bill.",
         "Business number: ${d.mpesa.paybill}",
-        "Account number: ${d.mpesa.account.ifBlank { category.uppercase() }}" + if (d.mpesa.accountHint.isNotBlank()) " (${d.mpesa.accountHint})" else "",
+        "Account number: ${accountFor(d.mpesa, category)}" + if (category != "Book" && d.mpesa.accountHint.isNotBlank()) " (${d.mpesa.accountHint})" else "",
         "Amount: ${money(amount)}",
         "Enter your M-PESA PIN and confirm. You'll get an SMS with a transaction code.",
     )
@@ -404,7 +413,7 @@ private fun instructions(w: Way, d: GivingDetails, amount: Int, category: String
         "Open Airtel Money on your phone (the Airtel Money menu or the My Airtel app).",
         "Choose Make Payments, then Pay Bill.",
         "Business number: ${d.airtel.paybill}",
-        "Account number: ${d.airtel.account.ifBlank { category.uppercase() }}" + if (d.airtel.accountHint.isNotBlank()) " (${d.airtel.accountHint})" else "",
+        "Account number: ${accountFor(d.airtel, category)}" + if (category != "Book" && d.airtel.accountHint.isNotBlank()) " (${d.airtel.accountHint})" else "",
         "Amount: ${money(amount)}",
         "Enter your Airtel Money PIN and confirm. You'll get an SMS with a transaction ID.",
     )

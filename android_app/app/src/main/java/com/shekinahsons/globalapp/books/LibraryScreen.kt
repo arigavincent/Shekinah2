@@ -209,7 +209,7 @@ private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublis
     var query by remember { mutableStateOf("") }
     var kind by remember { mutableStateOf("all") }
     val shown = books.filter { (kind == "all" || it.kind == kind) && (query.isBlank() || listOf(it.title, it.author, it.category, it.description).any { f -> f.contains(query, true) }) }
-    val reading = remember(books, Books.version) { books.filter { it.readable && Books.lastReadAt(context, it.id) > 0 }.sortedByDescending { Books.lastReadAt(context, it.id) } }
+    val reading = remember(books.toList(), Books.version) { books.filter { it.readable && Books.lastReadAt(context, it.id) > 0 }.sortedByDescending { Books.lastReadAt(context, it.id) } }
     val featured = books.take(6)
     val screenW = LocalConfiguration.current.screenWidthDp.dp
 
@@ -352,14 +352,14 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
                 }
             }
             Column(Modifier.padding(horizontal = 22.dp, vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(kindName(b.kind).uppercase() + if (b.category.isNotBlank()) " · ${b.category.uppercase()}" else "", style = Type.Label, color = Brand.Gold)
+                Text(kindName(b.kind).uppercase() + if (b.category.isNotBlank() && !b.category.equals(kindName(b.kind), true)) " · ${b.category.uppercase()}" else "", style = Type.Label, color = Brand.Gold)
                 Spacer(Modifier.height(8.dp))
                 Text(b.title, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
                 if (b.author.isNotBlank()) Text("by ${b.author}", style = Type.Body, color = Brand.GoldLight)
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     InfoChip(price(b))
-                    if (b.fileSizeBytes > 0) InfoChip("${"%.1f".format(b.fileSizeBytes / 1_048_576f)} MB")
+                    if (b.fileSizeBytes > 0) InfoChip(if (b.fileSizeBytes < 1_048_576) "${(b.fileSizeBytes / 1024).coerceAtLeast(1)} KB" else "${"%.1f".format(b.fileSizeBytes / 1_048_576f)} MB")
                     InfoChip("Read in the app")
                 }
                 Spacer(Modifier.height(22.dp))
