@@ -76,6 +76,10 @@ dependencies {
     implementation(libs.coil.okhttp)
     implementation(libs.serialization.json)
     implementation("com.google.zxing:core:3.5.3")
+    // Camera for scanning members' QR codes at the gate.
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
     implementation("com.google.firebase:firebase-messaging:25.1.3")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
     implementation("com.github.pedroSG94.RootEncoder:library:2.8.1")

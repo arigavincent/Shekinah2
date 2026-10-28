@@ -46,6 +46,7 @@ import com.shekinahsons.globalapp.data.Sermon
 import com.shekinahsons.globalapp.ui.components.FadeImage
 import com.shekinahsons.globalapp.ui.components.TopBar
 import com.shekinahsons.globalapp.ui.components.pressable
+import com.shekinahsons.globalapp.ui.components.glass
 import com.shekinahsons.globalapp.ui.theme.Brand
 import com.shekinahsons.globalapp.ui.theme.Cinzel
 import com.shekinahsons.globalapp.ui.theme.Inter
@@ -72,6 +73,9 @@ fun MenuPage(
     onBack: () -> Unit,
 ) {
     if (page == "Chat") { ChatScreen(session, onSignIn = openProfile, onBack = onBack); return }
+    if (page == "ReadingPlans") { com.shekinahsons.globalapp.readingplans.PlansScreen(session, openProfile, openReference, onBack); return }
+    if (page == "Gate") { com.shekinahsons.globalapp.attendance.GateScreen(content, onBack); return }
+    if (page == "Serve") { com.shekinahsons.globalapp.serve.ServeScreen(session, openProfile, onBack); return }
     if (page == "Events") { com.shekinahsons.globalapp.events.EventsScreen(content, session, openProfile, onBack); return }
     if (page == "Library") { com.shekinahsons.globalapp.books.LibraryScreen(session, openProfile, onBack); return }
     Column(Modifier.fillMaxSize().background(Brand.Black)) {
@@ -157,6 +161,20 @@ private fun BranchesPage(content: HomeContent) {
                             Icon(Icons.Rounded.Call, null, tint = Brand.Black, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("Call ${b.phone}", color = Brand.Black, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        }
+                    }
+                    if (b.lat != 0.0 && b.lng != 0.0) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            Modifier.glass().pressable {
+                                val geo = Uri.parse("geo:${b.lat},${b.lng}?q=${b.lat},${b.lng}(${Uri.encode(b.name)})")
+                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, geo)) }
+                            }.padding(horizontal = 16.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Rounded.Place, null, tint = Brand.GoldLight, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Directions", color = Brand.White, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         }
                     }
                 }

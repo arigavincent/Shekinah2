@@ -25,6 +25,7 @@ class Session(private val context: Context) {
     val canBroadcast get() = "live:broadcast" in permissions
     val canModerate get() = "live:moderate" in permissions
     val canPublish get() = "books:publish" in permissions
+    val canScan get() = "checkin:scan" in permissions
     // Admins (by their role in the database) get the admin console.
     val isAdmin get() = member?.role == "admin" || member?.role == "super_admin"
 

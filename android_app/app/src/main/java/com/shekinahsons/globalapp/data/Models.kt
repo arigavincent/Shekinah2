@@ -96,6 +96,8 @@ data class Branch(
     val services: String = "",
     val phone: String = "",
     val imageUrl: String = "",
+    val lat: Double = 0.0,
+    val lng: Double = 0.0,
 )
 
 @Serializable

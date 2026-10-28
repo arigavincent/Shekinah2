@@ -175,7 +175,7 @@ private fun NewEvent(onBack: () -> Unit, done: () -> Unit) {
     }
 }
 
-private suspend fun uploadImage(context: android.content.Context, uri: Uri): String = withContext(Dispatchers.IO) {
+internal suspend fun uploadImage(context: android.content.Context, uri: Uri): String = withContext(Dispatchers.IO) {
     val bytes = context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
     val type = context.contentResolver.getType(uri) ?: "image/jpeg"
     val body = MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart("kind", "image")

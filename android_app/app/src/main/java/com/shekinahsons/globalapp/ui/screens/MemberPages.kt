@@ -245,12 +245,21 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var sent by remember { mutableStateOf(false) }
+    val mine = remember { mutableStateListOf<Testimony>() }
     LaunchedEffect(reload) { runCatching { all.clear(); all.addAll(Api.decode<List<Testimony>>(Api.get("/testimonies")["testimonies"])) } }
+    LaunchedEffect(reload, session.member) {
+        if (session.member != null) runCatching { Api.decode<List<Testimony>>(Api.get("/testimonies/mine")["testimonies"]) }.onSuccess { mine.clear(); mine.addAll(it) }
+    }
     LazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Segments(listOf("Testimonies", "Share yours"), tab) { tab = it } }
         if (tab == "Share yours") item {
             if (session.member == null) SignInCard("Sign in to share what God has done. You can choose to share it anonymously.", onSignIn)
-            else if (sent) Card { Text("Thank you! 🙌", style = Type.Title, color = Brand.White); Text("Your testimony is now on the Testimonies wall for the family to read.", style = Type.Body, color = Brand.Text2) }
+            else if (sent) Card {
+                Text("Thank you! 🙌", style = Type.Title, color = Brand.White)
+                Text("Your testimony is now on the Testimonies wall for the family to read.", style = Type.Body, color = Brand.Text2)
+                Spacer(Modifier.height(14.dp))
+                GoldButton("Share another testimony") { sent = false; title = ""; body = ""; anonymous = false }
+            }
             else Card {
                 Text("What has God done?", style = Type.Title, color = Brand.White)
                 Spacer(Modifier.height(12.dp))
@@ -269,7 +278,19 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
                     }
                 }
             }
-        } else {
+        }
+        if (tab == "Share yours" && mine.isNotEmpty()) {
+            item { Text("Your testimonies (${mine.size})", style = Type.Title, color = Brand.White, modifier = Modifier.padding(top = 8.dp)) }
+            items(mine, key = { "mine-" + it.id }) { t ->
+                Card {
+                    Text(t.title, style = Type.CardTitle, color = Brand.White)
+                    Text(t.body, style = Type.Body.copy(fontSize = 14.sp), color = Brand.Text2, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text("${prettyDate(t.createdAt)} \u00B7 ${t.likeCount} amen" + if (t.displayName.contains("(anonymous)")) " \u00B7 shared anonymously" else "",
+                        style = Type.Meta, color = Brand.GoldLight, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
+        }
+        if (tab != "Share yours") {
             if (all.isEmpty()) item { Empty("No testimonies yet. Share the first one!") }
             items(all, key = { it.id }) { t ->
                 Card {

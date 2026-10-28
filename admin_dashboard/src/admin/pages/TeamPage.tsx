@@ -8,7 +8,8 @@ import { listMembers, setMemberPermissions, type Member } from "../api/adminMemb
 const PERMISSIONS: { key: string; label: string; detail: string }[] = [
   { key: "live:broadcast", label: "Go live", detail: "Stream services from the app's Live tab" },
   { key: "live:moderate", label: "Moderate live chat", detail: "Pin, remove and block comments; slow mode" },
-  { key: "books:publish", label: "Publish books", detail: "Add books and materials, set free or a price" }
+  { key: "books:publish", label: "Publish books", detail: "Add books and materials, set free or a price" },
+  { key: "checkin:scan", label: "Gate check-in", detail: "Scan members' codes and see attendance" }
 ];
 
 export function TeamPage() {

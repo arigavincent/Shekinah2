@@ -218,6 +218,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
             },
             version = BuildConfig.VERSION_NAME,
             admin = session.isAdmin,
+            scanner = session.canScan,
         )
 
         if (route is Route.Root) {

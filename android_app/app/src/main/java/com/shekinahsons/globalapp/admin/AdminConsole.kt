@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.VolunteerActivism
 import androidx.compose.material3.CircularProgressIndicator
@@ -123,6 +124,7 @@ private val permissionInfo = listOf(
     Triple("live:broadcast", "Go live", "Stream services from the Live tab"),
     Triple("live:moderate", "Moderate live chat", "Pin, remove and block comments"),
     Triple("books:publish", "Publish books", "Add books and set free or a price"),
+    Triple("checkin:scan", "Gate check-in", "Scan members' codes and see attendance"),
 )
 private fun permissionName(p: String) = permissionInfo.firstOrNull { it.first == p }?.second ?: p
 
@@ -146,8 +148,13 @@ private fun ago(iso: String): String = runCatching {
 fun AdminConsole(session: Session, openApp: () -> Unit, openLive: () -> Unit) {
     var section by rememberSaveable { mutableStateOf(Section.Overview) }
     var goLive by remember { mutableStateOf(false) }
-    BackHandler(enabled = section != Section.Overview && !goLive) { section = Section.Overview }
+    var gate by remember { mutableStateOf(false) }
+    BackHandler(enabled = section != Section.Overview && !goLive && !gate) { section = Section.Overview }
 
+    if (gate) {
+        com.shekinahsons.globalapp.attendance.GateScreen(null) { gate = false }
+        return
+    }
     if (goLive) {
         GoLiveScreen(session) { goLive = false }
         return
@@ -159,7 +166,7 @@ fun AdminConsole(session: Session, openApp: () -> Unit, openLive: () -> Unit) {
             if (section != Section.Books) Header(session, openApp)
             AnimatedContent(section, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "admin", modifier = Modifier.weight(1f)) { s ->
                 when (s) {
-                    Section.Overview -> OverviewPage(session, go = { section = it }, goLive = { goLive = true }, openLive = openLive)
+                    Section.Overview -> OverviewPage(session, go = { section = it }, goLive = { goLive = true }, openLive = openLive, openGate = { gate = true })
                     Section.Payments -> PaymentsPage()
                     Section.Team -> TeamPage()
                     Section.Books -> LibraryScreen(session, openProfile = {}, onBack = { section = Section.Overview }, bottomInset = 76.dp)
@@ -226,7 +233,7 @@ private fun PageTitle(title: String, subtitle: String) {
 // ---------------------------------------------------------------- Overview
 
 @Composable
-private fun OverviewPage(session: Session, go: (Section) -> Unit, goLive: () -> Unit, openLive: () -> Unit) {
+private fun OverviewPage(session: Session, go: (Section) -> Unit, goLive: () -> Unit, openLive: () -> Unit, openGate: () -> Unit) {
     var o by remember { mutableStateOf<AdminOverview?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
@@ -261,6 +268,7 @@ private fun OverviewPage(session: Session, go: (Section) -> Unit, goLive: () -> 
             item {
                 Text("Quick actions", style = Type.Title, color = Brand.White, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    item { Quick("Gate check-in", Icons.Rounded.QrCodeScanner, onClick = openGate) }
                     item { Quick("Events & registrations", Icons.Rounded.Groups) { go(Section.More) } }
                     item { Quick("Send notification", Icons.Rounded.Campaign) { go(Section.More) } }
                     item { Quick("Publish a book", Icons.AutoMirrored.Rounded.MenuBook) { go(Section.Books) } }
@@ -487,6 +495,11 @@ private fun TeamPage() {
                         }
                         if (admin) Text("ADMIN", color = Brand.Black, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.Gold).padding(horizontal = 9.dp, vertical = 3.dp))
                     }
+                    var resetNote by remember(m.id) { mutableStateOf<String?>(null) }
+                    Text(resetNote ?: "Send password reset code", color = if (resetNote != null) Color(0xFF4ADE80) else Brand.BlueText, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).clickable(enabled = resetNote == null) {
+                            scope.launch { runCatching { Api.post("/admin/members/${m.id}/reset-password") }.onSuccess { resetNote = "Reset code emailed to ${m.email}" }.onFailure { error = it.message } }
+                        }.padding(vertical = 4.dp))
                     if (admin) Text("Admins can do everything.", style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 10.dp))
                     else permissionInfo.forEach { (key, label, detail) ->
                         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -524,10 +537,12 @@ private fun TeamPage() {
 private fun MorePage() {
     var view by rememberSaveable { mutableStateOf("events") }
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { PageTitle("More", "Events, notifications and prayer requests") }
-        item { Chips(listOf("events" to "Events", "notify" to "Send notification", "prayers" to "Prayer requests"), view) { view = it } }
+        item { PageTitle("More", "Events, serve teams, branches, notifications and prayer") }
+        item { Chips(listOf("events" to "Events", "serve" to "Serve", "branches" to "Branches", "notify" to "Send notification", "prayers" to "Prayer requests"), view) { view = it } }
         when (view) {
             "events" -> item { AdminEventsPane() }
+            "serve" -> item { AdminServePane() }
+            "branches" -> item { AdminBranchesPane() }
             "notify" -> item { NotifyForm() }
             else -> prayers(this)
         }
