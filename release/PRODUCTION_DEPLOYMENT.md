@@ -8,7 +8,7 @@ API health: https://shekinah-sons-backend.onrender.com/api/v1/healthz
 
 ## Android release
 
-`artifacts/shekinah-production.apk` is the installable ministry-signed Android release, version 2.0.2 (version code 3). Its compiled API base is the HTTPS Render origin above; the localhost development API is absent. The same verified APK was installed on the TECNO, replacing the differently signed development build with the owner's explicit approval. A copy is also in the phone's Downloads folder as `Shekinah-2.0.2.apk`.
+`artifacts/shekinah-production.apk` is the installable ministry-signed Android release, version 2.0.3 (version code 4). Its compiled API base is the HTTPS Render origin above; the localhost development API is absent. The same verified APK was installed on the TECNO, replacing the differently signed development build with the owner's explicit approval. A copy is also in the phone's Downloads folder as `Shekinah-2.0.3.apk`.
 
 Signing certificate SHA-256:
 `5D:28:C2:E2:37:0F:93:4D:8B:A6:9B:1D:CD:52:2B:64:B1:D8:45:4F:91:87:84:48:2B:52:BB:F5:EA:C2:69:4E`
@@ -41,3 +41,11 @@ SMTP remains deferred. Actual Spotify podcast RSS, merchant/payment and other pr
 Manual security/dependency review was performed. The requested official Claude Security workflow could not run because its required Workflow tool was unavailable. No successful official scan is claimed. Cloudflare object upload/CORS checks passed; broader account/zone WAF/DNS inspection was not available with the object-storage credential.
 
 Keep secret files, database dumps, private signing material and `.local` acceptance logs out of source control.
+
+## Live delay and finance follow-up
+
+The resumed older admin address https://shekinah2.onrender.com now redirects to the current admin, retaining paths and avoiding an outdated June dashboard. Both entry points reach one version and one CORS origin.
+
+Live capture now targets two-second segments with one-second keyframes. Native device encoding measured2.04,2.00,2.00,1.93seconds versus the earlierapproximately5.8second segments. Live discovery polls everytwo seconds, the player uses500ms startup buffering and a1500ms target offset with catch-up, and live playlists request the newest media. Replays retain full start-to-finish playback and purchase protection. End-to-end latency still depends on encoder/upload/player/network conditions; zero-delay or sub-second playback is not promised on this segmented transport.
+
+Confirmed payments now expose Open receipt and Print receipt in the native finance tools, plus Print receipt in the web Payments page. Authorization remains payer/administrator/finance:manage; pending payments cannot produce receipts. Android one-pageA4printpreview verified without sending a print job. BrowserPDF.js uses print rendering intent so background print windows do not wait on animation frames.

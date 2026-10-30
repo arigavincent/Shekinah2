@@ -61,6 +61,7 @@ class DirectLiveWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c, p) 
             for (meta in dir.listFiles().orEmpty().filter { it.name.matches(Regex("[0-9]{6}\\.json")) }.sortedBy { it.name }) {
                 val chunk = Api.json.decodeFromString<DirectChunk>(meta.readText())
                 val file = File(dir, "%06d.ts".format(chunk.sequence))
+                val sentAt = android.os.SystemClock.elapsedRealtime()
                 val base = "/live/direct/$id/segments"
                 val reservation = transfer.json("POST", base, mapOf("sequence" to JsonPrimitive(chunk.sequence), "size" to JsonPrimitive(chunk.size), "sha256" to JsonPrimitive(chunk.sha256), "duration" to JsonPrimitive(chunk.duration)))
                 if (reservation["ready"]?.jsonPrimitive?.boolean != true) {
@@ -70,7 +71,7 @@ class DirectLiveWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c, p) 
                     transfer.request("POST", "$base/${chunk.sequence}/commit")
                 }
                 meta.delete(); file.delete()
-                Broadcast.directSaved(id, chunk.size, chunk.duration)
+                Broadcast.directSaved(id, chunk.size, chunk.duration, android.os.SystemClock.elapsedRealtime() - sentAt)
             }
             if (File(dir,"ended").exists()) {
                 val status = transfer.request("GET","/live/direct/$id/status")["status"]?.jsonPrimitive?.content

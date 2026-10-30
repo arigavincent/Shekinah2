@@ -25,14 +25,20 @@ async function queue<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore
 }
 async function pending() { return queue<Segment[]>("readonly", (store) => store.getAll()); }
 let localUpload: Promise<void> | null = null;
-export async function resumeDirectUploads(onStatus: (message: string) => void = () => {}) {
+export async function resumeDirectUploads(onStatus: (message: string) => void = () => {}, activeSession?: string) {
   // One uploader per browser, including across tabs. A retry is idempotent.
   const run = async () => {
     const account = getUser()?.id;
+    const jobs: Promise<void>[] = [], failures: { session: string; error: unknown }[] = [];
+    const blocked = new Set<string>();
+    try {
     for (const item of (await pending()).filter((s) => s.account === account).sort((a, b) => a.session.localeCompare(b.session) || a.sequence - b.sequence)) {
-      const data = await apiRequest<{ ready: boolean; url?: string; headers?: Record<string, string> }>(`/api/v1/live/direct/${item.session}/segments`, {
+      if (blocked.has(item.session)) continue;
+      let data: { ready: boolean; url?: string; headers?: Record<string, string> };
+      try { data = await apiRequest(`/api/v1/live/direct/${item.session}/segments`, {
         method: "POST", token: getToken(), body: { sequence: item.sequence, size: item.bytes.size, duration: item.duration, sha256: item.sha256 },
-      });
+      }); } catch (error) { blocked.add(item.session); failures.push({ session: item.session, error }); continue; }
+      const send = async () => {
       if (!data.ready) {
         let uploadError: unknown;
         try {
@@ -46,8 +52,16 @@ export async function resumeDirectUploads(onStatus: (message: string) => void = 
         } catch (e) { throw uploadError || e; }
       }
       await queue("readwrite", (store) => store.delete(item.id));
-      if (item.sequence >= 0) onStatus("Broadcast connected · recording saved");
+      if (item.sequence >= 0 && (!activeSession || item.session === activeSession)) onStatus("Broadcast connected · recording saved");
+      };
+      const job = send().catch((error) => { blocked.add(item.session); failures.push({ session: item.session, error }); });
+      jobs.push(job);
+      // Reserve in sequence, but overlap network transfers and acknowledgments.
+      if (item.sequence < 0 || jobs.length >= 3) await jobs.shift();
     }
+    } finally { await Promise.all(jobs); }
+    const failure = failures.find((f) => !activeSession || f.session === activeSession);
+    if (failure) throw failure.error;
   };
   if (navigator.locks) await navigator.locks.request("shekinah-live-upload", run);
   else { if (!localUpload) localUpload = run().finally(() => { localUpload = null; }); await localUpload; }
@@ -84,11 +98,11 @@ export class MP4Timing {
     if (!this.video) throw Error("Recording has no video track");
   }
   duration(b: Uint8Array): number {
-    const v = new DataView(b.buffer, b.byteOffset, b.byteLength); let first = Infinity, last = 0;
+    const v = new DataView(b.buffer, b.byteOffset, b.byteLength); let first = Infinity, last = 0, audioFirst = Infinity, audioLast = 0;
     for (const moof of boxes(b).filter((x) => x.kind === "moof")) {
       for (const traf of boxes(b, moof.body, moof.end).filter((x) => x.kind === "traf")) {
         const children = boxes(b, traf.body, traf.end), tfhd = children.find((x) => x.kind === "tfhd")!, tfdt = children.find((x) => x.kind === "tfdt")!;
-        const id = v.getUint32(tfhd.body + 4); if (id !== this.video) continue;
+        const id = v.getUint32(tfhd.body + 4);
         const flags = v.getUint32(tfhd.body) & 0xffffff; let p = tfhd.body + 8;
         if (flags & 1) p += 8; if (flags & 2) p += 4;
         const defaultDuration = flags & 8 ? v.getUint32(p) : 0;
@@ -103,10 +117,16 @@ export class MP4Timing {
             if (f & 0x100) q += 4; if (f & 0x200) q += 4; if (f & 0x400) q += 4; if (f & 0x800) q += 4;
           }
         }
-        const scale = this.tracks.get(id)!; first = Math.min(first, timestamp / scale); last = Math.max(last, (timestamp + ticks) / scale);
+        const scale = this.tracks.get(id);
+        if (!scale || ticks === 0) continue;
+        if (id === this.video) { first = Math.min(first, timestamp / scale); last = Math.max(last, (timestamp + ticks) / scale); }
+        else { audioFirst = Math.min(audioFirst, timestamp / scale); audioLast = Math.max(audioLast, (timestamp + ticks) / scale); }
       }
     }
-    const duration = last - first;
+    // Browser throttling can yield audio-only chunks or an empty heartbeat.
+    // Neither must terminate capture or leave a permanent sequence gap.
+    const duration = first !== Infinity ? last - first : audioFirst !== Infinity ? audioLast - audioFirst : 0;
+    if (duration === 0) return 0;
     if (!(duration > 0 && duration <= 30)) throw Error("Unsupported video fragment timing");
     return duration;
   }
@@ -127,14 +147,14 @@ export class DirectPublisher {
   private savingError: unknown;
   private account = getUser()?.id;
   constructor(stream: MediaStream, private session: string, private key: string, private report: (message: string) => void) {
-    this.recorder = new MediaRecorder(stream, { mimeType: DirectPublisher.mimeType(), videoBitsPerSecond: 1_200_000, audioBitsPerSecond: 96_000, videoKeyFrameIntervalDuration: 1000 } as MediaRecorderOptions);
+    this.recorder = new MediaRecorder(stream, { mimeType: DirectPublisher.mimeType(), videoBitsPerSecond: 600_000, audioBitsPerSecond: 64_000, videoKeyFrameIntervalDuration: 1000 } as MediaRecorderOptions);
     this.recorder.ondataavailable = (e) => {
       if (!e.data.size) return;
-      this.serial = this.serial.then(() => this.save(e.data)).catch((e) => { this.savingError = e; report(e instanceof Error ? e.message : "Recording could not be saved"); if (this.recorder.state !== "inactive") this.recorder.stop(); });
+      this.serial = this.serial.then(() => this.save(e.data)).catch((e) => { this.savingError = e; clearInterval(this.timer); report(e instanceof Error ? e.message : "Recording could not be saved"); if (this.recorder.state !== "inactive") this.recorder.stop(); });
     };
     this.recorder.onerror = () => report("Video capture failed. Saved recording segments are retained.");
     this.recorder.start(2000);
-    this.timer = setInterval(() => { void resumeDirectUploads(report).catch(() => report("Connection interrupted · saved segments will retry")); }, 1500);
+    this.timer = setInterval(() => { void resumeDirectUploads(report, this.session).catch(() => report("Connection interrupted · saved segments will retry")); }, 1500);
   }
   private async save(blob: Blob) {
     const bytes = new Uint8Array(await blob.arrayBuffer()), top = boxes(bytes);
@@ -143,9 +163,10 @@ export class DirectPublisher {
       const init = bytes.slice(0, split); this.timing.init(init); await this.enqueue(init, -1, 0); this.initialized = true;
     }
     if (split < bytes.length) {
-      const data = bytes.slice(split); await this.enqueue(data, this.sequence++, this.timing.duration(data));
+      const data = bytes.slice(split), duration = this.timing.duration(data);
+      if (duration > 0) { await this.enqueue(data, this.sequence, duration); this.sequence++; }
     }
-    void resumeDirectUploads(this.report).catch(() => this.report("Connection interrupted · recording saved on this device"));
+    void resumeDirectUploads(this.report, this.session).catch(() => this.report("Connection interrupted · recording saved on this device"));
   }
   private async enqueue(bytes: Uint8Array, sequence: number, duration: number) {
     const account = this.account; if (!account || getUser()?.id !== account) throw Error("Sign in to save the broadcast");
@@ -163,7 +184,7 @@ export class DirectPublisher {
     if (this.recorder.state !== "inactive") await new Promise<void>((resolve) => { this.recorder.onstop = () => resolve(); this.recorder.stop(); });
     await this.serial;
     if (this.savingError) throw this.savingError;
-    await resumeDirectUploads(this.report);
+    await resumeDirectUploads(this.report, this.session);
   }
   abort() {
     clearInterval(this.timer);

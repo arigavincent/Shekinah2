@@ -3,7 +3,7 @@ package com.shekinahsons.globalapp.playback
 import android.net.Uri
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.datasource.TransferListener
 import com.shekinahsons.globalapp.BuildConfig
 import com.shekinahsons.globalapp.data.Api
@@ -12,7 +12,7 @@ import com.shekinahsons.globalapp.data.Api
 // scoped signed URL, never a member's bearer token (which also breaks S3 auth).
 object LiveDataSource : DataSource.Factory {
     override fun createDataSource(): DataSource = object : DataSource {
-        private val source = DefaultHttpDataSource.Factory().createDataSource()
+        private val source = OkHttpDataSource.Factory(Api.http).createDataSource()
         override fun addTransferListener(listener: TransferListener) = source.addTransferListener(listener)
         override fun open(spec: DataSpec): Long {
             val base = Uri.parse(BuildConfig.API_BASE)

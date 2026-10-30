@@ -72,7 +72,10 @@ class DirectLiveAcceptance : Instrumentation() {
                         setVideoSurface(surface);volume=0f
                         addListener(object:Player.Listener {
                             override fun onRenderedFirstFrame() { ready.countDown() }
-                            override fun onPlayerError(error: PlaybackException) { failure.set(error.errorCodeName);ready.countDown() }
+                            override fun onPlayerError(error: PlaybackException) {
+                                failure.set(error.errorCodeName + ":" + generateSequence(error.cause) { it.cause }.joinToString("/") { it.javaClass.simpleName })
+                                ready.countDown()
+                            }
                         })
                         setMediaItem(MediaItem.Builder().setUri(replay).setMimeType(MimeTypes.APPLICATION_M3U8).build());prepare();playWhenReady=true
                     }

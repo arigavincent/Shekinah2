@@ -141,7 +141,7 @@ object Broadcast {
         val (w, h, rate) = if (hd) Triple(1280, 720, 2_500_000) else Triple(854, 480, 1_000_000)
         width = if (portrait) h else w; height = if (portrait) w else h
         target = rate
-        return s.prepareVideo(w, h, rate, iFrameInterval = 1, rotation = rotation) && s.prepareAudio(44_100, true, 128_000)
+        return s.prepareVideo(w, h, rate, iFrameInterval = 1, rotation = rotation) && s.prepareAudio(44_100, true, 96_000)
     }
 
     var directSession: String? = null; private set
@@ -161,7 +161,12 @@ object Broadcast {
             override fun onError(e: Exception?) { main.post { error = e?.message ?: "Could not record broadcast"; state = "error" } }
         })
     }
-    fun directSaved(id: String, bytes: Long, duration: Double) { main.post {
+    fun directSaved(id: String, bytes: Long, duration: Double, transferMs: Long = 0) { main.post {
+        if (directSession == id && transferMs > duration * 900 && target > 250_000) {
+            val sustainable = (bytes * 8000L / transferMs * 0.65).toInt() - 96_000
+            target = minOf((target * 0.8).toInt(), sustainable).coerceAtLeast(250_000)
+            stream?.setVideoBitrateOnFly(target)
+        }
         if (directSession == id) { if (state != "live") startedAt = System.currentTimeMillis(); state = "live"; error = null; bitrate = (bytes * 8 / duration).toLong() }
     } }
     fun directInterrupted(id: String, message: String) { main.post {

@@ -22,7 +22,7 @@ class ApiException(val status: Int, message: String) : Exception(message)
 // signed in and turns error bodies ({"message": ...}) into readable errors.
 object Api {
     val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; explicitNulls = false; encodeDefaults = true }
-    val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(12, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).build()
+    val http: OkHttpClient = OkHttpClient.Builder().dns(StorageDns).connectTimeout(12, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).build()
     var token: String? = null
 
     suspend fun get(path: String, headers: Map<String,String> = emptyMap()): JsonObject = call("GET", path, null, headers)

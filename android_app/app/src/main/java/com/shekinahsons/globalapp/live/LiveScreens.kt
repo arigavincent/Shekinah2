@@ -159,6 +159,7 @@ private fun money(n: Int) = "KSh ${"%,d".format(n)}"
 fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
     val context = LocalContext.current
     val token = com.shekinahsons.globalapp.data.Api.token
+    val retries = remember(url, token) { android.os.Handler(android.os.Looper.getMainLooper()) }
     val player = remember(url, token) {
         // The member's sign-in goes with every request, so paid lives play for those who paid.
         val http = com.shekinahsons.globalapp.playback.LiveDataSource
@@ -167,6 +168,16 @@ fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
                 .setBufferDurationsMs(4_000, 12_000, 500, 750)
                 .setPrioritizeTimeOverSizeThresholds(true).build())
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http)).build().apply {
+            val current = this
+            addListener(object : Player.Listener {
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    retries.removeCallbacksAndMessages(null)
+                    retries.postDelayed({ current.seekToDefaultPosition(); current.prepare(); current.playWhenReady = true }, 1500)
+                }
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) retries.removeCallbacksAndMessages(null)
+                }
+            })
             setMediaItem(MediaItem.Builder().setUri(if (url.startsWith("/")) com.shekinahsons.globalapp.BuildConfig.API_BASE+url else url).setMimeType(MimeTypes.APPLICATION_M3U8)
                 .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(1500)
                     .setMinOffsetMs(1000).setMaxOffsetMs(4000)
@@ -176,15 +187,20 @@ fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
         }
     }
     LaunchedEffect(muted) { player.volume = if (muted) 0f else 1f }
-    DisposableEffect(player) { onDispose { player.release() } }
+    DisposableEffect(player) { onDispose { retries.removeCallbacksAndMessages(null); player.release() } }
     return player
 }
 
 @Composable
 fun LivePicture(player: ExoPlayer, modifier: Modifier, fill: Boolean = true) {
     var ready by remember { mutableStateOf(false) }
+    var buffering by remember { mutableStateOf(true) }
     DisposableEffect(player) {
-        val l = object : Player.Listener { override fun onRenderedFirstFrame() { ready = true } }
+        val l = object : Player.Listener {
+            override fun onRenderedFirstFrame() { ready = true }
+            override fun onPlaybackStateChanged(state: Int) { buffering = state != Player.STATE_READY }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) { buffering = true }
+        }
         player.addListener(l)
         onDispose { player.removeListener(l) }
     }
@@ -202,7 +218,7 @@ fun LivePicture(player: ExoPlayer, modifier: Modifier, fill: Boolean = true) {
             update = { it.resizeMode = if (fill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT },
             modifier = Modifier.fillMaxSize(),
         )
-        if (!ready) CircularProgressIndicator(color = Brand.Red, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(30.dp))
+        if (!ready || buffering) CircularProgressIndicator(color = Brand.Red, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(30.dp))
     }
 }
 
