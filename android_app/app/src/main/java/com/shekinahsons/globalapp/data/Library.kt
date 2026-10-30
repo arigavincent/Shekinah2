@@ -10,10 +10,12 @@ import kotlinx.coroutines.launch
 // The listener's own shelf: saved (hearted) sermons and offline downloads.
 // Both live on the device only.
 class Library(private val context: Context) {
-    private val prefs = context.getSharedPreferences("library", Context.MODE_PRIVATE)
+    private val prefs get() = Accounts.prefs(context,"library")
 
     val saved = mutableStateSetOf<String>().apply { addAll(prefs.getStringSet("saved", emptySet()).orEmpty()) }
 
+    fun catalogue(): List<Sermon> = runCatching { Api.json.decodeFromString<List<Sermon>>(Accounts.prefs(context,"sermon-catalogue").getString("items","[]")!!) }.getOrDefault(emptyList())
+    fun remember(s:Sermon) { val items=(listOf(s)+catalogue()).distinctBy{it.id}.take(500);Accounts.prefs(context,"sermon-catalogue").edit().putString("items",Api.json.encodeToString(kotlinx.serialization.builtins.ListSerializer(Sermon.serializer()),items)).apply();version++ }
     fun isSaved(id: String) = id in saved
 
     fun toggleSaved(id: String) {
@@ -23,31 +25,28 @@ class Library(private val context: Context) {
 
     // Downloads are encrypted into the app's private storage (see Vault
     // files below): they play inside the app and nowhere else.
-    val downloading = androidx.compose.runtime.mutableStateMapOf<String, Float>()
-    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-
-    fun isDownloaded(s: Sermon) = s.id !in downloading && VaultFiles.has(context, s.id)
-
-    // Plays from the encrypted copy when there is one, otherwise streams.
-    fun playableUri(s: Sermon): String = if (isDownloaded(s)) VaultFiles.uri(s.id) else s.mediaUrl
-
-    fun download(s: Sermon) {
-        if (s.mediaUrl.isBlank() || isDownloaded(s) || s.id in downloading) return
-        downloading[s.id] = 0f
-        scope.launch {
-            val ok = runCatching { VaultFiles.save(context, s.id, s.mediaUrl) { downloading[s.id] = it } }.isSuccess
-            downloading.remove(s.id)
-            if (ok) version++
-        }
+    val downloading get() = transfers.filterValues { it.state in listOf("Downloading","Waiting for connection") }.mapKeys { it.key.removePrefix("sermon-${Accounts.current}-") }.mapValues { it.value.progress }
+    val transfers get() = Downloads.entries.filterKeys { it.startsWith("sermon-${Accounts.current}-") }
+    private fun vaultId(s: Sermon) = "sermon-${Accounts.current}-${s.id}"
+    fun transfer(s: Sermon) = Downloads.entries[vaultId(s)]
+    fun isDownloaded(s: Sermon) = VaultFiles.has(context,vaultId(s)) || VaultFiles.has(context,s.id)
+    fun playableUri(s: Sermon): String = when {
+        VaultFiles.has(context,vaultId(s)) -> VaultFiles.uri(vaultId(s))
+        VaultFiles.has(context,s.id) -> VaultFiles.uri(s.id)
+        else -> s.mediaUrl
     }
-
-    fun delete(s: Sermon) { VaultFiles.delete(context, s.id); downloading.remove(s.id); version++ }
+    fun download(s: Sermon) { remember(s); if(s.mediaUrl.isNotBlank() && !isDownloaded(s)) Downloads.start(context,vaultId(s),s.mediaUrl,if(s.id.startsWith("replay-")) Api.token else null) }
+    fun pause(s: Sermon) = Downloads.pause(context,vaultId(s))
+    fun cancel(s: Sermon) { scope.launch { Downloads.cancel(context,vaultId(s)) } }
+    fun delete(s: Sermon) { scope.launch { Downloads.cancel(context,vaultId(s)); VaultFiles.delete(context,s.id); version++ } }
+    private val scope=kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()+kotlinx.coroutines.Dispatchers.Main)
 
     // Bumped when a download finishes or is removed.
     var version by androidx.compose.runtime.mutableIntStateOf(0)
         private set
 
     init {
+        Accounts.changed += { saved.clear(); saved.addAll(prefs.getStringSet("saved",emptySet()).orEmpty()); progressVersion++; version++ }
         // Earlier builds saved plain copies in shared storage; remove them.
         listOf(Environment.DIRECTORY_MUSIC, Environment.DIRECTORY_MOVIES).forEach { dir ->
             context.getExternalFilesDir(dir)?.listFiles()?.forEach { it.delete() }
@@ -60,7 +59,7 @@ class Library(private val context: Context) {
         val fraction get() = if (finished) 1f else if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
         val leftMs get() = (duration - position).coerceAtLeast(0)
     }
-    private val progress = context.getSharedPreferences("progress2", Context.MODE_PRIVATE)
+    private val progress get() = Accounts.prefs(context,"progress2")
     // Bumped on every save so screens showing progress redraw.
     var progressVersion by androidx.compose.runtime.mutableIntStateOf(0)
         private set

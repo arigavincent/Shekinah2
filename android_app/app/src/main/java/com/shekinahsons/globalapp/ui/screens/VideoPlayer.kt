@@ -130,6 +130,10 @@ private fun clockOf(ms: Long): String {
 // sermon counting down when one ends.
 @Composable
 fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onOpen: (Sermon) -> Unit, onBack: () -> Unit) {
+    if (sermon.replayId.isNotBlank()) {
+        com.shekinahsons.globalapp.live.ReplaySermon(sermon, library, onBack)
+        return
+    }
     val context = LocalContext.current
     val activity = context as Activity
     val scope = rememberCoroutineScope()
@@ -166,6 +170,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
     fun save() = library.savePosition(sermon.id, player.currentPosition, player.duration)
 
     LaunchedEffect(sermon.id) {
+        library.remember(sermon)
         firstFrame = false; ended = false; error = null; retries = 0
         val resume = library.position(sermon.id)
         player.setMediaItem(MediaItem.fromUri(library.playableUri(sermon)), resume)

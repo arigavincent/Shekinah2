@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const BACKEND_BASE_URL = "https://shekinah-sons-backend.onrender.com";
+
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
@@ -13,8 +13,10 @@ const proxyInputSchema = z.object({
 });
 
 export const proxyAdminApiRequest = createServerFn({ method: "POST" })
-  .inputValidator(proxyInputSchema)
+  .validator(proxyInputSchema)
   .handler(async ({ data }) => {
+    const BACKEND_BASE_URL=process.env.BACKEND_API_BASE_URL || process.env.VITE_API_BASE_URL;
+    if(!BACKEND_BASE_URL) return {ok:false,status:503,payload:{message:"Set BACKEND_API_BASE_URL for the admin server."}};
     const method = data.method || "GET";
     const response = await fetch(`${BACKEND_BASE_URL}${data.path}`, {
       method,

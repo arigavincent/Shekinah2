@@ -28,7 +28,7 @@ object VaultFiles {
 
     fun has(context: Context, id: String) = file(context, id).let { it.exists() && it.length() > 16 }
     fun uri(id: String) = "$SCHEME://$id"
-    fun delete(context: Context, id: String) { file(context, id).delete() }
+    fun delete(context: Context, id: String) { val f=file(context,id); f.delete(); File(f.path+".part").delete(); File(f.path+".meta").delete() }
 
     private fun key(context: Context): SecretKeySpec {
         dataKey?.let { return it }
@@ -51,36 +51,56 @@ object VaultFiles {
     }
 
     // Streams the sermon from the network straight into an encrypted file.
-    fun save(context: Context, id: String, url: String, progress: (Float) -> Unit) = save(context, id, url, emptyMap(), progress)
+    fun save(context: Context, id: String, url: String, progress: (Float) -> Unit) = save(context, id, url, emptyMap(), progress = progress)
 
-    fun save(context: Context, id: String, url: String, headers: Map<String, String>, progress: (Float) -> Unit) {
+    fun save(context: Context, id: String, url: String, headers: Map<String, String>, stopped: () -> Boolean = { false }, progress: (Float) -> Unit) {
         val target = file(context, id)
         val part = File(target.path + ".part")
-        val iv = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        val cipher = Cipher.getInstance("AES/CTR/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key(context), IvParameterSpec(iv)) }
-        val request = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }.build()
-        Api.http.newBuilder().readTimeout(3, java.util.concurrent.TimeUnit.MINUTES).build().newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("HTTP ${response.code}")
-            val body = response.body ?: error("empty")
-            val total = body.contentLength()
-            part.outputStream().use { out ->
-                out.write(iv)
-                val buffer = ByteArray(64 * 1024)
-                var done = 0L
-                var lastReport = 0L
+        val meta = File(target.path + ".meta")
+        val saved=runCatching { org.json.JSONObject(meta.readText()) }.getOrNull()
+        var offset=if(part.length()>16 && saved?.optString("url")==url && !saved.optString("validator").isNullOrBlank()) part.length()-16 else 0L
+        val request = Request.Builder().url(url).apply {
+            headers.forEach { (k,v) -> header(k,v) }
+            header("Accept-Encoding","identity")
+            if(offset>0) { header("Range","bytes=$offset-"); header("If-Range",saved!!.getString("validator")) }
+        }.build()
+        Api.http.newBuilder().readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build().newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw ApiException(response.code,"Download failed (${response.code})")
+            val body=response.body ?: throw java.io.IOException("Empty download")
+            val type=body.contentType()?.toString().orEmpty()
+            check(!type.contains("mpegurl",true) && !url.substringBefore('?').endsWith(".m3u8")) { "Offline replay is not available for this live stream yet." }
+            if(response.code!=206) offset=0
+            if(offset>0) check(response.header("Content-Range").orEmpty().startsWith("bytes $offset-")) { "Server returned an invalid download range" }
+            val length=body.contentLength()
+            check(length<0 || target.parentFile!!.usableSpace>length+1024*1024) { "Free up some storage and try again." }
+            val iv=if(offset>0) RandomAccessFile(part,"r").use { f -> ByteArray(16).also(f::readFully) } else ByteArray(16).also { SecureRandom().nextBytes(it) }
+            val cipher=cipherAt(context,iv,offset)
+            if(offset%16>0) cipher.update(ByteArray((offset%16).toInt()))
+            meta.writeText(org.json.JSONObject().put("url",url).put("validator",response.header("ETag") ?: response.header("Last-Modified") ?: "").toString())
+            RandomAccessFile(part,"rw").use { out ->
+                if(offset==0L) { out.setLength(0); out.write(iv) }
+                out.seek(16+offset)
+                var received=0L
+                var report=0L
+                val buffer=ByteArray(64*1024)
                 body.byteStream().use { input ->
-                    while (true) {
-                        val n = input.read(buffer)
-                        if (n < 0) break
-                        out.write(cipher.update(buffer, 0, n))
-                        done += n
-                        if (total > 0 && done - lastReport > 256 * 1024) { progress(done.toFloat() / total); lastReport = done }
+                    while(true) {
+                        if(stopped()) throw java.io.InterruptedIOException("Download paused")
+                        val n=input.read(buffer)
+                        if(n<0) break
+                        out.write(cipher.update(buffer,0,n)); received+=n
+                        if(received-report>=256*1024) { if(length>0) progress((offset+received).toFloat()/(offset+length)); report=received }
                     }
                 }
-                cipher.doFinal()?.let { out.write(it) }
+                if(length>=0 && received!=length) throw java.io.IOException("Download interrupted")
+                check(received+offset>0) { "Empty download" }
+                cipher.doFinal()?.let(out::write)
+                out.fd.sync()
             }
         }
-        part.renameTo(target)
+        check(!stopped()) { "Download paused" }
+        check(part.renameTo(target)) { "Could not finish saving the download" }
+        meta.delete(); progress(1f)
     }
 
     // Lets the players read shekinah-vault:// addresses, decrypting as they go.

@@ -1,3 +1,5 @@
+import {MonetizationPage} from "./pages/MonetizationPage";
+import {SettingsPage} from "./pages/SettingsPage";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 
@@ -79,8 +81,11 @@ export default function App() {
         <Route path="checkins" element={<CheckInPage />} />
         <Route path="giving" element={<GivingPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="serve-settings" element={<ServeSettingsPage />} />
-        <Route path="team" element={<TeamPage />} />
+        <Route path="users" element={<TeamPage />} />
+        <Route path="team" element={<Navigate to="/users" replace />} />
+        <Route path="monetization" element={<MonetizationPage />} />
         <Route path="appearance" element={<AppearancePage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,3 +1,7 @@
+import {DateTimeField} from "../components/DateTimeFields";
+import {DateField,TimeField} from "../components/DateTimeFields";
+import {publishInputValue} from "../lib/publish";
+import {PublishingQueue} from "../components/PublishingQueue";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -51,7 +55,7 @@ function todayDate() {
 // and audio sermons get the app's branded template built from the code.
 function makeEmptyForm(): SermonPayload {
   return {
-    externalId: "",
+    isPublished:true,notifyOnPublish:false,externalId: "",
     type: "video",
     code: "",
     title: "",
@@ -632,12 +636,12 @@ export function SermonsPage() {
     setEditingId(sermon.id);
     setForm({
       type: sermon.type,
-      externalId: sermon.externalId || "",
+      externalId: sermon.externalId || "",isPublished:sermon.isPublished,notifyOnPublish:sermon.notifyOnPublish,
       code: sermon.code || "",
       title: sermon.title,
       speaker: sermon.speaker,
       sermonDate: sermon.sermonDate,
-      publishedAt: sermon.publishedAt.slice(0, 16),
+      publishedAt: publishInputValue(sermon.publishedAt),
       categoryId: sermon.categoryId || "cat-1",
       isLive: sermon.isLive,
       thumbnailUrl: sermon.thumbnailUrl || "",
@@ -855,9 +859,6 @@ export function SermonsPage() {
           <button type="button" className="secondary" onClick={runSync} disabled={syncing}>
             {syncing ? "Syncing..." : "Sync media now"}
           </button>
-          <button type="button" onClick={() => setBatchOpen(true)}>
-            Batch Upload
-          </button>
           <button className="secondary" onClick={load}>
             Refresh
           </button>
@@ -866,6 +867,8 @@ export function SermonsPage() {
 
       {error ? <InlineAlert title="Sermons could not be updated" message={error} /> : null}
 
+      <PublishingQueue section="sermons" onCompleted={load}/>
+      <details className="list-card"><summary>Podcast feed settings</summary>
       <form className="editor-card podcast-card" onSubmit={savePodcastFeed}>
         <div className="section-title-row">
           <div>
@@ -890,6 +893,8 @@ export function SermonsPage() {
         {podcastNote ? <p className="small-muted">{podcastNote}</p> : null}
       </form>
 
+      </details>
+      <details className="list-card"><summary>Sermon categories</summary>
       <SermonCategoriesCard
         categories={categoryList}
         canUploadImages={Boolean(storage?.r2)}
@@ -897,7 +902,9 @@ export function SermonsPage() {
         onError={setError}
       />
 
-      <section className="content-grid">
+      </details>
+      <section className="catalogue-stack">
+        <details className="list-card" open={Boolean(editingId)}><summary>{editingId ? "Edit selected sermon" : "Link existing media or import metadata"}</summary>
         <form className="editor-card" onSubmit={submit}>
           <div className="section-title-row">
             <h2>{editingId ? "Edit Sermon" : "Create Sermon"}</h2>
@@ -976,36 +983,12 @@ export function SermonsPage() {
               />
             </label>
 
-            <label>
-              Date
-              <input
-                value={form.sermonDate}
-                onChange={event => updateField("sermonDate", event.target.value)}
-                placeholder="YYYY-MM-DD"
-              />
-            </label>
+            <DateField label="Date" value={form.sermonDate} onChange={value=>updateField("sermonDate",value)}/>
           </div>
 
-          <label>
-            <div className="section-title-row compact">
-              <span>Publish At (UTC)</span>
-              <button
-                type="button"
-                className="secondary compact"
-                onClick={() => updateField("publishedAt", publishNowValue())}
-              >
-                Publish now
-              </button>
-            </div>
-            <input
-              type="datetime-local"
-              value={form.publishedAt}
-              onChange={event => updateField("publishedAt", event.target.value)}
-            />
-            <p className="small-muted">
-              Stored as UTC. Browser timezone: {publishTimeZoneLabel()}.
-            </p>
-          </label>
+          <label><input type="checkbox" checked={form.isPublished??true} onChange={e=>updateField("isPublished",e.target.checked)}/> Publish on release (off keeps a draft)</label>
+            <label><input type="checkbox" checked={form.notifyOnPublish??false} onChange={e=>updateField("notifyOnPublish",e.target.checked)}/> Notify members</label>
+            <DateTimeField label="Publication · Nairobi" value={form.publishedAt} onChange={value=>updateField("publishedAt",value)} allowNow/>
 
           <label>
             Thumbnail URL
@@ -1070,59 +1053,7 @@ export function SermonsPage() {
             />
           </label>
 
-          <div className="two-col">
-            {storage?.stream ? (
-              <label>
-                Upload video to Cloudflare Stream
-                <input
-                  type="file"
-                  accept="video/mp4,video/webm,video/quicktime,video/x-matroska"
-                  disabled={Boolean(uploading) || streamProgress !== null || Boolean(editingId)}
-                  onChange={async event => {
-                    await uploadToCloudflare(event.target.files?.[0] || null);
-                    event.target.value = "";
-                  }}
-                />
-                <span className="small-muted">
-                  {editingId
-                    ? "To replace a video, create a new sermon."
-                    : "Creates the sermon and streams it in the app once Cloudflare finishes processing."}
-                </span>
-              </label>
-            ) : (
-              <label>
-                Upload video
-                <input
-                  type="file"
-                  accept="video/mp4,video/webm,video/quicktime,video/x-m4v"
-                  disabled={!storage?.r2 || directProgress !== null}
-                  onChange={async event => {
-                    await uploadDirect("video", event.target.files?.[0] || null);
-                    event.target.value = "";
-                  }}
-                />
-                <span className="small-muted">
-                  {storage?.r2
-                    ? "MP4 at 720p keeps sermons small (about 0.7 GB per hour). Up to 5 GB."
-                    : "Video storage isn't configured on the server yet."}
-                </span>
-              </label>
-            )}
-
-            <label>
-              Upload audio
-              <input
-                type="file"
-                accept="audio/mpeg,audio/mp3,audio/mp4,audio/aac,audio/wav,audio/ogg"
-                disabled={!storage?.r2 || directProgress !== null}
-                onChange={async event => {
-                  await uploadDirect("audio", event.target.files?.[0] || null);
-                  event.target.value = "";
-                }}
-              />
-              <span className="small-muted">Most audio arrives from the podcast feed; use this for one-off files.</span>
-            </label>
-          </div>
+          <p className="small-muted">To upload new audio or video files, use Single upload or Batch upload above. This editor accepts links to existing media.</p>
 
           {uploading ? (
             <p className="muted">Uploading {uploading}...</p>
@@ -1240,6 +1171,7 @@ export function SermonsPage() {
             ) : null}
           </BulkCsvImportCard>
         </form>
+        </details>
 
         <section className="list-card">
           <div className="section-title-row">
@@ -1495,8 +1427,8 @@ export function SermonsPage() {
                           </p>
                         </div>
                         <div className="row-actions">
-                          <span className={`status-chip ${getPublishState(row.publishedAt).tone}`}>
-                            {getPublishState(row.publishedAt).label}
+                          <span className={`status-chip ${getPublishState(row.publishedAt || "").tone}`}>
+                            {getPublishState(row.publishedAt || "").label}
                           </span>
                           <button type="button" className="secondary compact" onClick={() => publishWizardRowNow(index)}>
                             Publish now
@@ -1559,24 +1491,8 @@ export function SermonsPage() {
                         </label>
                       </div>
                       <div className="two-col">
-                        <label>
-                          Sermon Date
-                          <input
-                            value={row.sermonDate}
-                            onChange={event => updateWizardRow(index, { sermonDate: event.target.value })}
-                          />
-                        </label>
-                        <label>
-                          Publish At (UTC)
-                          <input
-                            type="datetime-local"
-                            value={row.publishedAt}
-                            onChange={event => updateWizardRow(index, { publishedAt: event.target.value })}
-                          />
-                          <p className="small-muted">
-                            {formatPublishAt(row.publishedAt)} · UTC
-                          </p>
-                        </label>
+                        <DateField label="Sermon date" value={row.sermonDate} onChange={value=>updateWizardRow(index,{sermonDate:value})}/>
+                        <DateTimeField label="Publication · Nairobi" value={row.publishedAt} onChange={value=>updateWizardRow(index,{publishedAt:value})} allowNow/>
                       </div>
                       <label>
                         Description
@@ -1631,8 +1547,8 @@ export function SermonsPage() {
                             {row.publishedAt ? <p className="small-muted">Publishes {formatPublishAt(row.publishedAt)}</p> : null}
                           </div>
                           <div className="preview-row-meta">
-                            <span className={`status-chip ${getPublishState(row.publishedAt).tone}`}>
-                              {getPublishState(row.publishedAt).label}
+                            <span className={`status-chip ${getPublishState(row.publishedAt || "").tone}`}>
+                              {getPublishState(row.publishedAt || "").label}
                             </span>
                             <span className={`status-chip ${row.action === "reject" ? "danger" : row.action === "update" ? "warning" : "success"}`}>
                               {row.action}
@@ -1660,79 +1576,6 @@ export function SermonsPage() {
         </div>
       ) : null}
 
-      <BatchUploadDialog
-        open={batchOpen}
-        onClose={() => setBatchOpen(false)}
-        onCompleted={load}
-        title="Sermons"
-        subtitle="Add multiple sermons in one sitting. Each item uses the existing single-sermon create endpoint."
-        storageKey="batch-mode:sermons"
-        acceptFor={values =>
-          values.type === "audio"
-            ? "audio/mpeg,audio/mp3,audio/mp4,audio/aac,audio/wav,audio/ogg"
-            : "video/mp4,video/webm,video/quicktime"
-        }
-        mediaKind={values => (values.type === "audio" ? "audio" : "video")}
-        fileLabel="Sermon media file"
-        fields={[
-          {
-            key: "type",
-            label: "Type",
-            type: "select",
-            options: [
-              { value: "video", label: "Video" },
-              { value: "audio", label: "Audio" }
-            ],
-            default: "video"
-          },
-          {
-            key: "categoryId",
-            label: "Category",
-            type: "select",
-            options: categories.map(c => ({ value: c.id, label: c.name })),
-            default: "cat-1"
-          },
-          { key: "title", label: "Title", type: "text", required: true, placeholder: "Sermon title" },
-          { key: "speaker", label: "Speaker", type: "text", required: true, default: "Shekinah Sons Global" },
-          { key: "sermonDate", label: "Sermon date", type: "datetime" },
-          { key: "duration", label: "Duration", type: "text", placeholder: "e.g. 42:15" },
-          {
-            key: "thumbnailUrl",
-            label: "Thumbnail URL (optional)",
-            type: "text",
-            placeholder: "https://...",
-            fullWidth: true
-          },
-          {
-            key: "description",
-            label: "Description",
-            type: "textarea",
-            rows: 3,
-            fullWidth: true,
-            required: true
-          }
-        ]}
-        submitOne={async ctx => {
-          const v = ctx.values;
-          await createSermon({
-            externalId: batchSermonExternalId(v, ctx.publishAt),
-            type: (v.type as "video" | "audio") || "video",
-            code: "",
-            title: v.title.trim(),
-            speaker: v.speaker.trim() || "Shekinah Sons Global",
-            sermonDate: (v.sermonDate || ctx.publishAt).slice(0, 10),
-            publishedAt: ctx.publishAt,
-            categoryId: v.categoryId || "cat-1",
-            isLive: false,
-            thumbnailUrl:
-              v.thumbnailUrl.trim() ||
-              "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?q=80&w=900",
-            duration: v.duration.trim(),
-            description: v.description.trim(),
-            mediaUrl: ctx.mediaUrl
-          });
-        }}
-      />
     </main>
   );
 }

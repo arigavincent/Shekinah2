@@ -365,7 +365,7 @@ private fun DevotionCarousel(devotions: List<Devotion>, open: (Devotion) -> Unit
                 scaleX = 1f - 0.08f * t; scaleY = scaleX
                 alpha = 1f - 0.5f * t
             }) {
-                DevotionCard(devotions[page], hasMore = page < devotions.lastIndex, isToday = page == 0) { open(devotions[page]) }
+                DevotionCard(devotions[page], hasMore = page < devotions.lastIndex, isToday = runCatching { java.time.LocalDate.parse(devotions[page].date, java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy",java.util.Locale.ENGLISH)) == java.time.LocalDate.now(java.time.ZoneId.of("Africa/Nairobi")) }.getOrDefault(false)) { open(devotions[page]) }
             }
         }
         if (devotions.size > 1) {

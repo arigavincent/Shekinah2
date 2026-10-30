@@ -25,7 +25,7 @@ object Api {
     val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(12, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).build()
     var token: String? = null
 
-    suspend fun get(path: String): JsonObject = call("GET", path, null)
+    suspend fun get(path: String, headers: Map<String,String> = emptyMap()): JsonObject = call("GET", path, null, headers)
     suspend fun post(path: String, body: Map<String, Any?> = emptyMap()): JsonObject = call("POST", path, body)
     suspend fun put(path: String, body: Map<String, Any?> = emptyMap()): JsonObject = call("PUT", path, body)
     suspend fun patch(path: String, body: Map<String, Any?> = emptyMap()): JsonObject = call("PATCH", path, body)
@@ -35,6 +35,7 @@ object Api {
 
     private fun toJson(value: Any?): JsonElement = when (value) {
         null -> kotlinx.serialization.json.JsonNull
+        is JsonElement -> value
         is String -> JsonPrimitive(value)
         is Number -> JsonPrimitive(value)
         is Boolean -> JsonPrimitive(value)
@@ -43,9 +44,10 @@ object Api {
         else -> JsonPrimitive(value.toString())
     }
 
-    private suspend fun call(method: String, path: String, body: Map<String, Any?>?): JsonObject = withContext(Dispatchers.IO) {
+    private suspend fun call(method: String, path: String, body: Map<String, Any?>?, headers: Map<String,String> = emptyMap()): JsonObject = withContext(Dispatchers.IO) {
         val builder = Request.Builder().url("${BuildConfig.API_BASE}/api/v1$path").header("Accept", "application/json")
         token?.let { builder.header("Authorization", "Bearer $it") }
+        headers.forEach { (k,v) -> builder.header(k,v) }
         val payload = body?.let { toJson(it).toString().toRequestBody("application/json".toMediaType()) }
         builder.method(method, if (method == "GET" || (method == "DELETE" && payload == null)) null else payload ?: "{}".toRequestBody("application/json".toMediaType()))
         val response = try {

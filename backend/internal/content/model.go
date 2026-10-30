@@ -47,6 +47,9 @@ type Devotion struct {
 }
 
 type Sermon struct {
+	ReplayID    string `json:"replayId,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Price       int    `json:"price"`
 	ID          string `json:"id"`
 	Type        string `json:"type"`
 	Code        string `json:"code,omitempty"`

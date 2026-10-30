@@ -161,10 +161,9 @@ fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
     val token = com.shekinahsons.globalapp.data.Api.token
     val player = remember(url, token) {
         // The member's sign-in goes with every request, so paid lives play for those who paid.
-        val http = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-            .setDefaultRequestProperties(token?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap())
+        val http = com.shekinahsons.globalapp.playback.LiveDataSource
         ExoPlayer.Builder(context).setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http)).build().apply {
-            setMediaItem(MediaItem.Builder().setUri(url).setMimeType(MimeTypes.APPLICATION_M3U8)
+            setMediaItem(MediaItem.Builder().setUri(if (url.startsWith("/")) com.shekinahsons.globalapp.BuildConfig.API_BASE+url else url).setMimeType(MimeTypes.APPLICATION_M3U8)
                 .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(2500).build()).build())
             prepare()
             playWhenReady = true
@@ -254,8 +253,10 @@ fun LiveTab(content: HomeContent, session: Session, openGoLive: () -> Unit, open
     val on = content.live.isLive && content.live.playbackHlsUrl.isNotBlank()
     val live = rememberLiveSession(on, session)
     var paying by remember { mutableStateOf(false) }
+    var replays by remember { mutableStateOf(false) }
+    if(replays) { Replays(session,openProfile){replays=false};return }
     when {
-        !on -> LiveOffline(content, session, openGoLive)
+        !on -> LiveOffline(content, session, openGoLive) { replays=true }
         live == null -> Box(Modifier.fillMaxSize().background(Brand.Black), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Gold) }
         live.price > 0 && !live.access && paying -> Column(Modifier.fillMaxSize().background(Brand.Black)) {
             TopBar(title = "Get access", onBack = { paying = false })
@@ -318,7 +319,7 @@ private fun LockedLive(live: LiveSession, modifier: Modifier, onClick: (() -> Un
 }
 
 @Composable
-private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -> Unit) {
+private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -> Unit, replays: () -> Unit) {
     val glow = Breathing(3600, 0.45f, 1f)
     val start = remember(content.live.nextService) { ServiceReminder.nextStart(content.live.nextService) }
     Column(Modifier.fillMaxSize().background(Brand.Black)) {
@@ -346,6 +347,7 @@ private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -
                 Text("You'll get a notification the moment we go live.", style = Type.Meta.copy(fontSize = 13.sp), color = Brand.Text2, textAlign = TextAlign.Center)
             }
         }
+        Box(Modifier.padding(horizontal=20.dp,vertical=12.dp)) { GoldButton("Watch service replays",onClick=replays) }
         if (session.canBroadcast) {
             Spacer(Modifier.height(24.dp))
             Box(Modifier.padding(horizontal = 20.dp)) {

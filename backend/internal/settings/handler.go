@@ -1,6 +1,7 @@
 package settings
 
 import (
+	mailer "github.com/ariga/shekinah-backend/internal/mail"
 	"net/http"
 	"regexp"
 	"strings"
@@ -13,15 +14,21 @@ import (
 const serveWhatsAppNumberKey = "serve_whatsapp_number"
 
 type Handler struct {
-	db *pgxpool.Pool
+	db             *pgxpool.Pool
+	smtp           mailer.Store
+	providerClient *http.Client
 }
 
 type ServeSettings struct {
 	WhatsAppNumber string `json:"whatsappNumber"`
 }
 
-func NewHandler(db *pgxpool.Pool) Handler {
-	return Handler{db: db}
+func NewHandler(db *pgxpool.Pool, secret ...string) Handler {
+	key := ""
+	if len(secret) > 0 {
+		key = secret[0]
+	}
+	return Handler{db: db, smtp: mailer.Store{DB: db, Secret: key}}
 }
 
 var nonDigitPattern = regexp.MustCompile(`\D+`)

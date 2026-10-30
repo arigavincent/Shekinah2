@@ -13,6 +13,7 @@ import (
 	"log"
 	"mime"
 	"net"
+	netmail "net/mail"
 	"net/smtp"
 	"os"
 	"strings"
@@ -37,28 +38,45 @@ type Message struct {
 func env(key string) string { return strings.TrimSpace(os.Getenv(key)) }
 
 // Configured reports whether emails actually go out.
-func Configured() bool { return env("SMTP_HOST") != "" && env("SMTP_PORT") != "" && env("SMTP_FROM") != "" }
+func Configured() bool {
+	return env("SMTP_HOST") != "" && env("SMTP_PORT") != "" && env("SMTP_FROM") != ""
+}
 
-func Send(m Message) error {
+func Send(m Message) error { return SendWithConfig(FromEnvironment(), m) }
+func SendWithConfig(config Config, m Message) error {
+	if strings.ContainsAny(m.Subject, "\r\n") {
+		return fmt.Errorf("invalid email subject")
+	}
+	if m.ReplyTo != "" {
+		a, e := netmail.ParseAddress(m.ReplyTo)
+		if e != nil || strings.ContainsAny(m.ReplyTo, "\r\n") {
+			return fmt.Errorf("invalid reply address")
+		}
+		m.ReplyTo = a.Address
+		if a.Name != "" {
+			m.ReplyTo = a.String()
+		}
+	}
 	to := make([]string, 0, len(m.To))
 	for _, t := range m.To {
 		if t = strings.TrimSpace(t); t != "" {
-			to = append(to, t)
+			a, e := netmail.ParseAddress(t)
+			if e != nil || strings.ContainsAny(t, "\r\n") {
+				return fmt.Errorf("invalid recipient")
+			}
+			to = append(to, a.Address)
 		}
 	}
 	if len(to) == 0 {
 		return fmt.Errorf("no recipients")
 	}
 	text := plain(m)
-	if !Configured() {
-		log.Printf("email not sent (SMTP not configured) to=%s subject=%q\n%s", strings.Join(to, ","), m.Subject, text)
+	if !config.Configured() {
+		log.Printf("email not sent (SMTP disabled or not configured) subject=%q", m.Subject)
 		return nil
 	}
-	host, port, from := env("SMTP_HOST"), env("SMTP_PORT"), env("SMTP_FROM")
-	var auth smtp.Auth
-	if u, p := env("SMTP_USERNAME"), env("SMTP_PASSWORD"); u != "" || p != "" {
-		auth = smtp.PlainAuth("", u, p, host)
-	}
+	from := config.From
+
 	boundary := randomHex(12)
 	headers := []string{
 		"From: " + from,
@@ -75,7 +93,7 @@ func Send(m Message) error {
 		"--" + boundary + "\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + text + "\r\n" +
 		"--" + boundary + "\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" + htmlBody(m) + "\r\n" +
 		"--" + boundary + "--\r\n"
-	if err := send(host, port, auth, from, to, []byte(body)); err != nil {
+	if err := sendConfigured(config, from, to, []byte(body)); err != nil {
 		log.Printf("email send failed to=%s subject=%q error=%v", strings.Join(to, ","), m.Subject, err)
 		return err
 	}
@@ -136,45 +154,70 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-func send(host, port string, auth smtp.Auth, from string, to []string, message []byte) error {
-	conn, err := net.DialTimeout("tcp", host+":"+port, 12*time.Second)
+// Check connects, negotiates TLS and authenticates without sending an email.
+func Check(config Config) error {
+	if !config.Configured() {
+		return fmt.Errorf("SMTP is disabled or incomplete")
+	}
+	client, err := connect(config)
 	if err != nil {
 		return err
 	}
+	defer client.Close()
+	return client.Quit()
+}
+func connect(config Config) (*smtp.Client, error) {
+	host, port := config.Host, config.Port
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 12*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	_ = conn.SetDeadline(time.Now().Add(20 * time.Second))
 	var c net.Conn = conn
-	if port == "465" {
+	if config.Security == "tls" {
 		t := tls.Client(conn, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
-		if err := t.Handshake(); err != nil {
-			_ = conn.Close()
-			return err
+		if err = t.Handshake(); err != nil {
+			conn.Close()
+			return nil, err
 		}
 		c = t
 	}
 	client, err := smtp.NewClient(c, host)
 	if err != nil {
-		_ = c.Close()
+		c.Close()
+		return nil, err
+	}
+	fail := func(e error) (*smtp.Client, error) { client.Close(); return nil, e }
+	if config.Security != "tls" {
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			if err = client.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
+				return fail(err)
+			}
+		} else if config.Security == "starttls" {
+			return fail(fmt.Errorf("SMTP server does not offer STARTTLS"))
+		}
+	}
+	if config.Username != "" || config.Password != "" {
+		if ok, _ := client.Extension("AUTH"); !ok {
+			return fail(fmt.Errorf("SMTP server does not offer authentication"))
+		}
+		if err = client.Auth(smtp.PlainAuth("", config.Username, config.Password, host)); err != nil {
+			return fail(err)
+		}
+	}
+	return client, nil
+}
+func sendConfigured(config Config, from string, to []string, message []byte) error {
+	client, err := connect(config)
+	if err != nil {
 		return err
 	}
 	defer client.Close()
-	if port != "465" {
-		if ok, _ := client.Extension("STARTTLS"); ok {
-			if err := client.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
-				return err
-			}
-		}
-	}
-	if auth != nil {
-		if ok, _ := client.Extension("AUTH"); ok {
-			if err := client.Auth(auth); err != nil {
-				return err
-			}
-		}
-	}
-	if err := client.Mail(addressOnly(from)); err != nil {
+	if err = client.Mail(addressOnly(from)); err != nil {
 		return err
 	}
 	for _, r := range to {
-		if err := client.Rcpt(r); err != nil {
+		if err = client.Rcpt(r); err != nil {
 			return err
 		}
 	}
@@ -182,11 +225,11 @@ func send(host, port string, auth smtp.Auth, from string, to []string, message [
 	if err != nil {
 		return err
 	}
-	if _, err := w.Write(message); err != nil {
-		_ = w.Close()
+	if _, err = w.Write(message); err != nil {
+		w.Close()
 		return err
 	}
-	if err := w.Close(); err != nil {
+	if err = w.Close(); err != nil {
 		return err
 	}
 	return client.Quit()

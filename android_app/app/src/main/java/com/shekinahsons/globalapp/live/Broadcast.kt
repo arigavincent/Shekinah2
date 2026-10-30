@@ -128,7 +128,7 @@ object Broadcast {
 
     fun prepare(hd: Boolean, portrait: Boolean, rotation: Int): Boolean {
         val s = stream ?: return false
-        if (s.isStreaming) return false
+        if (s.isStreaming || s.isRecording) return false
         // The size can only change with the preview stopped; restart it after.
         val wasPreviewing = s.isOnPreview
         if (wasPreviewing) s.stopPreview()
@@ -144,6 +144,29 @@ object Broadcast {
         return s.prepareVideo(w, h, rate, rotation = rotation) && s.prepareAudio(44_100, true, 128_000)
     }
 
+    var directSession: String? = null; private set
+    fun startDirect(context: Context, id: String, key: String) {
+        val s = stream ?: return
+        directSession = id
+        state = "connecting"; error = null; bitrate = 0
+        val dir = DirectLive.prepare(context, id)
+        s.setRecordController(SegmentRecorder(dir) { file, duration ->
+            runCatching { DirectLive.save(context, id, file, duration, key) }.onFailure { problem ->
+                main.post { error = problem.message; state = "error"; if (s.isRecording) s.stopRecord() }
+            }
+        })
+        LiveService.start(context, screen = false); addFilters()
+        s.startRecord(dir.absolutePath, com.pedro.library.base.recording.RecordController.RecordTracks.ALL, object : com.pedro.library.base.recording.RecordController.Listener {
+            override fun onStatusChange(status: com.pedro.library.base.recording.RecordController.Status) {}
+            override fun onError(e: Exception?) { main.post { error = e?.message ?: "Could not record broadcast"; state = "error" } }
+        })
+    }
+    fun directSaved(id: String, bytes: Long, duration: Double) { main.post {
+        if (directSession == id) { if (state != "live") startedAt = System.currentTimeMillis(); state = "live"; error = null; bitrate = (bytes * 8 / duration).toLong() }
+    } }
+    fun directInterrupted(id: String, message: String) { main.post {
+        if (directSession == id) error = "Connection interrupted. Recording saved on this phone; retrying. $message"
+    } }
     fun start(context: Context, url: String) {
         val s = stream ?: return
         state = "connecting"; error = null; bitrate = 0
@@ -153,7 +176,9 @@ object Broadcast {
     }
 
     fun stop(context: Context) {
-        stream?.let { if (it.isStreaming) it.stopStream() }
+        stream?.let { if (it.isStreaming) it.stopStream(); if (it.isRecording) it.stopRecord() }
+        directSession?.let { id -> File(DirectLive.folder(context,id),"ended").writeText("1"); DirectLive.enqueue(context,id) }
+        directSession = null
         state = "idle"; startedAt = 0; bitrate = 0
         if (showing != Showing.Camera) runCatching { stream?.changeVideoSource(Camera2Source(context.applicationContext)) }
         showing = Showing.Camera
@@ -170,7 +195,7 @@ object Broadcast {
         micOn = on
         when (val a = stream?.audioSource) {
             is MicrophoneSource -> if (on) a.unMute() else a.mute()
-            is MixAudioSource -> if (on) a.unMute() else a.mute()
+            is MixAudioSource -> if (android.os.Build.VERSION.SDK_INT >= 29) { if (on) a.unMute() else a.mute() }
         }
     }
 

@@ -245,7 +245,19 @@ func (h Handler) PDF(c *gin.Context) {
 	header()
 	pdf.SetFont("Helvetica", "", 9)
 	for i, r := range list {
-		if pdf.GetY() > 275 {
+		cells := []string{fmt.Sprint(i + 1), r.Name, r.Email, r.CreatedAt.In(nairobi).Format("3:04 PM"), r.By}
+		if occasion == "" {
+			cells = []string{fmt.Sprint(i + 1), r.Name, r.Email, r.Occasion, r.CreatedAt.In(nairobi).Format("3:04 PM"), r.By}
+		}
+		// Keep complete names and contact details. Size the whole row for its
+		// tallest wrapped cell so text never overlaps the following record.
+		rowHeight := 7.0
+		for j, v := range cells {
+			if height := float64(len(pdf.SplitLines([]byte(tr(v)), widths[j]-2)))*4.5 + 2; height > rowHeight {
+				rowHeight = height
+			}
+		}
+		if pdf.GetY()+rowHeight > 281 {
 			pdf.AddPage()
 			header()
 			pdf.SetFont("Helvetica", "", 9)
@@ -256,17 +268,14 @@ func (h Handler) PDF(c *gin.Context) {
 			pdf.SetFillColor(255, 255, 255)
 		}
 		pdf.SetTextColor(30, 30, 30)
-		cells := []string{fmt.Sprint(i + 1), r.Name, r.Email, r.CreatedAt.In(nairobi).Format("3:04 PM"), r.By}
-		if occasion == "" {
-			cells = []string{fmt.Sprint(i + 1), r.Name, r.Email, r.Occasion, r.CreatedAt.In(nairobi).Format("3:04 PM"), r.By}
-		}
+		x, y := pdf.GetX(), pdf.GetY()
 		for j, v := range cells {
-			if r := []rune(v); float64(len(r))*1.75 > widths[j] {
-				v = string(r[:int(widths[j]/1.75)-1]) + "…"
-			}
-			pdf.CellFormat(widths[j], 7, tr(v), "", 0, "L", true, 0, "")
+			pdf.Rect(x, y, widths[j], rowHeight, "F")
+			pdf.SetXY(x+1, y+1)
+			pdf.MultiCell(widths[j]-2, 4.5, tr(v), "", "L", false)
+			x += widths[j]
 		}
-		pdf.Ln(-1)
+		pdf.SetXY(14, y+rowHeight)
 	}
 	if len(list) == 0 {
 		pdf.SetTextColor(120, 120, 125)

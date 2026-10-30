@@ -36,7 +36,21 @@ object VideoCache {
 
     // Encrypted downloads first, then the shared cache, then the network.
     fun dataSourceFactory(): androidx.media3.datasource.DataSource.Factory =
-        com.shekinahsons.globalapp.data.VaultFiles.Router(app, cacheFactory())
+        com.shekinahsons.globalapp.data.VaultFiles.Router(app, androidx.media3.datasource.DataSource.Factory {
+            object: androidx.media3.datasource.DataSource {
+                private var active: androidx.media3.datasource.DataSource?=null
+                override fun addTransferListener(l: androidx.media3.datasource.TransferListener) { }
+                override fun open(spec:DataSpec):Long {
+                    val base=android.net.Uri.parse(com.shekinahsons.globalapp.BuildConfig.API_BASE)
+                    val protected=spec.uri.scheme==base.scheme && spec.uri.authority==base.authority && spec.uri.path.orEmpty().startsWith("/api/v1/live/")
+                    active=if(protected) LiveDataSource.createDataSource() else cacheFactory().createDataSource()
+                    return active!!.open(spec)
+                }
+                override fun read(b:ByteArray,o:Int,n:Int)=active!!.read(b,o,n)
+                override fun getUri()=active?.uri
+                override fun close(){active?.close();active=null}
+            }
+        })
 
     private fun cacheFactory(): CacheDataSource.Factory = CacheDataSource.Factory()
         .setCache(cache!!)

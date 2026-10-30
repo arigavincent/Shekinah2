@@ -3,6 +3,7 @@ package liveconfig
 import (
 	"context"
 	"errors"
+	"github.com/ariga/shekinah-backend/internal/integrations"
 	"strings"
 
 	"github.com/ariga/shekinah-backend/internal/config"
@@ -13,6 +14,7 @@ var ErrInvalidInput = errors.New("invalid live config input")
 type Service struct {
 	repository Repository
 	cloudflare CloudflareStreamClient
+	store      *integrations.Store
 }
 
 func NewService(repository Repository, cfg config.Config) Service {
@@ -22,6 +24,23 @@ func NewService(repository Repository, cfg config.Config) Service {
 	}
 }
 
+func (s Service) WithIntegrations(store integrations.Store) Service { s.store = &store; return s }
+func (s Service) current(ctx context.Context) (Service, error) {
+	if s.store == nil {
+		return s, nil
+	}
+	cfg, _, err := s.store.Load(ctx, "cloudflare-stream")
+	if err != nil {
+		return s, err
+	}
+	s.cloudflare.accountID = ""
+	s.cloudflare.apiToken = ""
+	if cfg.Enabled {
+		s.cloudflare.accountID = cfg.Values["CLOUDFLARE_ACCOUNT_ID"]
+		s.cloudflare.apiToken = cfg.Values["CLOUDFLARE_STREAM_API_TOKEN"]
+	}
+	return s, nil
+}
 func (s Service) Get(ctx context.Context) (LiveConfig, error) {
 	item, err := s.repository.Get(ctx)
 	if err == nil {
@@ -89,6 +108,11 @@ func (s Service) Update(ctx context.Context, req UpdateRequest) (LiveConfig, err
 }
 
 func (s Service) CreateCloudflareLiveInput(ctx context.Context) (LiveConfig, error) {
+	var e error
+	s, e = s.current(ctx)
+	if e != nil {
+		return LiveConfig{}, errors.New("protected stream settings are unavailable")
+	}
 	current, err := s.Get(ctx)
 	if err != nil {
 		return LiveConfig{}, err
@@ -123,6 +147,11 @@ func (s Service) CreateCloudflareLiveInput(ctx context.Context) (LiveConfig, err
 }
 
 func (s Service) ResetCloudflareLiveInput(ctx context.Context) (LiveConfig, error) {
+	var e error
+	s, e = s.current(ctx)
+	if e != nil {
+		return LiveConfig{}, errors.New("protected stream settings are unavailable")
+	}
 	current, err := s.Get(ctx)
 	if err != nil {
 		return LiveConfig{}, err

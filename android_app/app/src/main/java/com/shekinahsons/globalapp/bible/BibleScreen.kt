@@ -148,7 +148,7 @@ private fun highlightOf(name: String?) = highlightColors.firstOrNull { it.first 
 fun BibleScreen() {
     val context = LocalContext.current
     val bible = remember { BibleDb.get(context) }
-    val store = remember { BibleStore(context) }
+    val store = remember(com.shekinahsons.globalapp.data.Accounts.current) { BibleStore(context) }
     var view by remember { mutableStateOf<View>(View.Books) }
 
     // Opened from elsewhere at a reference.
@@ -280,7 +280,7 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
     fun readChapter(ch: Int, from: Int) {
         val id = listenId
         readingChapter = ch
-        narrator.read(versionOf(id)?.language ?: "en", heading(id, ch), bible.chapter(id, book.id, ch), from) {
+        scope.launch { narrator.readChapter(id,book.code,ch,versionOf(id)?.language ?: "en", heading(id, ch), bible.chapter(id, book.id, ch), from) {
             // Carry on into the next chapter, turning the page with it.
             if (ch < chapters) scope.launch {
                 advancing = true
@@ -288,7 +288,7 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
                 advancing = false
                 readChapter(ch + 1, 1)
             } else narrator.stop()
-        }
+        } }
     }
 
     LaunchedEffect(pager.settledPage) {
@@ -374,7 +374,7 @@ private fun ListenBar(narrator: Narrator, modifier: Modifier, where: String, ver
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("NOW READING", style = Type.Label.copy(fontSize = 9.5.sp), color = Brand.Gold)
+                Text(if(narrator.recorded)"RECORDED NARRATION" else "DEVICE VOICE", style = Type.Label.copy(fontSize = 9.5.sp), color = Brand.Gold)
                 Text(where, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Brand.White, maxLines = 1)
             }
             if (versionLabel.isNotBlank()) {
@@ -383,6 +383,7 @@ private fun ListenBar(narrator: Narrator, modifier: Modifier, where: String, ver
             }
             Icon(Icons.Rounded.Close, "Stop reading", tint = Brand.Text2, modifier = Modifier.padding(start = 6.dp).size(34.dp).clip(CircleShape).clickable { narrator.stop() }.padding(6.dp))
         }
+        if(narrator.recorded) Text(narrator.attribution,style=Type.Meta,color=Brand.Text2)
         if (narrator.missingLanguage) {
             Text("This phone has no voice for this language yet. Tap to add one in speech settings.", style = Type.Meta, color = Color(0xFFFFD58A),
                 modifier = Modifier.padding(top = 6.dp).clickable {
@@ -392,7 +393,7 @@ private fun ListenBar(narrator: Narrator, modifier: Modifier, where: String, ver
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box {
-                Row(Modifier.glass().clickable { voiceMenu = true }.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.glass().clickable(enabled=!narrator.recorded) { voiceMenu = true }.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.RecordVoiceOver, null, tint = Brand.GoldLight, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(5.dp))
                     Text("Voice", color = Brand.White, fontSize = 12.5.sp)

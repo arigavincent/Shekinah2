@@ -133,6 +133,7 @@ func (r Repository) UpdatePassword(ctx context.Context, userID string, passwordH
 		UPDATE users
 		SET password_hash = $2,
 		    password_reset_required = false,
+		    session_version = session_version + 1,
 		    updated_at = now()
 		WHERE id = $1
 		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
@@ -252,6 +253,7 @@ func (r Repository) UsePasswordResetAndUpdatePassword(ctx context.Context, token
 		UPDATE users
 		SET password_hash = $2,
 		    password_reset_required = false,
+		    session_version = session_version + 1,
 		    updated_at = now()
 		WHERE id = $1
 		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at

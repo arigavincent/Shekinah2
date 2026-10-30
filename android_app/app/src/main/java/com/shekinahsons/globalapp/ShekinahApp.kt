@@ -18,6 +18,7 @@ class ShekinahApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        com.shekinahsons.globalapp.data.Downloads.observe(this)
         content = ContentRepository(this)
         library = Library(this)
         session = com.shekinahsons.globalapp.data.Session(this)

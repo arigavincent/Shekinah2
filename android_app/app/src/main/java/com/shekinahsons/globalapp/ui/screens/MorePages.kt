@@ -142,10 +142,12 @@ fun PlatformsPage(content: HomeContent) {
         item { Text("Find Shekinah Sons Global on radio, TV and the web.", style = Type.Body, color = Brand.Text2) }
         content.platforms.forEach { (kind, list) ->
             items(list, key = { it.id }) { p ->
+                val configured=com.shekinahsons.globalapp.data.Ministry.details.let{when(kind){"Radio"->it.radioUrl;"TV"->it.tvUrl;"Web"->it.website;else->""}}
+                val link=configured.ifBlank{p.link.takeUnless{it.contains("example.com",true)}.orEmpty()}
                 Row(
                     Modifier.fillMaxWidth().lifted(RoundedCornerShape(20.dp), 10.dp).clip(RoundedCornerShape(20.dp))
                         .background(Brush.linearGradient(listOf(Color(0xFF1C1810), Color(0xFF111318)))).border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(20.dp))
-                        .clickable(enabled = p.link.isNotBlank()) { open(context, p.link) }.padding(16.dp),
+                        .clickable(enabled = link.isNotBlank()) { open(context, link) }.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.size(52.dp).clip(CircleShape).background(Brand.GoldGradient), contentAlignment = Alignment.Center) {
@@ -155,9 +157,9 @@ fun PlatformsPage(content: HomeContent) {
                     Column(Modifier.weight(1f)) {
                         Text(kind.uppercase(), style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold)
                         Text(p.name, style = Type.CardTitle, color = Brand.White)
-                        Text(p.description, style = Type.Meta, color = Brand.Text2)
+                        Text(if(link.isBlank()) "Details coming soon" else p.description, style = Type.Meta, color = Brand.Text2)
                     }
-                    if (p.link.isNotBlank()) Icon(Icons.AutoMirrored.Rounded.OpenInNew, "Open", tint = Brand.Text2)
+                    if (link.isNotBlank()) Icon(Icons.AutoMirrored.Rounded.OpenInNew, "Open", tint = Brand.Text2)
                 }
             }
         }
@@ -166,9 +168,13 @@ fun PlatformsPage(content: HomeContent) {
 
 // What the member wants to hear about. Saved on the phone and sent to the
 // server so pushes respect it; the phone also filters what it shows.
+@Serializable private data class Announcement(val id:String="",val title:String="",val body:String="",val createdAt:String="",val category:String="general",val data:Map<String,kotlinx.serialization.json.JsonElement> = emptyMap())
 @Composable
 fun NotificationsPage(content: HomeContent) {
     val context = LocalContext.current
+    var announcements by remember{mutableStateOf(emptyList<Announcement>())}
+    var feedError by remember{mutableStateOf<String?>(null)}
+    LaunchedEffect(Unit){runCatching{Api.decode<List<Announcement>>(Api.get("/notifications/feed")["messages"])}.onSuccess{announcements=it}.onFailure{feedError=it.message}}
     val prefs = remember { context.getSharedPreferences("notify", Context.MODE_PRIVATE) }
     fun toggle(key: String, def: Boolean = true): Pair<Boolean, (Boolean) -> Unit> = prefs.getBoolean(key, def) to { v -> prefs.edit().putBoolean(key, v).apply() }
     var live by remember { mutableStateOf(prefs.getBoolean("live", true)) }
@@ -185,14 +191,16 @@ fun NotificationsPage(content: HomeContent) {
             }
         }
         item { Text("Recent announcements", style = Type.Title, color = Brand.White, modifier = Modifier.padding(top = 10.dp)) }
-        if (content.updates.isEmpty()) item { Text("Nothing new right now.", style = Type.Body, color = Brand.Muted) }
-        items(content.updates, key = { it.id }) { u ->
-            Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.6f).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                FadeImage(u.image, Modifier.size(54.dp).clip(RoundedCornerShape(12.dp)), label = "NEW")
+        item { com.shekinahsons.globalapp.ui.components.ErrorNote(feedError) }
+        if (announcements.isEmpty()) item { Text("Nothing new right now.", style = Type.Body, color = Brand.Muted) }
+        items(announcements, key = { it.id }) { u ->
+            Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.6f).clickable { com.shekinahsons.globalapp.notify.OpenLink.pending=com.shekinahsons.globalapp.notify.OpenLink.Target((u.data["open"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: u.category,(u.data["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(u.title, style = Type.CardTitle, color = Brand.White)
-                    Text(u.date, style = Type.Meta, color = Brand.Text2)
+                    Text(u.body, style = Type.Meta, color = Brand.Text2)
+                    Text(u.createdAt.take(10),style=Type.Meta,color=Brand.Muted)
                 }
             }
         }
@@ -208,7 +216,7 @@ fun LibraryPage(content: HomeContent, library: Library, openVideo: (Sermon, List
     val context = LocalContext.current
     val resources = remember { mutableStateListOf<Resource>() }
     LaunchedEffect(Unit) { runCatching { resources.clear(); resources.addAll(Api.decode<List<Resource>>(Api.get("/library")["items"])) } }
-    val saved = content.sermons.filter { library.isSaved(it.id) }
+    val saved = (content.sermons+library.catalogue()).distinctBy{it.id}.filter { library.isSaved(it.id) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp)) {
         item { Text("Books & resources", style = Type.Title, color = Brand.White, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         if (resources.isEmpty()) item { Text("Books and study guides from the church will appear here.", style = Type.Body, color = Brand.Muted, modifier = Modifier.padding(horizontal = 16.dp)) }
@@ -235,9 +243,9 @@ fun LibraryPage(content: HomeContent, library: Library, openVideo: (Sermon, List
 // Downloads: encrypted copies kept inside the app, playable offline only here.
 @Composable
 fun DownloadsPage(content: HomeContent, library: Library, openVideo: (Sermon, List<Sermon>) -> Unit, openAudio: (Sermon, List<Sermon>) -> Unit) {
-    val all = content.sermons
-    val done = remember(library.version, all) { all.filter { library.isDownloaded(it) } }
-    val active = all.filter { it.id in library.downloading }
+    val all = (content.sermons+library.catalogue()).distinctBy{it.id}
+    val done = remember(library.version, library.transfers.toMap(), all) { all.filter { library.isDownloaded(it) } }
+    val active = all.filter { library.transfer(it)?.state !in listOf(null,"Complete","Cancelled") }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp)) {
         item {
             Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.7f).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -253,7 +261,12 @@ fun DownloadsPage(content: HomeContent, library: Library, openVideo: (Sermon, Li
                 Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color(0x22FFFFFF))) {
                     Box(Modifier.fillMaxWidth(p.coerceIn(0.02f, 1f)).height(4.dp).background(Brand.GoldGradient))
                 }
-                Text("Downloading ${(p * 100).toInt()}%", style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 4.dp))
+                Text("${library.transfer(s)?.state} ${(p * 100).toInt()}%", style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 4.dp))
+                com.shekinahsons.globalapp.ui.components.ErrorNote(library.transfer(s)?.error?.takeIf { it.isNotBlank() })
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Text(if(s.id in library.downloading) "Pause" else "Retry", color=Brand.Gold, modifier=Modifier.clickable { if(s.id in library.downloading) library.pause(s) else library.download(s) }.padding(vertical=12.dp))
+                    Text("Cancel",color=Brand.Text2,modifier=Modifier.clickable { library.cancel(s) }.padding(vertical=12.dp))
+                }
             }
         }
         if (done.isEmpty() && active.isEmpty()) item {
@@ -274,7 +287,7 @@ fun DownloadsPage(content: HomeContent, library: Library, openVideo: (Sermon, Li
 // Watch history: every sermon opened, most recent first.
 @Composable
 fun HistoryPage(content: HomeContent, library: Library, openVideo: (Sermon, List<Sermon>) -> Unit, openAudio: (Sermon, List<Sermon>) -> Unit) {
-    val everything = remember(content) { content.sermons + content.clips.map { it.asSermon() } }
+    val everything = remember(content) { (content.sermons+library.catalogue()).distinctBy{it.id} + content.clips.map { it.asSermon() } }
     val items = remember(library.progressVersion, everything) { library.history(everything) }
     var confirm by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp)) {

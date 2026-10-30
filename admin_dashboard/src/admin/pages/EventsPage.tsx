@@ -1,3 +1,6 @@
+import {DateField,TimeField} from "../components/DateTimeFields";
+import {EventAccessEditor} from "../components/EventAccessEditor";
+import {PublishingQueue} from "../components/PublishingQueue";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -128,7 +131,7 @@ export function EventsPage() {
     }
     if (!form.eventTime.trim()) return "Event time is required.";
     if (!form.location.trim()) return "Location is required.";
-    if (!isValidAssetReference(form.imageUrl)) {
+    if (form.imageUrl && !isValidAssetReference(form.imageUrl)) {
       return "Event image must be an uploaded file path or a valid http(s) URL.";
     }
     if (!hasMinLength(form.description, 30)) return "Description must be at least 30 characters.";
@@ -217,10 +220,12 @@ export function EventsPage() {
         </button>
       </header>
 
+      <PublishingQueue section="event" onCompleted={load}/>
       {error ? <InlineAlert title="Events could not be updated" message={error} /> : null}
 
-      <section className="content-grid">
-        <form className="editor-card" onSubmit={submit}>
+      {editingId&&events.find(e=>e.id===editingId)&&<EventAccessEditor key={editingId} id={editingId} publishedAt={events.find(e=>e.id===editingId)!.publishedAt} isPublished={events.find(e=>e.id===editingId)!.isPublished}/>}
+      <section className="catalogue-stack">
+        {editingId && <form className="editor-card" onSubmit={submit}>
           <div className="section-title-row">
             <h2>{editingId ? "Edit Event" : "Create Event"}</h2>
 
@@ -241,23 +246,9 @@ export function EventsPage() {
           </label>
 
           <div className="two-col">
-            <label>
-              Date
-              <input
-                value={form.eventDate}
-                onChange={event => updateField("eventDate", event.target.value)}
-                placeholder="YYYY-MM-DD"
-              />
-            </label>
+            <DateField label="Date" value={form.eventDate} onChange={value=>updateField("eventDate",value)}/>
 
-            <label>
-              Time
-              <input
-                value={form.eventTime}
-                onChange={event => updateField("eventTime", event.target.value)}
-                placeholder="6:00 PM"
-              />
-            </label>
+            <TimeField label="Time" value={form.eventTime} onChange={value=>updateField("eventTime",value)}/>
           </div>
 
           <label>
@@ -320,7 +311,7 @@ export function EventsPage() {
           <button disabled={saving}>
             {saving ? "Saving..." : editingId ? "Update Event" : "Create Event"}
           </button>
-        </form>
+        </form>}
 
         <section className="list-card">
           <div className="section-title-row">

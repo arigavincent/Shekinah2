@@ -506,7 +506,7 @@ export function BatchUploadDialog(props: BatchUploadDialogProps) {
                   {publishVisibility.label}
                 </span>
                 <span className="batch-file-meta">
-                  Content appears in the mobile app only when this UTC time is reached.
+                  Content appears in the mobile app only when this Nairobi time is reached.
                 </span>
               </label>
             </div>

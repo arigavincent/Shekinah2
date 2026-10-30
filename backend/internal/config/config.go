@@ -1,12 +1,15 @@
 package config
 
 import (
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
 )
 
 type Config struct {
+	// Optional dependency injection for isolated provider tests; never set from HTTP input.
+	ProviderHTTPClient                       *http.Client
 	AppEnv                                   string
 	HTTPAddr                                 string
 	DatabaseURL                              string
@@ -32,8 +35,8 @@ func Load() Config {
 		APIBibleKey:                              getEnv("API_BIBLE_KEY", ""),
 		APIBibleBaseURL:                          getEnv("API_BIBLE_BASE_URL", "https://rest.api.bible/v1"),
 		FlutterwaveSecretKey:                     getEnv("FLUTTERWAVE_SECRET_KEY", ""),
-		FlutterwaveBaseURL:                       getEnv("FLUTTERWAVE_BASE_URL", "https://developersandbox-api.flutterwave.com"),
-		FlutterwaveRedirectURL:                   getEnv("FLUTTERWAVE_REDIRECT_URL", "https://example.com/giving/flutterwave/return"),
+		FlutterwaveBaseURL:                       getEnv("FLUTTERWAVE_BASE_URL", "https://api.flutterwave.com/v3"),
+		FlutterwaveRedirectURL:                   getEnv("FLUTTERWAVE_REDIRECT_URL", ""),
 		CloudflareAccountID:                      getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
 		CloudflareStreamAPIToken:                 getEnv("CLOUDFLARE_STREAM_API_TOKEN", ""),
 		CloudflareStreamRecordingMode:            getEnv("CLOUDFLARE_STREAM_RECORDING_MODE", "automatic"),

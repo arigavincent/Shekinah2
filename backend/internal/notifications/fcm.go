@@ -42,6 +42,9 @@ func newFCMSender(client *http.Client) *fcmSender {
 			raw = string(data)
 		}
 	}
+	return senderFromJSON(client, raw)
+}
+func senderFromJSON(client *http.Client, raw string) *fcmSender {
 	if raw == "" {
 		return &fcmSender{client: client}
 	}
@@ -113,6 +116,13 @@ func (s *fcmSender) send(ctx context.Context, tokens []string, req BroadcastRequ
 	}
 	endpoint := "https://fcm.googleapis.com/v1/projects/" + s.account.ProjectID + "/messages:send"
 	data := map[string]string{"category": req.Category, "title": req.Title, "body": req.Body}
+	// Android delivers data fields as Intent extras when its notification opens
+	// a background/cold app. Keep the destination directly addressable.
+	for _, key := range []string{"open", "id"} {
+		if value, ok := req.Data[key].(string); ok {
+			data[key] = value
+		}
+	}
 	if payload, err := json.Marshal(req.Data); err == nil {
 		data["payload"] = string(payload)
 	}

@@ -80,6 +80,7 @@ import com.shekinahsons.globalapp.ui.components.AmbientGlow
 import com.shekinahsons.globalapp.ui.components.ErrorNote
 import com.shekinahsons.globalapp.ui.components.FadeImage
 import com.shekinahsons.globalapp.ui.components.Field
+import com.shekinahsons.globalapp.ui.components.GhostButton
 import com.shekinahsons.globalapp.ui.components.GoldButton
 import com.shekinahsons.globalapp.ui.components.SignInCard
 import com.shekinahsons.globalapp.ui.components.TopBar
@@ -116,7 +117,11 @@ private fun date(e: Event) = runCatching { LocalDate.parse(e.eventDate) }.getOrN
 // Events: upcoming gatherings, and signing up for them.
 @Composable
 fun EventsScreen(content: HomeContent, session: Session, openProfile: () -> Unit, onBack: () -> Unit) {
-    var open by remember { mutableStateOf<Event?>(null) }
+    var open by remember { mutableStateOf<Event?>(content.events.firstOrNull { it.id==com.shekinahsons.globalapp.notify.OpenLink.eventId }.also { com.shekinahsons.globalapp.notify.OpenLink.eventId=null }) }
+    LaunchedEffect(com.shekinahsons.globalapp.notify.OpenLink.eventId,content.events) {
+        val id=com.shekinahsons.globalapp.notify.OpenLink.eventId?.takeIf{it.isNotBlank()} ?: return@LaunchedEffect
+        content.events.firstOrNull{it.id==id}?.let{open=it;com.shekinahsons.globalapp.notify.OpenLink.eventId=null}
+    }
     BackHandler { if (open != null) open = null else onBack() }
     AnimatedContent(open, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "events", modifier = Modifier.fillMaxSize().background(Brand.Black)) { e ->
         if (e == null) EventList(content.events, onBack) { open = it } else EventDetail(e, session, openProfile) { open = null }
@@ -125,7 +130,7 @@ fun EventsScreen(content: HomeContent, session: Session, openProfile: () -> Unit
 
 @Composable
 private fun EventList(events: List<Event>, onBack: () -> Unit, open: (Event) -> Unit) {
-    val today = LocalDate.now()
+    val today = LocalDate.now(ZoneId.of("Africa/Nairobi"))
     val upcoming = events.filter { (date(it) ?: today) >= today }.sortedBy { date(it) ?: today }
     val past = (events - upcoming.toSet()).sortedByDescending { date(it) ?: today }
     val hero = upcoming.firstOrNull()
@@ -222,9 +227,13 @@ private fun EventDetail(e: Event, session: Session, openProfile: () -> Unit, onB
     var reload by remember { mutableIntStateOf(0) }
     var paying by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(reload, session.member) {
         runCatching { Api.decode<RegInfo>(Api.get("/events/${e.id}/registration")) }.onSuccess { info = it }.onFailure { error = it.message }
+    }
+    LaunchedEffect(info?.mine?.payment) {
+        while(info?.mine?.payment=="pending") { kotlinx.coroutines.delay(8_000); runCatching { Api.decode<RegInfo>(Api.get("/events/${e.id}/registration")) }.onSuccess { info=it } }
     }
     val i = info
     if (paying && i != null) {
@@ -244,7 +253,7 @@ private fun EventDetail(e: Event, session: Session, openProfile: () -> Unit, onB
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(bottom = 40.dp)) {
             TopBar(title = "", onBack = onBack) {
                 Icon(Icons.Rounded.Share, "Share", tint = Color.White, modifier = Modifier.size(42.dp).clip(CircleShape).clickable {
-                    val text = "${e.title}\n${e.date} · ${e.time}\n${e.location}\n\nSee you there! Shekinah Sons Global"
+                    val text = "${e.title}\n${e.date} · ${e.time}\n${e.location}\n\nSee you there! Shekinah Sons Global\n${com.shekinahsons.globalapp.notify.OpenLink.uri("events",e.id)}"
                     context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share event"))
                 }.padding(10.dp))
             }
@@ -269,7 +278,7 @@ private fun EventDetail(e: Event, session: Session, openProfile: () -> Unit, onB
                         val intent = Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
                             .putExtra(CalendarContract.Events.TITLE, e.title).putExtra(CalendarContract.Events.EVENT_LOCATION, e.location)
                             .putExtra(CalendarContract.Events.DESCRIPTION, e.description)
-                        start?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, it.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()) }
+                        start?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, it.atZone(ZoneId.of("Africa/Nairobi")).toInstant().toEpochMilli()) }
                         runCatching { context.startActivity(intent) }
                     }
                 }
@@ -282,14 +291,15 @@ private fun EventDetail(e: Event, session: Session, openProfile: () -> Unit, onB
                 Spacer(Modifier.height(22.dp))
                 ErrorNote(error)
                 if (i == null) Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Gold) }
-                else Registration(e, i, session, editing, openProfile,
+                else Registration(e, i, session, editing, openProfile, submitting,
                     edit = { editing = it }, pay = { paying = true },
                     submit = { answers ->
                         scope.launch {
-                            error = null
+                            error = null; submitting = true
                             runCatching { Api.post("/events/${e.id}/register", mapOf("answers" to answers)) }
                                 .onSuccess { editing = false; reload++; if (i.setup.price > 0 && i.mine.payment == "none") paying = true }
                                 .onFailure { error = it.message }
+                            submitting = false
                         }
                     },
                     cancel = {
@@ -321,7 +331,7 @@ private fun SmallAction(icon: androidx.compose.ui.graphics.vector.ImageVector, l
 
 @Composable
 private fun Registration(
-    e: Event, i: RegInfo, session: Session, editing: Boolean, openProfile: () -> Unit,
+    e: Event, i: RegInfo, session: Session, editing: Boolean, openProfile: () -> Unit, busy: Boolean,
     edit: (Boolean) -> Unit, pay: () -> Unit, submit: (Map<String, String>) -> Unit, cancel: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -329,8 +339,13 @@ private fun Registration(
     val mine = i.mine
     Text("Registration", style = Type.Title, color = Brand.White)
     Spacer(Modifier.height(10.dp))
+    if(s.mode=="link" && s.price>0) Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
+        Text("External registration form",style=Type.CardTitle,color=Brand.White)
+        Text("Complete the external form separately. Your Shekinah ticket requires confirmed payment below; external responses are not synced.",style=Type.Body,color=Brand.Text2)
+        GhostButton("Open form"){runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(s.formUrl)))}}
+    }
     when {
-        s.mode == "link" -> Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp)) {
+        s.mode == "link" && s.price==0 -> Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp)) {
             Text("Register with the event's form. It opens in your browser.", style = Type.Body, color = Brand.Text2)
             Spacer(Modifier.height(12.dp))
             Row(
@@ -362,14 +377,13 @@ private fun Registration(
             Text("Change my details", color = Brand.GoldLight, fontSize = 13.5.sp, modifier = Modifier.padding(top = 10.dp).clickable { edit(true) })
         }
         i.spotsLeft == 0 && !mine.registered -> Text("This event is fully booked.", style = Type.Body, color = Brand.Text2)
-        else -> RegistrationForm(s, mine, submit, cancelEdit = if (editing) ({ edit(false) }) else null)
+        else -> RegistrationForm(s, mine, busy, submit, cancelEdit = if (editing) ({ edit(false) }) else null)
     }
 }
 
 @Composable
-private fun RegistrationForm(s: RegSetup, mine: MyReg, submit: (Map<String, String>) -> Unit, cancelEdit: (() -> Unit)?) {
+private fun RegistrationForm(s: RegSetup, mine: MyReg, busy: Boolean, submit: (Map<String, String>) -> Unit, cancelEdit: (() -> Unit)?) {
     val answers = remember { mutableStateMapOf<String, String>().apply { putAll(mine.answers) } }
-    var busy by remember { mutableStateOf(false) }
     val missing = s.fields.any { it.required && answers[it.id].isNullOrBlank() }
     Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (s.fields.isEmpty()) Text("Reserve your place for this event.", style = Type.Body, color = Brand.Text2)
@@ -394,7 +408,7 @@ private fun RegistrationForm(s: RegSetup, mine: MyReg, submit: (Map<String, Stri
             }
         }
         GoldButton(if (s.price > 0 && mine.payment == "none") "Continue to payment · ${money(s.price)}" else if (mine.registered) "Save changes" else "Register", busy = busy, enabled = !missing) {
-            busy = true; submit(answers.toMap())
+            submit(answers.toMap())
         }
         cancelEdit?.let { Text("Cancel", color = Brand.Text2, modifier = Modifier.align(Alignment.CenterHorizontally).clickable(onClick = it).padding(6.dp)) }
     }

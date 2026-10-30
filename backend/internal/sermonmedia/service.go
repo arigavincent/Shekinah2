@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ariga/shekinah-backend/internal/integrations"
 	"log"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 // Cloudflare Stream uploads, marks them ready once encoded, turns recorded
 // live services into sermons, and pulls episodes from the podcast feed.
 type Service struct {
+	store      *integrations.Store
 	stream     StreamClient
 	sermons    adminsermons.Service
 	repository adminsermons.Repository
@@ -35,6 +37,22 @@ func NewService(stream StreamClient, sermons adminsermons.Service, repository ad
 		podcast:    NewPodcastFetcher(),
 		mu:         &sync.Mutex{},
 	}
+}
+
+func (s Service) WithIntegrations(store integrations.Store) Service { s.store = &store; return s }
+func (s Service) current(ctx context.Context) (Service, error) {
+	if s.store == nil {
+		return s, nil
+	}
+	cfg, _, err := s.store.Load(ctx, "cloudflare-stream")
+	if err != nil {
+		return s, err
+	}
+	s.stream = NewStreamClient("", "")
+	if cfg.Enabled {
+		s.stream = NewStreamClient(cfg.Values["CLOUDFLARE_ACCOUNT_ID"], cfg.Values["CLOUDFLARE_STREAM_API_TOKEN"])
+	}
+	return s, nil
 }
 
 type StartUploadRequest struct {
@@ -57,6 +75,11 @@ type StartUploadResult struct {
 // StartUpload creates the sermon in "processing" state and returns the
 // resumable upload URL the dashboard sends the video file to.
 func (s Service) StartUpload(ctx context.Context, req StartUploadRequest) (StartUploadResult, error) {
+	var loadErr error
+	s, loadErr = s.current(ctx)
+	if loadErr != nil {
+		return StartUploadResult{}, errors.New("protected stream settings are unavailable")
+	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		return StartUploadResult{}, adminsermons.ErrInvalidInput
@@ -105,6 +128,12 @@ func (s Service) Sync(ctx context.Context) SyncReport {
 	defer s.mu.Unlock()
 
 	report := SyncReport{}
+	var err error
+	s, err = s.current(ctx)
+	if err != nil {
+		report.Errors = append(report.Errors, "protected stream settings are unavailable")
+		s.stream = NewStreamClient("", "")
+	}
 
 	if s.stream.Configured() {
 		if err := s.refreshProcessing(ctx, &report); err != nil {

@@ -50,9 +50,14 @@ func (h Handler) StartDirectUpload(c *gin.Context) {
 
 // StorageStatus tells the dashboard which upload paths are available.
 func (h Handler) StorageStatus(c *gin.Context) {
+	service, err := h.service.current(c.Request.Context())
+	if err != nil {
+		httpx.Error(c, 503, "provider_unavailable", "Stream settings are unavailable")
+		return
+	}
 	httpx.OK(c, gin.H{
 		"r2":     h.r2.Configured(),
-		"stream": h.service.stream.Configured(),
+		"stream": service.stream.Configured(),
 	})
 }
 

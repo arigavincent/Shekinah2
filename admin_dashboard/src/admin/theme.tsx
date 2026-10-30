@@ -2,6 +2,7 @@ import { createContext, useContext, useLayoutEffect, useMemo, useState, type Rea
 
 export type ThemeMode = "dark" | "light";
 export type ThemePalette =
+  | "shekinah"
   | "amber"
   | "indigo"
   | "emerald"
@@ -18,10 +19,11 @@ type ThemeContextValue = {
   toggleTheme: () => void;
 };
 
-const MODE_KEY = "shekinah.admin.theme";
-const PALETTE_KEY = "shekinah.admin.palette";
+const MODE_KEY = "shekinah.admin.theme.v2";
+const PALETTE_KEY = "shekinah.admin.palette.v2";
 
 export const ADMIN_PALETTES: { id: ThemePalette; label: string; swatch: string; description: string }[] = [
+  { id: "shekinah", label: "Shekinah", swatch: "#d4af37", description: "The same gold, charcoal and blue as the app" },
   { id: "amber",   label: "Burnt Amber",     swatch: "#c2410c", description: "Warm editorial default" },
   { id: "indigo",  label: "Midnight Indigo", swatch: "#4f46e5", description: "Cool, modern, focused" },
   { id: "emerald", label: "Emerald",         swatch: "#0d7a5f", description: "Calm, premium, trustworthy" },
@@ -34,14 +36,14 @@ export const ADMIN_PALETTES: { id: ThemePalette; label: string; swatch: string; 
 const PALETTE_IDS: string[] = ADMIN_PALETTES.map(p => p.id);
 
 function readMode(): ThemeMode {
-  if (typeof window === "undefined") return "light";
-  return window.localStorage.getItem(MODE_KEY) === "dark" ? "dark" : "light";
+  if (typeof window === "undefined") return "dark";
+  return window.localStorage.getItem(MODE_KEY) === "light" ? "light" : "dark";
 }
 
 function readPalette(): ThemePalette {
-  if (typeof window === "undefined") return "amber";
+  if (typeof window === "undefined") return "shekinah";
   const raw = window.localStorage.getItem(PALETTE_KEY);
-  return PALETTE_IDS.includes(raw || "") ? (raw as ThemePalette) : "amber";
+  return PALETTE_IDS.includes(raw || "") ? (raw as ThemePalette) : "shekinah";
 }
 
 function applyMode(mode: ThemeMode) {
@@ -64,8 +66,8 @@ if (typeof window !== "undefined") {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  mode: "light",
-  palette: "amber",
+  mode: "dark",
+  palette: "shekinah",
   setMode: () => {},
   setPalette: () => {},
   toggleTheme: () => {}

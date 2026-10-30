@@ -1,43 +1,61 @@
 package events
 
-import "time"
+import (
+	"github.com/ariga/shekinah-backend/internal/eventreg"
+	"time"
+)
 
 type Event struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	EventDate   string    `json:"eventDate"`
-	EventTime   string    `json:"eventTime"`
-	Location    string    `json:"location"`
-	ImageURL    string    `json:"imageUrl"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	PublishedAt     time.Time `json:"publishedAt"`
+	IsPublished     bool      `json:"isPublished"`
+	NotifyOnPublish bool      `json:"notifyOnPublish"`
+	ID              string    `json:"id"`
+	Title           string    `json:"title"`
+	EventDate       string    `json:"eventDate"`
+	EventTime       string    `json:"eventTime"`
+	Location        string    `json:"location"`
+	ImageURL        string    `json:"imageUrl"`
+	Description     string    `json:"description"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 type CreateRequest struct {
-	Title       string `json:"title"`
-	EventDate   string `json:"eventDate"`
-	EventTime   string `json:"eventTime"`
-	Location    string `json:"location"`
-	ImageURL    string `json:"imageUrl"`
-	Description string `json:"description"`
+	RegistrationSetup *eventreg.Setup `json:"registrationSetup"`
+	ID                string          `json:"id"`
+	PublishedAt       string          `json:"publishedAt"`
+	IsPublished       *bool           `json:"isPublished"`
+	NotifyOnPublish   *bool           `json:"notifyOnPublish"`
+	Title             string          `json:"title"`
+	EventDate         string          `json:"eventDate"`
+	EventTime         string          `json:"eventTime"`
+	Location          string          `json:"location"`
+	ImageURL          string          `json:"imageUrl"`
+	Description       string          `json:"description"`
 }
 
 type UpdateRequest struct {
-	Title       *string `json:"title"`
-	EventDate   *string `json:"eventDate"`
-	EventTime   *string `json:"eventTime"`
-	Location    *string `json:"location"`
-	ImageURL    *string `json:"imageUrl"`
-	Description *string `json:"description"`
+	PublishedAt     *string `json:"publishedAt"`
+	IsPublished     *bool   `json:"isPublished"`
+	NotifyOnPublish *bool   `json:"notifyOnPublish"`
+	Title           *string `json:"title"`
+	EventDate       *string `json:"eventDate"`
+	EventTime       *string `json:"eventTime"`
+	Location        *string `json:"location"`
+	ImageURL        *string `json:"imageUrl"`
+	Description     *string `json:"description"`
 }
 
 type Command struct {
-	ID          string
-	Title       string
-	EventDate   time.Time
-	EventTime   string
-	Location    string
-	ImageURL    string
-	Description string
+	Setup           eventreg.Setup
+	PublishedAt     time.Time
+	IsPublished     bool
+	NotifyOnPublish bool
+	ID              string
+	Title           string
+	EventDate       time.Time
+	EventTime       string
+	Location        string
+	ImageURL        string
+	Description     string
 }

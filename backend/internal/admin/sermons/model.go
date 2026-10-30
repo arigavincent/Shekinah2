@@ -3,65 +3,71 @@ package sermons
 import "time"
 
 type Sermon struct {
-	ID           string    `json:"id"`
-	ExternalID   string    `json:"externalId"`
-	Type         string    `json:"type"`
-	Code         string    `json:"code"`
-	Title        string    `json:"title"`
-	Speaker      string    `json:"speaker"`
-	SermonDate   string    `json:"sermonDate"`
-	PublishedAt  string    `json:"publishedAt"`
-	CategoryID   string    `json:"categoryId"`
-	Category     string    `json:"category"`
-	IsLive       bool      `json:"isLive"`
-	ThumbnailURL string    `json:"thumbnailUrl"`
-	Duration     string    `json:"duration"`
-	Description  string    `json:"description"`
-	MediaURL     string    `json:"mediaUrl"`
-	Source       string    `json:"source"`
-	StreamUID    string    `json:"streamUid"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	IsPublished     bool      `json:"isPublished"`
+	NotifyOnPublish bool      `json:"notifyOnPublish"`
+	ID              string    `json:"id"`
+	ExternalID      string    `json:"externalId"`
+	Type            string    `json:"type"`
+	Code            string    `json:"code"`
+	Title           string    `json:"title"`
+	Speaker         string    `json:"speaker"`
+	SermonDate      string    `json:"sermonDate"`
+	PublishedAt     string    `json:"publishedAt"`
+	CategoryID      string    `json:"categoryId"`
+	Category        string    `json:"category"`
+	IsLive          bool      `json:"isLive"`
+	ThumbnailURL    string    `json:"thumbnailUrl"`
+	Duration        string    `json:"duration"`
+	Description     string    `json:"description"`
+	MediaURL        string    `json:"mediaUrl"`
+	Source          string    `json:"source"`
+	StreamUID       string    `json:"streamUid"`
+	Status          string    `json:"status"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 type CreateRequest struct {
-	ID           string `json:"id"`
-	ExternalID   string `json:"externalId"`
-	Type         string `json:"type"`
-	Code         string `json:"code"`
-	Title        string `json:"title"`
-	Speaker      string `json:"speaker"`
-	SermonDate   string `json:"sermonDate"`
-	PublishedAt  string `json:"publishedAt"`
-	CategoryID   string `json:"categoryId"`
-	IsLive       bool   `json:"isLive"`
-	ThumbnailURL string `json:"thumbnailUrl"`
-	Duration     string `json:"duration"`
-	Description  string `json:"description"`
-	MediaURL     string `json:"mediaUrl"`
-	Source       string `json:"source"`
-	StreamUID    string `json:"streamUid"`
-	Status       string `json:"status"`
+	IsPublished     *bool  `json:"isPublished"`
+	NotifyOnPublish *bool  `json:"notifyOnPublish"`
+	ID              string `json:"id"`
+	ExternalID      string `json:"externalId"`
+	Type            string `json:"type"`
+	Code            string `json:"code"`
+	Title           string `json:"title"`
+	Speaker         string `json:"speaker"`
+	SermonDate      string `json:"sermonDate"`
+	PublishedAt     string `json:"publishedAt"`
+	CategoryID      string `json:"categoryId"`
+	IsLive          bool   `json:"isLive"`
+	ThumbnailURL    string `json:"thumbnailUrl"`
+	Duration        string `json:"duration"`
+	Description     string `json:"description"`
+	MediaURL        string `json:"mediaUrl"`
+	Source          string `json:"source"`
+	StreamUID       string `json:"streamUid"`
+	Status          string `json:"status"`
 }
 
 type UpdateRequest struct {
-	ExternalID   *string `json:"externalId"`
-	Type         *string `json:"type"`
-	Code         *string `json:"code"`
-	Title        *string `json:"title"`
-	Speaker      *string `json:"speaker"`
-	SermonDate   *string `json:"sermonDate"`
-	PublishedAt  *string `json:"publishedAt"`
-	CategoryID   *string `json:"categoryId"`
-	IsLive       *bool   `json:"isLive"`
-	ThumbnailURL *string `json:"thumbnailUrl"`
-	Duration     *string `json:"duration"`
-	Description  *string `json:"description"`
-	MediaURL     *string `json:"mediaUrl"`
-	Source       *string `json:"source"`
-	StreamUID    *string `json:"streamUid"`
-	Status       *string `json:"status"`
+	IsPublished     *bool   `json:"isPublished"`
+	NotifyOnPublish *bool   `json:"notifyOnPublish"`
+	ExternalID      *string `json:"externalId"`
+	Type            *string `json:"type"`
+	Code            *string `json:"code"`
+	Title           *string `json:"title"`
+	Speaker         *string `json:"speaker"`
+	SermonDate      *string `json:"sermonDate"`
+	PublishedAt     *string `json:"publishedAt"`
+	CategoryID      *string `json:"categoryId"`
+	IsLive          *bool   `json:"isLive"`
+	ThumbnailURL    *string `json:"thumbnailUrl"`
+	Duration        *string `json:"duration"`
+	Description     *string `json:"description"`
+	MediaURL        *string `json:"mediaUrl"`
+	Source          *string `json:"source"`
+	StreamUID       *string `json:"streamUid"`
+	Status          *string `json:"status"`
 }
 
 type ImportRequest struct {
@@ -99,21 +105,23 @@ type ImportResult struct {
 }
 
 type Command struct {
-	ID           string
-	ExternalID   string
-	Type         string
-	Code         string
-	Title        string
-	Speaker      string
-	SermonDate   time.Time
-	PublishedAt  time.Time
-	CategoryID   string
-	IsLive       bool
-	ThumbnailURL string
-	Duration     string
-	Description  string
-	MediaURL     string
-	Source       string
-	StreamUID    string
-	Status       string
+	IsPublished     bool
+	NotifyOnPublish bool
+	ID              string
+	ExternalID      string
+	Type            string
+	Code            string
+	Title           string
+	Speaker         string
+	SermonDate      time.Time
+	PublishedAt     time.Time
+	CategoryID      string
+	IsLive          bool
+	ThumbnailURL    string
+	Duration        string
+	Description     string
+	MediaURL        string
+	Source          string
+	StreamUID       string
+	Status          string
 }

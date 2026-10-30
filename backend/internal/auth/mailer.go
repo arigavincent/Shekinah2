@@ -1,9 +1,9 @@
 package auth
 
 import (
+	"context"
 	"crypto/tls"
 	"github.com/ariga/shekinah-backend/internal/mail"
-	"log"
 	"net"
 	"net/smtp"
 	"os"
@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-type passwordResetMailer struct{}
+type passwordResetMailer struct{ store mail.Store }
 
 func (m passwordResetMailer) Send(email string, code string) error {
-	if !mail.Configured() {
-		log.Printf("password reset SMTP not configured; OTP for %s: %s", email, code)
-		return nil
+	config, _, err := m.store.Load(context.Background())
+	if err != nil {
+		return err
 	}
-	return mail.Send(mail.Message{
+	return mail.SendWithConfig(config, mail.Message{
 		To:        []string{email},
 		Subject:   "Your Shekinah password reset code",
 		Heading:   "Reset your password",

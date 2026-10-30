@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,7 +19,16 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if cfg.AppEnv == "production" && (len(cfg.JWTSecret) < 32 || cfg.JWTSecret == "dev-only-change-this-secret") {
+		log.Fatal("Set JWT_SECRET to a strong secret of at least 32 characters before starting production")
+	}
 
+	if cfg.AppEnv == "production" {
+		key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(os.Getenv("LIBRARY_ENCRYPTION_KEY")))
+		if err != nil || len(key) != 32 {
+			log.Fatal("Set LIBRARY_ENCRYPTION_KEY to a persistent base64-encoded 32-byte key before production startup")
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -27,11 +38,19 @@ func main() {
 	}
 	defer db.Close()
 
+	if err := database.BootstrapFromR2(ctx, db); err != nil {
+		log.Fatal(err)
+	}
 	if err := database.RunMigrations(ctx, db, "migrations"); err != nil {
 		log.Fatalf("database migration failed: %v", err)
 	}
 
-	app := server.New(cfg, db)
+	if cfg.AppEnv == "production" {
+		if err := database.CheckProductionAccounts(ctx, db); err != nil {
+			log.Fatal(err)
+		}
+	}
+	app := server.NewWithContext(ctx, cfg, db)
 	server.StartBackground(ctx, cfg, db)
 
 	httpServer := &http.Server{

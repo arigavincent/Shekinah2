@@ -16,13 +16,18 @@ import (
 )
 
 const (
-	LiveBroadcast = "live:broadcast"
-	LiveModerate  = "live:moderate"
-	BooksPublish  = "books:publish"
-	CheckinScan   = "checkin:scan"
+	LiveBroadcast     = "live:broadcast"
+	LiveModerate      = "live:moderate"
+	BooksPublish      = "books:publish"
+	CheckinScan       = "checkin:scan"
+	SermonsManage     = "sermons:manage"
+	EventsManage      = "events:manage"
+	ContentManage     = "content:manage"
+	CommunityModerate = "community:moderate"
+	FinanceManage     = "finance:manage"
 )
 
-var All = []string{LiveBroadcast, LiveModerate, BooksPublish, CheckinScan}
+var All = []string{LiveBroadcast, LiveModerate, BooksPublish, CheckinScan, SermonsManage, EventsManage, ContentManage, CommunityModerate, FinanceManage}
 
 type Checker struct{ db *pgxpool.Pool }
 
@@ -32,7 +37,7 @@ func New(db *pgxpool.Pool) Checker { return Checker{db: db} }
 func (c Checker) Of(ctx context.Context, userID string) ([]string, error) {
 	var role string
 	var granted []string
-	err := c.db.QueryRow(ctx, `SELECT role, permissions FROM users WHERE id = $1 AND is_active = TRUE`, userID).Scan(&role, &granted)
+	err := c.db.QueryRow(ctx, `SELECT role, permissions FROM users WHERE id = $1 AND is_active = TRUE AND NOT password_reset_required`, userID).Scan(&role, &granted)
 	if err != nil {
 		return nil, err
 	}
@@ -84,19 +89,21 @@ func (c Checker) Mine(ctx *gin.Context) {
 }
 
 type memberRow struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Email       string   `json:"email"`
-	Role        string   `json:"role"`
-	Permissions []string `json:"permissions"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Email       string    `json:"email"`
+	Role        string    `json:"role"`
+	Permissions []string  `json:"permissions"`
+	IsActive    bool      `json:"isActive"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // AdminListMembers: GET /admin/members?query=
 func (c Checker) AdminListMembers(ctx *gin.Context) {
 	q := "%" + strings.ToLower(strings.TrimSpace(ctx.Query("query"))) + "%"
 	rows, err := c.db.Query(ctx.Request.Context(), `
-		SELECT id::text, name, email, role, permissions FROM users
-		WHERE is_active = TRUE AND (LOWER(name) LIKE $1 OR LOWER(email) LIKE $1)
+		SELECT id::text, name, email, role, permissions, is_active, created_at FROM users
+		WHERE (LOWER(name) LIKE $1 OR LOWER(email) LIKE $1)
 		ORDER BY (array_length(permissions, 1) IS NULL), role <> 'member' DESC, name LIMIT 100
 	`, q)
 	if err != nil {
@@ -107,7 +114,7 @@ func (c Checker) AdminListMembers(ctx *gin.Context) {
 	items := make([]memberRow, 0)
 	for rows.Next() {
 		var m memberRow
-		if err := rows.Scan(&m.ID, &m.Name, &m.Email, &m.Role, &m.Permissions); err == nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Email, &m.Role, &m.Permissions, &m.IsActive, &m.CreatedAt); err == nil {
 			items = append(items, m)
 		}
 	}

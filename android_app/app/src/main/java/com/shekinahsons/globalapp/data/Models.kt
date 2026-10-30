@@ -48,6 +48,9 @@ data class Devotion(
 
 @Serializable
 data class Sermon(
+    val replayId: String = "",
+    val status: String = "ready",
+    val price: Int = 0,
     val id: String = "",
     val type: String = "video",
     val code: String = "",

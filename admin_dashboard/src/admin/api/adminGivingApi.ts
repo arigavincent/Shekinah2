@@ -7,6 +7,7 @@ export type GivingTransaction = {
   method: string;
   phone: string;
   amount: number;
+  currency: string;
   note: string;
   status: "pending" | "success" | "failed" | "cancelled" | string;
   checkoutRequestId: string;

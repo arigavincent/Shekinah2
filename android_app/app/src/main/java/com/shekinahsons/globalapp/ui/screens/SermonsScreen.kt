@@ -289,6 +289,7 @@ private fun VideoRow(s: Sermon, modifier: Modifier, onOpen: () -> Unit) {
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(listOf(s.date, s.duration).filter { it.isNotBlank() }.joinToString("  •  "), fontFamily = Inter, fontSize = 13.5.sp, color = Brand.Text2)
+                if(s.replayId.isNotBlank())Text(if(s.status!="ready")"Preparing replay…" else if(s.price>0)"KSh ${s.price} · Replay" else "Free replay",style=Type.Meta,color=Brand.Gold)
             }
         }
         HorizontalDivider(color = Brand.Line, modifier = Modifier.padding(horizontal = 16.dp))

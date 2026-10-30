@@ -3,10 +3,14 @@ package notifications
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/ariga/shekinah-backend/internal/integrations"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,9 +18,11 @@ import (
 )
 
 type Handler struct {
-	db     *pgxpool.Pool
-	client *http.Client
-	fcm    *fcmSender
+	store   *integrations.Store
+	runtime *senderCache
+	db      *pgxpool.Pool
+	client  *http.Client
+	fcm     *fcmSender
 }
 
 type RegisterDeviceRequest struct {
@@ -56,6 +62,35 @@ func NewHandler(db *pgxpool.Pool) Handler {
 	return Handler{db: db, client: client, fcm: newFCMSender(client)}
 }
 
+type senderCache struct {
+	sync.Mutex
+	hash   [32]byte
+	sender *fcmSender
+}
+
+func (h Handler) WithIntegrations(store integrations.Store) Handler {
+	h.store = &store
+	h.runtime = &senderCache{}
+	return h
+}
+func (h Handler) currentSender(ctx context.Context) *fcmSender {
+	if h.store == nil {
+		return h.fcm
+	}
+	cfg, _, err := h.store.Load(ctx, "firebase")
+	if err != nil || !cfg.Enabled {
+		return nil
+	}
+	raw := cfg.Values["FCM_SERVICE_ACCOUNT_JSON"]
+	hash := sha256.Sum256([]byte(raw))
+	h.runtime.Lock()
+	defer h.runtime.Unlock()
+	if h.runtime.sender == nil || h.runtime.hash != hash {
+		h.runtime.hash = hash
+		h.runtime.sender = senderFromJSON(h.client, raw)
+	}
+	return h.runtime.sender
+}
 func cleanToken(value string) string {
 	return strings.TrimSpace(value)
 }
@@ -251,8 +286,17 @@ func (h Handler) Notify(ctx context.Context, req BroadcastRequest) (gin.H, error
 		return nil, err
 	}
 
-	success, failure := h.sendExpoPush(tokens, req)
-	fcmSuccess, fcmFailure, stale := h.fcm.send(ctx, fcmTokens, req)
+	success, failure, fcmSuccess, fcmFailure := 0, 0, 0, 0
+	var stale []string
+	if os.Getenv("NOTIFICATIONS_DELIVERY_ENABLED") != "false" {
+		success, failure = h.sendExpoPush(tokens, req)
+		sender := h.currentSender(ctx)
+		if sender != nil {
+			fcmSuccess, fcmFailure, stale = sender.send(ctx, fcmTokens, req)
+		} else {
+			fcmFailure = len(fcmTokens)
+		}
+	}
 	success += fcmSuccess
 	failure += fcmFailure
 	if len(stale) > 0 {
@@ -266,7 +310,7 @@ func (h Handler) Notify(ctx context.Context, req BroadcastRequest) (gin.H, error
 		dataBytes = []byte(`{}`)
 	}
 
-	_, _ = h.db.Exec(
+	_, saveErr := h.db.Exec(
 		ctx,
 		`
 			INSERT INTO notification_messages (id, title, body, category, data, target_count, success_count, failure_count)
@@ -275,6 +319,9 @@ func (h Handler) Notify(ctx context.Context, req BroadcastRequest) (gin.H, error
 		messageID, req.Title, req.Body, req.Category, string(dataBytes), target, success, failure,
 	)
 
+	if saveErr != nil {
+		return nil, saveErr
+	}
 	return gin.H{"id": messageID, "targetCount": target, "successCount": success, "failureCount": failure}, nil
 }
 

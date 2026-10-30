@@ -62,7 +62,8 @@ func (h Handler) setup(c *gin.Context, eventID string) (Setup, string, error) {
 	var s Setup
 	var raw []byte
 	var title string
-	err := h.db.QueryRow(c.Request.Context(), `SELECT title, registration, form_url, form_fields, price, capacity FROM events WHERE id = $1`, eventID).
+	admin := strings.Contains(c.FullPath(), "/admin/")
+	err := h.db.QueryRow(c.Request.Context(), `SELECT title, registration, form_url, form_fields, price, capacity FROM events WHERE id = $1 AND ($2 OR (is_published AND published_at<=NOW()))`, eventID, admin).
 		Scan(&title, &s.Mode, &s.FormURL, &raw, &s.Price, &s.Capacity)
 	if err != nil {
 		return s, "", err
@@ -136,7 +137,7 @@ func (h Handler) Register(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Event not found"})
 		return
 	}
-	if s.Mode != "form" && !(s.Mode == "none" && s.Price > 0) {
+	if s.Mode != "form" && s.Mode != "link" && !(s.Mode == "none" && s.Price > 0) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "This event doesn't take registrations in the app"})
 		return
 	}
@@ -146,6 +147,9 @@ func (h Handler) Register(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 	answers := map[string]string{}
 	for _, f := range s.Fields {
+		if s.Mode != "form" {
+			break
+		}
 		v := strings.TrimSpace(req.Answers[f.ID])
 		if len(v) > 2000 {
 			v = v[:2000]
@@ -225,54 +229,14 @@ func (h Handler) AdminSetup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid setup"})
 		return
 	}
-	switch s.Mode {
-	case "none", "form", "link":
-	default:
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Registration must be none, form or link"})
+	var err error
+	s, err = NormalizeSetup(s)
+	if err != nil {
+		c.JSON(400, gin.H{"message": err.Error()})
 		return
 	}
-	s.FormURL = strings.TrimSpace(s.FormURL)
-	if s.Mode == "link" {
-		if u, err := url.Parse(s.FormURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "Paste the full form link, starting with https://"})
-			return
-		}
-	}
-	if s.Price < 0 || s.Price > 1_000_000 || s.Capacity < 0 || s.Capacity > 1_000_000 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Check the price and capacity"})
-		return
-	}
-	if s.Mode == "link" && s.Price > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "A paid event registers in the app, so payments are tracked. Use the app form instead of a link."})
-		return
-	}
-	clean := make([]Field, 0, len(s.Fields))
-	for i, f := range s.Fields {
-		f.Label = strings.TrimSpace(f.Label)
-		if f.Label == "" || i >= 30 {
-			continue
-		}
-		switch f.Type {
-		case "text", "longtext", "phone", "email", "number", "choice":
-		default:
-			f.Type = "text"
-		}
-		if f.ID == "" {
-			f.ID = "q" + randomHex(3)
-		}
-		opts := make([]string, 0, len(f.Options))
-		for _, o := range f.Options {
-			if o = strings.TrimSpace(o); o != "" {
-				opts = append(opts, o)
-			}
-		}
-		f.Options = opts
-		if f.Type == "choice" && len(opts) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "Add options for: " + f.Label})
-			return
-		}
-		clean = append(clean, f)
-	}
+	clean := s.Fields
+
 	raw, _ := json.Marshal(clean)
 	tag, err := h.db.Exec(c.Request.Context(), `UPDATE events SET registration = $2, form_url = $3, form_fields = $4, price = $5, capacity = $6, updated_at = NOW() WHERE id = $1`,
 		c.Param("id"), s.Mode, s.FormURL, raw, s.Price, s.Capacity)
@@ -364,4 +328,59 @@ func (h Handler) AdminCSV(c *gin.Context) {
 		_ = w.Write(line)
 	}
 	w.Flush()
+}
+
+// NormalizeSetup is shared by atomic event creation and later registration edits.
+func NormalizeSetup(s Setup) (Setup, error) {
+	if s.Mode != "none" && s.Mode != "form" && s.Mode != "link" {
+		return s, errors.New("registration must be none, form or link")
+	}
+	s.FormURL = strings.TrimSpace(s.FormURL)
+	if s.Mode == "link" {
+		u, e := url.Parse(s.FormURL)
+		if e != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
+			return s, errors.New("use the full HTTPS form link")
+		}
+	}
+	if s.Price < 0 || s.Price > 1_000_000 || s.Capacity < 0 || s.Capacity > 1_000_000 {
+		return s, errors.New("check price and capacity")
+	}
+	clean := []Field{}
+	ids := map[string]bool{}
+	if s.Mode == "form" {
+		for _, f := range s.Fields {
+			f.Label = strings.TrimSpace(f.Label)
+			if f.Label == "" {
+				continue
+			}
+			if len(clean) >= 30 {
+				return s, errors.New("use at most 30 questions")
+			}
+			if f.ID == "" {
+				f.ID = "q" + randomHex(3)
+			}
+			if ids[f.ID] {
+				return s, errors.New("question identifiers must be unique")
+			}
+			ids[f.ID] = true
+			switch f.Type {
+			case "text", "longtext", "phone", "email", "number", "choice":
+			default:
+				f.Type = "text"
+			}
+			options := []string{}
+			for _, o := range f.Options {
+				if o = strings.TrimSpace(o); o != "" {
+					options = append(options, o)
+				}
+			}
+			f.Options = options
+			if f.Type == "choice" && len(options) == 0 {
+				return s, errors.New("add choices for " + f.Label)
+			}
+			clean = append(clean, f)
+		}
+	}
+	s.Fields = clean
+	return s, nil
 }

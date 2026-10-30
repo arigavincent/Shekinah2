@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -30,7 +31,7 @@ func (r Repository) List(ctx context.Context) ([]Event, error) {
 			image_url,
 			description,
 			created_at,
-			updated_at
+			updated_at, published_at, is_published, notify_on_publish
 		FROM events
 		ORDER BY event_date ASC, created_at DESC
 	`
@@ -70,7 +71,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (Event, error) {
 			image_url,
 			description,
 			created_at,
-			updated_at
+			updated_at, published_at, is_published, notify_on_publish
 		FROM events
 		WHERE id = $1
 		LIMIT 1
@@ -89,6 +90,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (Event, error) {
 }
 
 func (r Repository) Create(ctx context.Context, command Command) (Event, error) {
+	raw, _ := json.Marshal(command.Setup.Fields)
 	const query = `
 		INSERT INTO events (
 			id,
@@ -97,9 +99,9 @@ func (r Repository) Create(ctx context.Context, command Command) (Event, error) 
 			event_time,
 			location,
 			image_url,
-			description
+			description, published_at, is_published, notify_on_publish, registration,form_url,form_fields,price,capacity
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12,$13,$14,$15)
 		RETURNING
 			id,
 			title,
@@ -109,7 +111,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Event, error) 
 			image_url,
 			description,
 			created_at,
-			updated_at
+			updated_at, published_at, is_published, notify_on_publish
 	`
 
 	item, err := scanEvent(
@@ -122,7 +124,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Event, error) 
 			command.EventTime,
 			command.Location,
 			command.ImageURL,
-			command.Description,
+			command.Description, command.PublishedAt, command.IsPublished, command.NotifyOnPublish, command.Setup.Mode, command.Setup.FormURL, raw, command.Setup.Price, command.Setup.Capacity,
 		),
 	)
 	if err != nil {
@@ -141,7 +143,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Event, error) 
 			event_time = $4,
 			location = $5,
 			image_url = $6,
-			description = $7,
+			description = $7, published_at=$8, is_published=$9, notify_on_publish=$10,
 			updated_at = now()
 		WHERE id = $1
 		RETURNING
@@ -153,7 +155,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Event, error) 
 			image_url,
 			description,
 			created_at,
-			updated_at
+			updated_at, published_at, is_published, notify_on_publish
 	`
 
 	item, err := scanEvent(
@@ -166,7 +168,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Event, error) 
 			command.EventTime,
 			command.Location,
 			command.ImageURL,
-			command.Description,
+			command.Description, command.PublishedAt, command.IsPublished, command.NotifyOnPublish,
 		),
 	)
 	if err != nil {
@@ -214,7 +216,7 @@ func scanEvent(row eventScanner) (Event, error) {
 		&item.ImageURL,
 		&item.Description,
 		&item.CreatedAt,
-		&item.UpdatedAt,
+		&item.UpdatedAt, &item.PublishedAt, &item.IsPublished, &item.NotifyOnPublish,
 	); err != nil {
 		return Event{}, err
 	}
