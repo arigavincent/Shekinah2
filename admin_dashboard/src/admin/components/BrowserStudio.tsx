@@ -63,8 +63,10 @@ export function BrowserStudio({
     mounted.current = true;
     const retry = () => { void resumeDirectUploads().catch(() => {}); };
     retry();
+    const retryTimer = window.setInterval(retry, 10000);
     window.addEventListener("online", retry);
     return () => {
+      window.clearInterval(retryTimer);
       window.removeEventListener("online", retry);
       mounted.current = false;
       release();

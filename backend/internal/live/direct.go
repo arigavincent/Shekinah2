@@ -297,7 +297,9 @@ func validMediaPrefix(b []byte, format string, seq int) bool {
 	}
 	kind := string(b[4:8])
 	if seq < 0 {
-		return kind == "ftyp"
+		// Chrome may emit moov without an ftyp box. Both forms contain valid
+		// initialization metadata; media fragments must still start separately.
+		return kind == "ftyp" || kind == "moov"
 	}
 	return kind == "moof" || kind == "styp"
 }

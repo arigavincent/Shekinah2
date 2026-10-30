@@ -30,6 +30,18 @@ func TestSegmentValidation(t *testing.T) {
 	}
 }
 
+func TestBrowserInitializationWithoutFileTypeBox(t *testing.T) {
+	// Chrome can begin a recording with moov directly. The init fragment still
+	// contains the track metadata and decodes as H264/Opus with its media data.
+	init := []byte{0, 0, 4, 0, 'm', 'o', 'o', 'v'}
+	if !validMediaPrefix(init, "fmp4", -1) {
+		t.Fatal("Chrome initialization without ftyp was rejected")
+	}
+	if validMediaPrefix(init, "fmp4", 0) {
+		t.Fatal("initialization was accepted as a media fragment")
+	}
+}
+
 // Explicit opt-in acceptance: creates and deletes one tiny object, never touches
 // ministry data or account bucket policies. No secrets/URLs are printed.
 func TestDirectR2ConditionalChecksumAcceptance(t *testing.T) {
