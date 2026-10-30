@@ -113,6 +113,9 @@ func TestDirectLivePermissionsOrderingReplayAndRecovery(t *testing.T) {
 	if !strings.Contains(raw, "#EXTINF:3.000000") || !strings.Contains(raw, "X-Amz-Signature") {
 		t.Fatal("missing signed HLS segments")
 	}
+	if !strings.Contains(raw, "#EXT-X-START:TIME-OFFSET=-1.500,PRECISE=YES") {
+		t.Fatal("live playback did not request the newest media")
+	}
 	input["sequence"] = 1
 	req("POST", prefix+"/segments", input, admin, 200)
 	req("POST", "/live/stop", map[string]any{"sessionId": "stale"}, admin, 409)
@@ -121,6 +124,9 @@ func TestDirectLivePermissionsOrderingReplayAndRecovery(t *testing.T) {
 	raw = assertStatus(t, app, "GET", "/api/v1"+prefix+"/index.m3u8?media=1", nil, token, 200)
 	if !strings.Contains(raw, "#EXT-X-ENDLIST") || strings.Count(raw, "#EXTINF:") != 2 {
 		t.Fatal("replay lost delayed segment")
+	}
+	if strings.Contains(raw, "#EXT-X-START") {
+		t.Fatal("replay incorrectly starts at the live edge")
 	}
 	replay := req("GET", "/live/replays", nil, token, 200)["items"].([]any)
 	if len(replay) != 1 || replay[0].(map[string]any)["access"] != true || replay[0].(map[string]any)["status"] != "ready" {

@@ -406,6 +406,10 @@ func (h *Handler) DirectPlaylist(c *gin.Context) {
 	fmt.Fprintf(&b, "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:%d\n#EXT-X-MEDIA-SEQUENCE:%d\n", int(math.Ceil(maxDuration)), all[0].seq)
 	if s.Status == "ended" {
 		b.WriteString("#EXT-X-PLAYLIST-TYPE:VOD\n")
+	} else {
+		// Start near the latest complete segment instead of the HLS default
+		// of three target durations behind. Replays always start at the beginning.
+		b.WriteString("#EXT-X-START:TIME-OFFSET=-1.500,PRECISE=YES\n")
 	}
 	if init != "" {
 		fmt.Fprintf(&b, "#EXT-X-KEY:METHOD=AES-128,URI=\"key\",IV=0x%032x\n", directIV(-1))

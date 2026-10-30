@@ -1,7 +1,7 @@
 import {Link} from "react-router-dom";
 import {getUser} from "../auth/session";
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Check, FileText, Receipt, RefreshCw } from "lucide-react";
+import { Copy, Check, FileText, Receipt, RefreshCw, Printer } from "lucide-react";
 
 import { API_BASE_URL } from "../api/client";
 import { getToken } from "../auth/session";
@@ -287,6 +287,19 @@ export function GivingPage() {
     } catch(error) {setError(error instanceof Error?error.message:"Could not download document");}
   }
 
+  async function printReceipt(transactionId: string) {
+    const popup = window.open("", "_blank");
+    if (!popup) { setError("Allow the receipt window to open, then choose Print again."); return; }
+    popup.opener = null;
+    popup.document.body.textContent = "Preparing receipt…";
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/giving/transactions/${transactionId}/receipt.pdf`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!response.ok) throw new Error(`Could not print receipt (${response.status})`);
+      const { printReceiptPDF } = await import("../lib/printReceipt");
+      await printReceiptPDF(popup, await response.arrayBuffer());
+    } catch (error) { popup.close(); setError(error instanceof Error ? error.message : "Could not print receipt"); }
+  }
+
   return (
     <main>
       <header className="page-header">
@@ -470,6 +483,7 @@ export function GivingPage() {
                             Receipt
                           </button>
                         )}
+                        {transaction.status === "success" && <button type="button" className="ghost-action" onClick={() => printReceipt(transaction.id)} title="Print confirmed payment receipt"><Printer size={14} aria-hidden="true" /> Print receipt</button>}
                         <button
                           type="button"
                           className="ghost-action"

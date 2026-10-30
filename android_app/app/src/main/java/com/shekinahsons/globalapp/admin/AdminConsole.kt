@@ -393,6 +393,10 @@ private fun PaymentsPage() {
 
 @Composable
 private fun PaymentCard(t: Txn, busy: Boolean, confirm: () -> Unit, reject: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val receiptScope = rememberCoroutineScope()
+    var receiptBusy by remember(t.id) { mutableStateOf(false) }
+    var receiptError by remember(t.id) { mutableStateOf<String?>(null) }
     val book = t.category == "Book"
     val (methodName, methodColor) = when {
         "mpesa" in t.method -> "M-Pesa" to Color(0xFF2EAD4B)
@@ -439,6 +443,24 @@ private fun PaymentCard(t: Txn, busy: Boolean, confirm: () -> Unit, reject: () -
             "success" -> Text(if (book) "Confirmed · the book is unlocked for them" else "Confirmed · receipt ready in their app", color = Color(0xFF4ADE80), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             "failed" -> Text("Marked not found", color = Brand.Red, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             else -> Text(t.status, style = Type.Meta, color = Brand.Text2)
+        }
+        if (t.status == "success") {
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                listOf("Open receipt" to false, "Print receipt" to true).forEach { (label, print) ->
+                    androidx.compose.material3.OutlinedButton(enabled = !receiptBusy, onClick = {
+                        receiptScope.launch {
+                            receiptBusy = true; receiptError = null
+                            runCatching {
+                                if (print) com.shekinahsons.globalapp.data.Documents.printReceipt(context, t.id)
+                                else com.shekinahsons.globalapp.data.Documents.openReceipt(context, t.id)
+                            }.onFailure { receiptError = it.message }
+                            receiptBusy = false
+                        }
+                    }) { Text(label) }
+                }
+            }
+            receiptError?.let { ErrorNote(it) }
         }
     }
 }

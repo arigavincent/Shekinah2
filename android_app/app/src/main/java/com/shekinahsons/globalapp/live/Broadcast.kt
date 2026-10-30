@@ -141,7 +141,7 @@ object Broadcast {
         val (w, h, rate) = if (hd) Triple(1280, 720, 2_500_000) else Triple(854, 480, 1_000_000)
         width = if (portrait) h else w; height = if (portrait) w else h
         target = rate
-        return s.prepareVideo(w, h, rate, rotation = rotation) && s.prepareAudio(44_100, true, 128_000)
+        return s.prepareVideo(w, h, rate, iFrameInterval = 1, rotation = rotation) && s.prepareAudio(44_100, true, 128_000)
     }
 
     var directSession: String? = null; private set

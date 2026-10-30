@@ -68,9 +68,9 @@ class SegmentRecorder(private val directory: File, private val complete: (File, 
             val key = frame.info.toMediaCodecBufferInfo().isKeyframe()
             if (!hasVideo && !key) return
             if (started < 0) { started = timestamp; hasVideo = true; recordStatus = RecordController.Status.RECORDING; listener?.onStatusChange(recordStatus) }
-            if (key && timestamp - started >= 4_000_000) {
+            if (key && timestamp - started >= 1_800_000) {
                 finish(timestamp); rotate(); started = timestamp
-            } else if (!asked && timestamp - started >= 3_800_000) { asked = true; myRequestKeyFrame?.onRequestKeyFrame() }
+            } else if (!asked && timestamp - started >= 2_200_000) { asked = true; myRequestKeyFrame?.onRequestKeyFrame() }
             video.createAndSendPacket(frame) { write(psi.checkSendInfo(key, packetizer, 7)); write(it) }
         } else if (hasVideo) audio.createAndSendPacket(frame) { write(it) }
         latest = maxOf(latest, timestamp)

@@ -153,6 +153,23 @@ func TestAdminParityIncomeClassificationRolesAndServeHistory(t *testing.T) {
 		}
 	}
 	path := "/admin/giving/analytics?from=2026-10-28&to=2026-10-28&currency=KES"
+	// Finance can print a confirmed receipt for another payer. An ordinary
+	// member cannot read it, and pending payments never produce receipts.
+	_, err = db.Exec(ctx, `INSERT INTO giving_transactions(id,category,method,status,amount,phone,user_id) SELECT 'finance-print-qa','Gift','bank','success',100,'',id FROM users WHERE email='vincent@example.com'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []string{"/giving/transactions/finance-print-qa/receipt.pdf", "/admin/giving/transactions/finance-print-qa/receipt.pdf"} {
+		pdf := assertStatus(t, app, "GET", "/api/v1"+route, nil, member, 200)
+		if !strings.HasPrefix(pdf, "%PDF-") {
+			t.Fatal("finance receipt is not a PDF")
+		}
+	}
+	other := req("POST", "/auth/register", map[string]string{"name": "Other payer", "email": "receipt-other@example.invalid", "password": "OtherReceipt123!"}, "", 201)["token"].(string)
+	assertStatus(t, app, "GET", "/api/v1/giving/transactions/finance-print-qa/receipt.pdf", nil, other, 403)
+	assertStatus(t, app, "GET", "/api/v1/admin/giving/transactions/finance-print-qa/receipt.pdf", nil, other, 403)
+	assertStatus(t, app, "GET", "/api/v1/admin/giving/transactions/pending/receipt.pdf", nil, member, 409)
+	_, _ = db.Exec(ctx, `DELETE FROM giving_transactions WHERE id='finance-print-qa'`)
 	report := req("GET", path, nil, member, 200)
 	totals := report["totals"].(map[string]any)
 	for k, want := range map[string]float64{"confirmed": 1400, "pending": 200, "failed": 500, "cancelled": 300, "sales": 5, "transactions": 8} {

@@ -1,5 +1,7 @@
 # Shekinah release preparation — 29 October 2026
 
+**Deployment update, 30 October 2026:** Production is now live on Render and the ministry-signed APK is installed. See [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) for current URLs, verification and free-database expiry. The review below records the earlier preparation state.
+
 Status: release preparation complete; production deployment is deferred at the owner's request until hosting details are supplied. No public deployment, live payment, external email or push was initiated during this pass.
 
 ## Implemented and exercised

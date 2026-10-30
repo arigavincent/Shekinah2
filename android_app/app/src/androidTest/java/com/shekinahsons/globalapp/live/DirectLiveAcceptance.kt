@@ -50,17 +50,18 @@ class DirectLiveAcceptance : Instrumentation() {
                 }
                 encoder = GenericStream(targetContext,checker,BitmapSource(image),SilenceAudioSource()).apply {
                     setRecordController(SegmentRecorder(directory) { f,d -> segments.add(f to d) })
-                    check(prepareVideo(640,360,500_000)) { "Video preparation failed" }
+                    check(prepareVideo(640,360,500_000,iFrameInterval=1)) { "Video preparation failed" }
                     check(prepareAudio(44_100,true,96_000)) { "Audio preparation failed" }
                     startRecord(directory.path, RecordController.RecordTracks.ALL, object: RecordController.Listener { override fun onStatusChange(status: RecordController.Status) {} })
                 }
             }
             stage("encoding synthetic video")
-            Thread.sleep(14_000)
+            Thread.sleep(8_000)
             stage("stopping native encoder")
             runOnMainSync { encoder?.stopRecord(); encoder?.release(); encoder=null }
             check(segments.size>=3) { "Encoder did not produce three segments" }
             check(segments.all { it.first.length()>376 && it.second>0 && it.second<10 }) { "Invalid native segment" }
+            check(segments.dropLast(1).all { it.second < 3.2 }) { "Live encoder segments are too long" }
             result.putString("segments",segments.joinToString(",") { "${it.first.name}:${it.first.length()}:${it.second}" })
             if (replay.isNotBlank()) {
                 stage("decoding R2 replay")

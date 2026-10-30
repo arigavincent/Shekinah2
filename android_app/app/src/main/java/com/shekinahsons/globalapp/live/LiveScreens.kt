@@ -146,7 +146,7 @@ fun rememberLiveSession(active: Boolean, session: Session): LiveSession? {
     LaunchedEffect(active, session.member) {
         while (active) {
             runCatching { Api.decode<LiveSession?>(Api.get("/live/current")["session"]) }.onSuccess { current = it }
-            delay(10_000)
+            delay(2_000)
         }
     }
     return current
@@ -162,9 +162,15 @@ fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
     val player = remember(url, token) {
         // The member's sign-in goes with every request, so paid lives play for those who paid.
         val http = com.shekinahsons.globalapp.playback.LiveDataSource
-        ExoPlayer.Builder(context).setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http)).build().apply {
+        ExoPlayer.Builder(context)
+            .setLoadControl(androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(4_000, 12_000, 500, 750)
+                .setPrioritizeTimeOverSizeThresholds(true).build())
+            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http)).build().apply {
             setMediaItem(MediaItem.Builder().setUri(if (url.startsWith("/")) com.shekinahsons.globalapp.BuildConfig.API_BASE+url else url).setMimeType(MimeTypes.APPLICATION_M3U8)
-                .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(2500).build()).build())
+                .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(1500)
+                    .setMinOffsetMs(1000).setMaxOffsetMs(4000)
+                    .setMinPlaybackSpeed(1f).setMaxPlaybackSpeed(1.08f).build()).build())
             prepare()
             playWhenReady = true
         }

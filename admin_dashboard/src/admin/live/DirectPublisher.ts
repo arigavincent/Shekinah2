@@ -127,14 +127,14 @@ export class DirectPublisher {
   private savingError: unknown;
   private account = getUser()?.id;
   constructor(stream: MediaStream, private session: string, private key: string, private report: (message: string) => void) {
-    this.recorder = new MediaRecorder(stream, { mimeType: DirectPublisher.mimeType(), videoBitsPerSecond: 1_200_000, audioBitsPerSecond: 96_000, videoKeyFrameIntervalDuration: 2000 } as MediaRecorderOptions);
+    this.recorder = new MediaRecorder(stream, { mimeType: DirectPublisher.mimeType(), videoBitsPerSecond: 1_200_000, audioBitsPerSecond: 96_000, videoKeyFrameIntervalDuration: 1000 } as MediaRecorderOptions);
     this.recorder.ondataavailable = (e) => {
       if (!e.data.size) return;
       this.serial = this.serial.then(() => this.save(e.data)).catch((e) => { this.savingError = e; report(e instanceof Error ? e.message : "Recording could not be saved"); if (this.recorder.state !== "inactive") this.recorder.stop(); });
     };
     this.recorder.onerror = () => report("Video capture failed. Saved recording segments are retained.");
-    this.recorder.start(4000);
-    this.timer = setInterval(() => { void resumeDirectUploads(report).catch(() => report("Connection interrupted · saved segments will retry")); }, 2500);
+    this.recorder.start(2000);
+    this.timer = setInterval(() => { void resumeDirectUploads(report).catch(() => report("Connection interrupted · saved segments will retry")); }, 1500);
   }
   private async save(blob: Blob) {
     const bytes = new Uint8Array(await blob.arrayBuffer()), top = boxes(bytes);

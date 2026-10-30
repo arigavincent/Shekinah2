@@ -16,6 +16,7 @@ val productionApiBase = providers.gradleProperty("releaseApiBase").orElse(releas
 
 android {
     namespace = "com.shekinahsons.globalapp"
+    testBuildType = providers.gradleProperty("acceptanceBuildType").orElse("debug").get()
     compileSdk = 36
     defaultConfig {
         applicationId = "com.shekinahsons.globalapp"
