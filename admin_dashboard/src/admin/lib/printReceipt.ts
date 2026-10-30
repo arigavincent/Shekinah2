@@ -19,7 +19,7 @@ export async function printReceiptPDF(popup: Window, bytes: ArrayBuffer) {
       const canvas = doc.createElement("canvas");
       canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
       doc.body.append(canvas);
-      await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport }).promise;
+      await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport, intent: "print" }).promise;
     }
     if (!popup.closed) { popup.focus(); popup.print(); }
   } finally { await task.destroy(); }

@@ -16,7 +16,6 @@ val productionApiBase = providers.gradleProperty("releaseApiBase").orElse(releas
 
 android {
     namespace = "com.shekinahsons.globalapp"
-    testBuildType = providers.gradleProperty("acceptanceBuildType").orElse("debug").get()
     compileSdk = 36
     defaultConfig {
         applicationId = "com.shekinahsons.globalapp"
@@ -46,7 +45,10 @@ android {
     }
     buildTypes {
         // Debug talks to the local backend through `adb reverse tcp:3000 tcp:3000`.
-        debug { buildConfigField("String", "API_BASE", "\"http://127.0.0.1:3000\"") }
+        debug {
+            applicationIdSuffix = providers.gradleProperty("debugAppIdSuffix").orNull
+            buildConfigField("String", "API_BASE", "\"http://127.0.0.1:3000\"")
+        }
         release {
             buildConfigField("String", "API_BASE", "\"${productionApiBase.get().trimEnd('/')}\"")
             signingConfig=signingConfigs.findByName("production")
