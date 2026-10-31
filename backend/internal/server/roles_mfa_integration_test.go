@@ -94,6 +94,8 @@ func TestRoleDesignerTwoStepSignInAndIdleSignOut(t *testing.T) {
 		t.Fatalf("password alone must not sign in: %v", first)
 	}
 	ticket := first["mfaToken"].(string)
+	req("POST", "/auth/mfa/verify", map[string]string{"mfaToken": "not-a-ticket", "code": "123456"}, "", 401)
+	req("POST", "/auth/mfa/verify", map[string]string{"mfaToken": admin, "code": totpCode(secret, step+1)}, "", 401)
 	req("GET", "/auth/me", nil, ticket, 401)
 	req("POST", "/auth/mfa/verify", map[string]string{"mfaToken": ticket, "code": totpCode(secret, step)}, "", 401)
 	admin = req("POST", "/auth/mfa/verify", map[string]string{"mfaToken": ticket, "code": totpCode(secret, step+1)}, "", 200)["token"].(string)

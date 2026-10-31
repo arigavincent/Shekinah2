@@ -209,7 +209,10 @@ func (h Handler) MFAVerify(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req)
 	token, err := jwt.Parse(req.MFAToken, func(t *jwt.Token) (any, error) { return []byte(h.service.jwtSecret), nil }, jwt.WithValidMethods([]string{"HS256"}))
-	claims, _ := token.Claims.(jwt.MapClaims)
+	var claims jwt.MapClaims
+	if err == nil {
+		claims, _ = token.Claims.(jwt.MapClaims)
+	}
 	if err != nil || claims["purpose"] != "mfa" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "Sign-in expired. Enter your password again."})
 		return
