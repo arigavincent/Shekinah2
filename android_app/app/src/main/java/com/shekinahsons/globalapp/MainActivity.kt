@@ -99,6 +99,16 @@ class MainActivity : ComponentActivity() {
                 var adminMode by rememberSaveable { mutableStateOf(session.isAdmin) }
                 LaunchedEffect(session.member?.id) { adminMode = session.isAdmin }
                 LaunchedEffect(com.shekinahsons.globalapp.notify.OpenLink.pending) { if(com.shekinahsons.globalapp.notify.OpenLink.pending!=null)adminMode=false }
+                // Staff security rules from the server: idle sign-out, required two-step sign-in.
+                androidx.compose.runtime.DisposableEffect(session) {
+                    com.shekinahsons.globalapp.data.Api.onSecuritySignal = { code ->
+                        if (code == "idle_timeout") {
+                            session.signOut()
+                            android.widget.Toast.makeText(this@MainActivity, "Signed out after a period without activity. Please sign in again.", android.widget.Toast.LENGTH_LONG).show()
+                        } else com.shekinahsons.globalapp.notify.OpenLink.pending = com.shekinahsons.globalapp.notify.OpenLink.Target("security", "")
+                    }
+                    onDispose { com.shekinahsons.globalapp.data.Api.onSecuritySignal = null }
+                }
                 if (session.member?.passwordResetRequired == true) com.shekinahsons.globalapp.ui.screens.AccountPage(session)
                 else if (adminMode && session.hasStaffTools) com.shekinahsons.globalapp.admin.StaffConsole(
                     session,
@@ -156,6 +166,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
             "plans" -> { com.shekinahsons.globalapp.notify.OpenLink.planId=target.id; nav.push(Route.Page("ReadingPlans")) }
             "library" -> { com.shekinahsons.globalapp.notify.OpenLink.bookId=target.id; nav.push(Route.Page("Library")) }
             "updates" -> nav.push(Route.Page("Updates"))
+            "security" -> nav.push(Route.Page("Security"))
             else -> nav.push(Route.Page("Notifications"))
         }
     }

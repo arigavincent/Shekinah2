@@ -40,6 +40,7 @@ data class SaUser(
     val id: String = "", val name: String = "", val email: String = "",
     val role: String = "member", val membershipStatus: String = "member",
     val phone: String = "", val isActive: Boolean = true, val archived: Boolean = false,
+    val staffRoleId: String = "", val staffRole: String = "",
     val createdAt: String = "",
 ) { val suspended get() = !isActive }
 
@@ -95,6 +96,7 @@ internal fun SuperAdminPage() {
     var view by rememberSaveable { mutableStateOf("members") }
     val tools = listOf(
         "members" to "Members",
+        "roles" to "Roles",
         "groups" to "Groups",
         "attendance" to "Attendance",
         "kiosks" to "Kiosks",
@@ -110,6 +112,7 @@ internal fun SuperAdminPage() {
         item { ToolChoices(tools, view) { view = it } }
         when (view) {
             "members"   -> item { SaMembersPane() }
+            "roles"     -> item { SaRolesPane() }
             "groups"    -> item { SaGroupsPane() }
             "attendance"-> item { SaAttendancePane() }
             "kiosks"    -> item { SaKiosksPane() }
@@ -202,6 +205,9 @@ internal fun SaUserDetailDialog(user: SaUser, onDismiss: () -> Unit, onSuspend: 
     var phone by remember(user.id) { mutableStateOf(user.phone) }
     var role by remember(user.id) { mutableStateOf(user.role) }
     var status by remember(user.id) { mutableStateOf(user.membershipStatus) }
+    var staffRole by remember(user.id) { mutableStateOf(user.staffRoleId) }
+    val roles = remember { mutableStateListOf<SaRole>() }
+    LaunchedEffect(Unit) { runCatching { Api.decode<List<SaRole>>(Api.get("/admin/sa/roles")["roles"]) }.onSuccess { roles.clear(); roles.addAll(it) } }
     var busy by remember { mutableStateOf("") }
     var note by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -224,6 +230,10 @@ internal fun SaUserDetailDialog(user: SaUser, onDismiss: () -> Unit, onSuspend: 
                 Chips(listOf("member" to "Member", "admin" to "Admin", "super_admin" to "Super admin"), role) { role = it }
                 Text("MEMBERSHIP", color = Brand.Text2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Chips(listOf("member" to "Member", "visitor" to "Visitor", "leader" to "Leader", "pastor" to "Pastor", "staff" to "Staff", "transferred" to "Transferred"), status) { status = it }
+                if (roles.isNotEmpty()) {
+                    Text("STAFF ROLE", color = Brand.Text2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Chips(listOf("" to "No role") + roles.map { it.id to it.name }, staffRole) { staffRole = it }
+                }
                 ErrorNote(error)
                 note?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp) }
                 temporary?.let {
@@ -234,8 +244,9 @@ internal fun SaUserDetailDialog(user: SaUser, onDismiss: () -> Unit, onSuspend: 
                 GoldButton(if (busy == "save") "Saving…" else "Save details", busy = busy == "save", enabled = busy.isEmpty() && name.isNotBlank() && "@" in email) {
                     act("save") {
                         Api.patch("/admin/sa/users/${user.id}", mapOf("name" to name.trim(), "email" to email, "phone" to phone.trim(), "role" to role, "membershipStatus" to status))
+                        if (staffRole != user.staffRoleId) Api.put("/admin/sa/users/${user.id}/role", mapOf("roleId" to staffRole))
                         note = "Details saved."
-                        onSaved(user.copy(name = name.trim(), email = email, phone = phone.trim(), role = role, membershipStatus = status))
+                        onSaved(user.copy(name = name.trim(), email = email, phone = phone.trim(), role = role, membershipStatus = status, staffRoleId = staffRole, staffRole = roles.firstOrNull { it.id == staffRole }?.name.orEmpty()))
                     }
                 }
                 GhostButton(if (busy == "email") "Sending…" else "Email a reset code", Modifier.fillMaxWidth()) {
@@ -988,5 +999,73 @@ internal fun SaMemberPicker(value: String, onPick: (String) -> Unit) {
                 Text(m.email, color = Brand.Text2, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+@Serializable
+data class SaRole(val id: String = "", val name: String = "", val description: String = "", val permissions: List<String> = emptyList(), val holders: Int = 0)
+
+// Role designer: named permission sets given to people from Members.
+@Composable
+internal fun SaRolesPane() {
+    val scope = rememberCoroutineScope()
+    val list = remember { mutableStateListOf<SaRole>() }
+    var editing by remember { mutableStateOf<SaRole?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    suspend fun reload() { list.clear(); list.addAll(Api.decode<List<SaRole>>(Api.get("/admin/sa/roles")["roles"])) }
+    LaunchedEffect(Unit) { runCatching { reload() }.onFailure { error = it.message } }
+    val labels = KEY_PERMISSIONS.toMap()
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Design roles like \"Media team\", then give them to people in Members. Editing a role updates everyone who has it.", color = Brand.Text2, fontSize = 13.sp)
+        GoldButton("New role") { editing = SaRole() }
+        ErrorNote(error)
+        list.forEach { r ->
+            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.9f).clickable { editing = r }.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(r.name, color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(if (r.holders == 1) "1 person" else "${r.holders} people", color = Brand.GoldLight, fontSize = 12.sp)
+                }
+                Text(r.permissions.joinToString(", ") { labels[it] ?: it }.ifBlank { "No permissions yet" }, color = Brand.Text2, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp))
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Duplicate", color = Brand.Gold, fontSize = 13.sp, modifier = Modifier.clickable { scope.launch { runCatching { Api.post("/admin/sa/roles/${r.id}/duplicate", emptyMap<String, String>()); reload() }.onFailure { error = it.message } } })
+                    Text("Delete", color = Color(0xFFFF6B6B), fontSize = 13.sp, modifier = Modifier.clickable { scope.launch { runCatching { Api.delete("/admin/sa/roles/${r.id}"); reload() }.onFailure { error = it.message } } })
+                }
+            }
+        }
+    }
+    editing?.let { role ->
+        var name by remember(role.id) { mutableStateOf(role.name) }
+        var description by remember(role.id) { mutableStateOf(role.description) }
+        val perms = remember(role.id) { mutableStateListOf<String>().apply { addAll(role.permissions) } }
+        var busy by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { editing = null },
+            containerColor = Color(0xFF1A1A1E),
+            title = { Text(if (role.id.isBlank()) "New role" else "Edit role", color = Brand.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Field("NAME", name, { name = it }, hint = "e.g. Media team")
+                    Field("DESCRIPTION", description, { description = it }, hint = "What this role is for")
+                    KEY_PERMISSIONS.forEach { (perm, label) ->
+                        Row(Modifier.fillMaxWidth().clickable { if (perm in perms) perms.remove(perm) else perms.add(perm) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = perm in perms, onCheckedChange = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(label, color = Brand.White, fontSize = 14.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                GoldButton("Save", busy = busy, enabled = name.isNotBlank()) {
+                    scope.launch {
+                        busy = true
+                        runCatching { Api.put("/admin/sa/roles", mapOf("id" to role.id, "name" to name.trim(), "description" to description.trim(), "permissions" to perms.toList())); reload() }
+                            .onSuccess { editing = null }.onFailure { error = it.message }
+                        busy = false
+                    }
+                }
+            },
+            dismissButton = { TextButton(onClick = { editing = null }) { Text("Cancel", color = Brand.Text2) } }
+        )
     }
 }

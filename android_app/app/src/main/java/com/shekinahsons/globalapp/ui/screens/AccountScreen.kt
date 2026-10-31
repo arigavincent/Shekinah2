@@ -90,6 +90,10 @@ fun AccountPage(session: Session, onDone: (() -> Unit)? = null) {
             }
             else -> GhostButton("Change password") { changing = true }
         }
+        if (session.hasStaffTools) {
+            Spacer(Modifier.height(12.dp))
+            GhostButton("Two-step sign-in") { com.shekinahsons.globalapp.notify.OpenLink.pending = com.shekinahsons.globalapp.notify.OpenLink.Target("security") }
+        }
         Spacer(Modifier.height(12.dp))
         GhostButton("Sign out") { session.signOut() }
         Spacer(Modifier.height(18.dp))
@@ -175,6 +179,7 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    var needCode by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var info by remember { mutableStateOf<String?>(null) }
@@ -209,7 +214,16 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
         AnimatedContent(mode, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "mode") { m ->
             Column(Modifier.fillMaxWidth()) {
                 when (m) {
-                    Mode.SignIn -> {
+                    Mode.SignIn -> if (needCode) {
+                        Text("Two-step sign-in", style = Type.Title, color = Brand.White)
+                        Text("Open your authenticator app and type the 6-digit code for Shekinah Sons Global.", style = Type.Body, color = Brand.Text2, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+                        Field("CODE", code, { code = it.filter(Char::isDigit).take(6) }, keyboard = KeyboardType.NumberPassword)
+                        ErrorNote(error)
+                        Spacer(Modifier.height(18.dp))
+                        GoldButton("Sign in", busy = busy, enabled = code.length == 6) { run { session.verifyCode(code); needCode = false; code = ""; onDone?.invoke() } }
+                        Text("Back", color = Brand.BlueText, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 13.5.sp,
+                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 14.dp).clickable { needCode = false; code = ""; error = null })
+                    } else {
                         Field("EMAIL", email, { email = it }, hint = "you@example.com", keyboard = KeyboardType.Email)
                         Spacer(Modifier.height(12.dp))
                         Field("PASSWORD", password, { password = it }, password = true)
@@ -217,7 +231,7 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
                             modifier = Modifier.align(Alignment.End).padding(top = 10.dp).clickable { mode = Mode.Forgot; error = null })
                         ErrorNote(error)
                         Spacer(Modifier.height(18.dp))
-                        GoldButton("Sign in", busy = busy, enabled = email.isNotBlank() && password.isNotBlank()) { run { session.signIn(email, password); onDone?.invoke() } }
+                        GoldButton("Sign in", busy = busy, enabled = email.isNotBlank() && password.isNotBlank()) { run { if (session.signIn(email, password)) onDone?.invoke() else { needCode = true; code = "" } } }
                     }
                     Mode.Register -> {
                         Field("FULL NAME", name, { name = it }, hint = "As the church knows you")
@@ -254,7 +268,7 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
                         ErrorNote(error)
                         Spacer(Modifier.height(18.dp))
                         GoldButton("Set password and sign in", busy = busy, enabled = code.isNotBlank() && password.length >= 8) {
-                            run { session.confirmReset(email, code, password); session.signIn(email, password); onDone?.invoke() }
+                            run { session.confirmReset(email, code, password); if (session.signIn(email, password)) onDone?.invoke() else { mode = Mode.SignIn; needCode = true; code = "" } }
                         }
                         Text("Didn't get it? Send the code again", color = Brand.BlueText, fontSize = 13.5.sp,
                             modifier = Modifier.padding(top = 12.dp).clickable { run { session.requestReset(email); info = "A new code was sent to $email" } }.padding(6.dp))

@@ -16,7 +16,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
-class ApiException(val status: Int, message: String) : Exception(message)
+class ApiException(val status: Int, message: String, val code: String = "") : Exception(message)
 
 // Small JSON client for the church backend. Sends the member's token when
 // signed in and turns error bodies ({"message": ...}) into readable errors.
@@ -24,6 +24,7 @@ object Api {
     val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; explicitNulls = false; encodeDefaults = true }
     val http: OkHttpClient = OkHttpClient.Builder().dns(StorageDns).connectTimeout(12, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).build()
     var token: String? = null
+    var onSecuritySignal: ((String) -> Unit)? = null
 
     suspend fun get(path: String, headers: Map<String,String> = emptyMap()): JsonObject = call("GET", path, null, headers)
     suspend fun post(path: String, body: Map<String, Any?> = emptyMap()): JsonObject = call("POST", path, body)
@@ -60,7 +61,10 @@ object Api {
             val parsed = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: JsonObject(emptyMap())
             if (!it.isSuccessful) {
                 val message = (parsed["message"] as? JsonPrimitive)?.content ?: "Something went wrong (${it.code})."
-                throw ApiException(it.code, message)
+                val code = (parsed["code"] as? JsonPrimitive)?.content.orEmpty()
+                // Staff security rules (idle sign-out, required two-step sign-in) are handled app-wide.
+                if (code == "idle_timeout" || code == "mfa_setup_required") onSecuritySignal?.let { signal -> android.os.Handler(android.os.Looper.getMainLooper()).post { signal(code) } }
+                throw ApiException(it.code, message, code)
             }
             parsed
         }

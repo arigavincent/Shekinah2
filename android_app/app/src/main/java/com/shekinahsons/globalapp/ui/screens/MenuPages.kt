@@ -57,7 +57,7 @@ val MenuPageTitles = mapOf(
     "Downloads" to "Downloads", "History" to "Watch history", "Library" to "Books & Library", "Platforms" to "Our Platforms",
     "Prayer" to "Prayer Request", "Events" to "Events", "ReadingPlans" to "Reading Plans", "Chat" to "Chat",
     "Testimonies" to "Testimonies", "Serve" to "Serve", "Branches" to "Branches", "CheckIn" to "QR Check-In",
-    "About" to "About & Contact",
+    "About" to "About & Contact", "Security" to "Two-step sign-in",
 )
 
 @Composable
@@ -97,6 +97,7 @@ fun MenuPage(
             "Serve" -> ServePage(session)
             "Platforms" -> PlatformsPage(content)
             "Notifications" -> NotificationsPage(content)
+            "Security" -> TwoStepPage()
             else -> ComingSoon(MenuPageTitles[page] ?: page)
         }
     }

@@ -1,5 +1,8 @@
 package com.shekinahsons.globalapp.data
 
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
+
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,8 +57,28 @@ class Session(private val context: Context) {
         prefs.edit().putString("token", Vault.seal(token)).putString("member", Api.json.encodeToString(Member.serializer(), user)).apply()
     }
 
-    suspend fun signIn(email: String, password: String) {
+    // Two-step sign-in: the ticket between the password and the code steps.
+    private var mfaTicket: String? = null
+
+    // Returns false when the account also needs a code from an authenticator app;
+    // then call verifyCode.
+    suspend fun signIn(email: String, password: String): Boolean {
         val res = Api.post("/auth/login", mapOf("email" to email.trim(), "password" to password))
+        if (res["mfaRequired"]?.jsonPrimitive?.booleanOrNull == true) {
+            mfaTicket = res["mfaToken"]?.jsonPrimitive?.content
+            return false
+        }
+        finishSignIn(res)
+        return true
+    }
+
+    suspend fun verifyCode(code: String) {
+        val res = Api.post("/auth/mfa/verify", mapOf("mfaToken" to (mfaTicket ?: error("Enter your password again")), "code" to code.trim()))
+        mfaTicket = null
+        finishSignIn(res)
+    }
+
+    private suspend fun finishSignIn(res: kotlinx.serialization.json.JsonObject) {
         val token=Api.decode<String>(res["token"])
         // Finish permissions before publishing the signed-in member to Compose;
         // replacing the sign-in screen cancels its coroutine scope.
