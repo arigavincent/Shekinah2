@@ -375,6 +375,9 @@ func (h *Handler) PurgeMemberDataGDPR(c *gin.Context) {
 		Reason string `json:"reason"`
 	}
 	_ = c.ShouldBindJSON(&req)
+	if req.Reason == "" {
+		req.Reason = c.Query("reason")
+	}
 	if strings.TrimSpace(req.Reason) == "" {
 		fail(c, http.StatusBadRequest, "Record the reason for erasing this person's data")
 		return

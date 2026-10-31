@@ -3,6 +3,8 @@ package com.shekinahsons.globalapp.admin
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shekinahsons.globalapp.data.Api
@@ -36,9 +39,9 @@ import kotlinx.serialization.json.*
 data class SaUser(
     val id: String = "", val name: String = "", val email: String = "",
     val role: String = "member", val membershipStatus: String = "member",
-    val phone: String = "", val suspended: Boolean = false, val deleted: Boolean = false,
+    val phone: String = "", val isActive: Boolean = true, val archived: Boolean = false,
     val createdAt: String = "",
-)
+) { val suspended get() = !isActive }
 
 @Serializable
 data class SaGroup(
@@ -176,7 +179,7 @@ internal fun SaMembersPane() {
                     runCatching { Api.post("/admin/sa/users/${u.id}/suspend", emptyMap<String, String>()) }
                         .onSuccess {
                             val idx = list.indexOfFirst { it.id == u.id }
-                            if (idx >= 0) list[idx] = u.copy(suspended = !u.suspended)
+                            if (idx >= 0) list[idx] = u.copy(isActive = !u.isActive)
                             selected = null
                         }.onFailure { error = it.message }
                 }},
@@ -569,6 +572,7 @@ internal fun SaApiKeysPane() {
     var error by remember { mutableStateOf<String?>(null) }
     var showCreate by remember { mutableStateOf(false) }
     var keyName by remember { mutableStateOf("") }
+    val keyPerms = remember { mutableStateListOf<String>() }
     var rawKey by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
@@ -628,19 +632,34 @@ internal fun SaApiKeysPane() {
                 onDismissRequest = { showCreate = false },
                 containerColor = Color(0xFF1A1A1E),
                 title = { Text("Generate API Key", color = Brand.White) },
-                text = { Field("KEY NAME", keyName, { keyName = it }, hint = "e.g. n8n Integration") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Field("KEY NAME", keyName, { keyName = it }, hint = "e.g. n8n Integration")
+                        Text("WHAT THIS KEY MAY DO", color = Brand.Text2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                            KEY_PERMISSIONS.forEach { (perm, label) ->
+                                Row(Modifier.fillMaxWidth().clickable { if (perm in keyPerms) keyPerms.remove(perm) else keyPerms.add(perm) }.padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = perm in keyPerms, onCheckedChange = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(label, color = Brand.White, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+                },
                 confirmButton = {
-                    GoldButton("Generate", busy = busy, enabled = keyName.isNotBlank()) {
+                    GoldButton("Generate", busy = busy, enabled = keyName.isNotBlank() && keyPerms.isNotEmpty()) {
                         scope.launch {
                             busy = true
                             runCatching {
-                                val resp = Api.post("/admin/sa/api-keys", mapOf("name" to keyName, "permissions" to listOf<String>()))
+                                val resp = Api.post("/admin/sa/api-keys", mapOf("name" to keyName, "permissions" to keyPerms.toList()))
                                 resp["key"]?.jsonPrimitive?.content
                             }.onSuccess { k ->
                                 rawKey = k
                                 val resp2 = Api.get("/admin/sa/api-keys")
                                 list.clear(); list.addAll(Api.decode<List<SaApiKey>>(resp2["keys"]))
-                                showCreate = false; keyName = ""
+                                showCreate = false; keyName = ""; keyPerms.clear()
                             }.onFailure { error = it.message }
                             busy = false
                         }
@@ -863,23 +882,14 @@ internal fun SaBackupPane() {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Database Backup", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Column(Modifier.glass(RoundedCornerShape(18.dp), 0.9f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Trigger a manual backup of the Shekinah database to cloud storage.", color = Brand.Text2, fontSize = 13.sp)
-            backupResult?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp) }
-            GoldButton("Trigger Backup Now", busy = backupBusy) {
-                scope.launch {
-                    backupBusy = true; backupResult = null; error = null
-                    runCatching { Api.post("/admin/sa/system/backup", emptyMap<String, String>()) }
-                        .onSuccess { backupResult = "Backup triggered. Check cloud storage." }
-                        .onFailure { error = it.message }
-                    backupBusy = false
-                }
-            }
+            Text("Backups hold every member's personal data, so they are downloaded on a computer, not a phone: open the web dashboard → System & Governance → Data & Backup → Download backup.",
+                color = Brand.Text2, fontSize = 13.sp)
         }
         HorizontalDivider(color = Brand.Line)
         Text("GDPR — Right to be Forgotten", color = Color(0xFFFF6B6B), fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Column(Modifier.glass(RoundedCornerShape(18.dp), 0.9f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Permanently purge all personal data for a member. Financial records are anonymised, not deleted.", color = Brand.Text2, fontSize = 13.sp)
-            Field("MEMBER ID", gdprId, { gdprId = it }, hint = "UUID of member to purge")
+            SaMemberPicker(gdprId) { gdprId = it }
             Field("REASON", gdprReason, { gdprReason = it }, hint = "Legal basis for erasure")
             Field("TYPE 'PURGE' TO CONFIRM", gdprConfirm, { gdprConfirm = it })
             ErrorNote(error)
@@ -891,11 +901,52 @@ internal fun SaBackupPane() {
             ) {
                 scope.launch {
                     gdprBusy = true; error = null; gdprResult = null
-                    runCatching { Api.delete("/admin/sa/members/${gdprId.trim()}/purge-gdpr") }
-                        .onSuccess { gdprResult = "Member data purged successfully." }
+                    runCatching { Api.delete("/admin/sa/members/${gdprId.trim()}/purge-gdpr?reason=${java.net.URLEncoder.encode(gdprReason.trim(), "UTF-8")}") }
+                        .onSuccess { gdprResult = "Personal data erased. Payments stay in the accounts without the payer's details."; gdprId = ""; gdprReason = ""; gdprConfirm = "" }
                         .onFailure { error = it.message }
                     gdprBusy = false
                 }
+            }
+        }
+    }
+}
+
+private val KEY_PERMISSIONS = listOf(
+    "sermons:manage" to "Manage sermons", "events:manage" to "Manage events", "content:manage" to "Devotions, updates & plans",
+    "finance:manage" to "Payments & giving", "checkin:scan" to "Check-in", "books:publish" to "Publish books",
+    "community:moderate" to "Moderate community", "live:broadcast" to "Go live", "live:moderate" to "Moderate live chat",
+)
+
+// Search members by name or email; the value is the chosen member's id.
+@Composable
+internal fun SaMemberPicker(value: String, onPick: (String) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    var chosen by remember { mutableStateOf<SaUser?>(null) }
+    val results = remember { mutableStateListOf<SaUser>() }
+    LaunchedEffect(value) { if (value.isEmpty()) chosen = null }
+    LaunchedEffect(query) {
+        if (query.length < 2) { results.clear(); return@LaunchedEffect }
+        kotlinx.coroutines.delay(250)
+        runCatching { Api.decode<List<SaUser>>(Api.get("/admin/members?query=${java.net.URLEncoder.encode(query, "UTF-8")}")["members"]) }
+            .onSuccess { found -> results.clear(); results.addAll(found.filter { !it.archived }.take(6)) }
+    }
+    val picked = chosen
+    if (picked != null && picked.id == value) {
+        Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(14.dp), 0.9f).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(picked.name, color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(picked.email, color = Brand.Text2, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text("Change", color = Brand.Gold, fontSize = 13.sp, modifier = Modifier.clickable { chosen = null; onPick("") }.padding(6.dp))
+        }
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Field("MEMBER", query, { query = it }, hint = "Type a name or email")
+        results.forEach { m ->
+            Column(Modifier.fillMaxWidth().clickable { chosen = m; query = ""; results.clear(); onPick(m.id) }.padding(horizontal = 4.dp, vertical = 8.dp)) {
+                Text(m.name, color = Brand.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(m.email, color = Brand.Text2, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

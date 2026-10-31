@@ -13,6 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -150,7 +152,7 @@ fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit,
             is View.Detail -> {
                 val book = books.firstOrNull { it.id == v.book.id } ?: v.book
                 Detail(book, session, onBack = { view = View.Shelf }, read = { view = View.Read(book) }, buy = { if (session.member == null) openProfile() else view = View.Buy(book) },
-                    changed = { reload++ })
+                    changed = { reload++ }, bottomInset = bottomInset)
             }
             is View.Read -> Reader(v.book) { view = View.Detail(v.book) }
             is View.Buy -> Column(Modifier.fillMaxSize()) {
@@ -344,7 +346,8 @@ private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublis
 }
 
 @Composable
-private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Unit, buy: () -> Unit, changed: () -> Unit) {
+@OptIn(ExperimentalLayoutApi::class)
+private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Unit, buy: () -> Unit, changed: () -> Unit, bottomInset: androidx.compose.ui.unit.Dp = 0.dp) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
@@ -373,7 +376,8 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
                 Text(b.title, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
                 if (b.author.isNotBlank()) Text("by ${b.author}", style = Type.Body, color = Brand.GoldLight)
                 Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Wraps onto a second line on narrow phones instead of cutting chips off.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     InfoChip(price(b))
                     if (b.fileSizeBytes > 0) InfoChip(if (b.fileSizeBytes < 1_048_576) "${(b.fileSizeBytes / 1024).coerceAtLeast(1)} KB" else "${"%.1f".format(b.fileSizeBytes / 1_048_576f)} MB")
                     InfoChip("Read in the app")
@@ -435,6 +439,8 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
                     }
                 }
             }
+            // Room to scroll the last controls clear of the bottom bar and gesture area.
+            Spacer(Modifier.height(32.dp + bottomInset).navigationBarsPadding())
         }
     }
 }
