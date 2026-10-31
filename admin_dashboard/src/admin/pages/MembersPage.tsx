@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../api/client";
+import { MemberSelect } from "../components/MemberSelect";
 import { getToken } from "../auth/session";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { Search, UserX, UserCheck, Trash2, Merge, StickyNote, Download } from "lucide-react";
@@ -48,14 +49,14 @@ export function MembersPage() {
 
   async function suspend(m: Member) {
     try {
-      await apiRequest(`/api/v1/admin/sa/users/${m.id}/suspend`, { method: "POST", token });
-      showToast({ title: "Done", message: `${m.name} suspension toggled`, tone: "success" });
+      const r = await apiRequest<{ message: string }>(`/api/v1/admin/sa/users/${m.id}/suspend`, { method: "POST", token });
+      showToast({ title: m.name, message: r.message, tone: "success" });
       void load();
     } catch (e: any) { setError(e.message); }
   }
 
   async function deleteUser(m: Member, mode: "soft" | "hard") {
-    const ok = await confirm({ title: `${mode === "hard" ? "PERMANENTLY" : "Soft"} delete ${m.name}?`, message: mode === "hard" ? "This CANNOT be undone. All data will be erased." : "The user will be hidden but data preserved.", confirmLabel: mode === "hard" ? "Yes, permanently delete" : "Archive user", tone: mode === "hard" ? "danger" : "warning" });
+    const ok = await confirm({ title: `${mode === "hard" ? "PERMANENTLY" : "Soft"} delete ${m.name}?`, message: mode === "hard" ? "This CANNOT be undone. All data will be erased." : "The user will be hidden but data preserved.", confirmLabel: mode === "hard" ? "Yes, permanently delete" : "Archive user", tone: mode === "hard" ? "danger" : "default" });
     if (!ok) return;
     try {
       await apiRequest(`/api/v1/admin/sa/users/${m.id}?mode=${mode}`, { method: "DELETE", token });
@@ -76,7 +77,7 @@ export function MembersPage() {
 
   async function doMerge() {
     if (!mergeId || !mergeInto) return;
-    const ok = await confirm({ title: "Merge profiles?", message: `Merge ${mergeId} INTO ${mergeInto}. This cannot be undone.`, confirmLabel: "Merge", tone: "warning" });
+    const ok = await confirm({ title: "Merge profiles?", message: "The duplicate's giving, notes and groups move to the account you keep, and the duplicate is archived. This cannot be undone.", confirmLabel: "Merge", tone: "default" });
     if (!ok) return;
     try {
       await apiRequest(`/api/v1/admin/sa/members/${mergeId}/merge`, { method: "POST", token, body: { mergeIntoId: mergeInto } });
@@ -91,11 +92,12 @@ export function MembersPage() {
     <div className="admin-page">
       <div className="page-header"><h1>Member Management</h1></div>
       {error && <div className="alert alert-error">{error}</div>}
+      <AddAccount token={token} onCreated={() => void load()} />
       <div className="card" style={{ marginBottom: 16, padding: 16 }}>
         <h3 style={{ marginBottom: 8 }}><Merge size={16} style={{ marginRight: 6 }} />Merge Duplicates</h3>
         <div style={{ display: "flex", gap: 8 }}>
-          <input placeholder="Source member ID" value={mergeId} onChange={e => setMergeId(e.target.value)} className="input" style={{ flex: 1 }} />
-          <input placeholder="Target member ID" value={mergeInto} onChange={e => setMergeInto(e.target.value)} className="input" style={{ flex: 1 }} />
+          <div style={{ flex: 1 }}><MemberSelect token={token} value={mergeId} onChange={setMergeId} placeholder="Duplicate account (will be archived)" /></div>
+          <div style={{ flex: 1 }}><MemberSelect token={token} value={mergeInto} onChange={setMergeInto} placeholder="Account to keep" /></div>
           <button className="btn primary" onClick={doMerge} disabled={!mergeId || !mergeInto}>Merge</button>
         </div>
       </div>
@@ -147,4 +149,42 @@ export function MembersPage() {
       )}
     </div>
   );
+}
+
+const ROLES = [["member", "Member"], ["admin", "Admin"], ["super_admin", "Super admin"]];
+const STATUSES = ["member", "visitor", "pastor", "leader", "staff", "transferred"];
+function AddAccount({ token, onCreated }: { token: string | null; onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", phone: "", role: "member", membershipStatus: "member" });
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [done, setDone] = useState<{ email: string; temporaryPassword?: string } | null>(null);
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  async function create() {
+    setBusy(true); setError("");
+    try {
+      const r = await apiRequest<{ email: string; temporaryPassword?: string }>("/api/v1/admin/sa/users", { method: "POST", token, body: form });
+      setDone(r); setForm({ name: "", email: "", phone: "", role: "member", membershipStatus: "member" }); onCreated();
+    } catch (e: any) { setError(e.message); }
+    setBusy(false);
+  }
+  if (!open) return <div style={{ marginBottom: 16 }}><button className="btn primary" onClick={() => { setOpen(true); setDone(null); }}>Add account</button></div>;
+  return (<div className="card" style={{ marginBottom: 16, padding: 16 }}>
+    <h3 style={{ marginBottom: 8 }}>Add account</h3>
+    {error && <div className="alert alert-error">{error}</div>}
+    {done ? (<div className="alert alert-success">
+      Account created for <strong>{done.email}</strong>.{done.temporaryPassword && <> Temporary password: <code style={{ userSelect: "all" }}>{done.temporaryPassword}</code> — share it privately. They must choose their own password at first sign-in. It will not be shown again.</>}
+      <div style={{ marginTop: 8 }}><button className="btn compact" onClick={() => setDone(null)}>Add another</button> <button className="btn compact" onClick={() => setOpen(false)}>Close</button></div>
+    </div>) : (<>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+        <label>Full name<input className="input" value={form.name} onChange={set("name")} /></label>
+        <label>Email<input className="input" type="email" value={form.email} onChange={set("email")} /></label>
+        <label>Phone<input className="input" value={form.phone} onChange={set("phone")} /></label>
+        <label>Role<select className="input" value={form.role} onChange={set("role")}>{ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+        <label>Membership<select className="input" value={form.membershipStatus} onChange={set("membershipStatus")}>{STATUSES.map((v) => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}</select></label>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <button className="btn primary" onClick={create} disabled={busy || !form.name.trim() || !form.email.includes("@")}>{busy ? "Creating…" : "Create account"}</button>
+        <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </>)}
+  </div>);
 }

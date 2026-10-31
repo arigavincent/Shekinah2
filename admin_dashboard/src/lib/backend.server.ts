@@ -6,7 +6,7 @@ export async function forwardBackend(request: Request): Promise<Response> {
   const source = new URL(request.url);
   if(!source.pathname.startsWith("/api/v1/")) return Response.json({message:"Unknown API route"},{status:404});
   const headers = new Headers();
-  for(const key of ["accept","authorization","content-type","range","if-range","x-receipt-token","upload-offset","content-length"]) {
+  for(const key of ["accept","authorization","x-api-key","content-type","range","if-range","x-receipt-token","upload-offset","content-length"]) {
     const value=request.headers.get(key);if(value)headers.set(key,value);
   }
   const init: RequestInit & {duplex?: "half"} = {method:request.method,headers,redirect:"manual",signal:request.signal};

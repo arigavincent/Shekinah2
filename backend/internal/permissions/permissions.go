@@ -99,6 +99,9 @@ type memberRow struct {
 	Role        string    `json:"role"`
 	Permissions []string  `json:"permissions"`
 	IsActive    bool      `json:"isActive"`
+	Archived    bool      `json:"archived"`
+	Status      string    `json:"membershipStatus"`
+	Phone       string    `json:"phone"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
@@ -106,9 +109,9 @@ type memberRow struct {
 func (c Checker) AdminListMembers(ctx *gin.Context) {
 	q := "%" + strings.ToLower(strings.TrimSpace(ctx.Query("query"))) + "%"
 	rows, err := c.db.Query(ctx.Request.Context(), `
-		SELECT id::text, name, email, role, permissions, is_active, created_at FROM users
+		SELECT id::text, name, email, role, permissions, is_active, deleted_at IS NOT NULL, membership_status, phone, created_at FROM users
 		WHERE (LOWER(name) LIKE $1 OR LOWER(email) LIKE $1)
-		ORDER BY (array_length(permissions, 1) IS NULL), role <> 'member' DESC, name LIMIT 100
+		ORDER BY deleted_at IS NOT NULL, (array_length(permissions, 1) IS NULL), role <> 'member' DESC, name LIMIT 100
 	`, q)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load members"})
@@ -118,7 +121,7 @@ func (c Checker) AdminListMembers(ctx *gin.Context) {
 	items := make([]memberRow, 0)
 	for rows.Next() {
 		var m memberRow
-		if err := rows.Scan(&m.ID, &m.Name, &m.Email, &m.Role, &m.Permissions, &m.IsActive, &m.CreatedAt); err == nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Email, &m.Role, &m.Permissions, &m.IsActive, &m.Archived, &m.Status, &m.Phone, &m.CreatedAt); err == nil {
 			items = append(items, m)
 		}
 	}

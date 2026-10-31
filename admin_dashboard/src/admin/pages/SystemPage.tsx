@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { apiRequest } from "../api/client";
+import { MemberSelect } from "../components/MemberSelect";
+import { API_BASE_URL, apiRequest } from "../api/client";
 import { getToken } from "../auth/session";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { ShieldAlert, Database, Eye, ToggleLeft } from "lucide-react";
@@ -12,10 +13,7 @@ const MODULE_LABELS: Record<string, string> = {
   livestream: "Livestream", communityChat: "Community Chat", attendanceKiosk: "Attendance Kiosk", taxStatements: "Tax Statements",
 };
 const SECURITY_FIELDS: { key: string; label: string; type: "toggle" | "number" }[] = [
-  { key: "mfaEnforced", label: "Enforce MFA", type: "toggle" },
-  { key: "sessionTimeoutMinutes", label: "Session Timeout (min)", type: "number" },
-  { key: "passwordExpiryDays", label: "Password Expiry (days)", type: "number" },
-  { key: "minPasswordLength", label: "Min Password Length", type: "number" },
+  { key: "minPasswordLength", label: "Minimum password length (8–64)", type: "number" },
 ];
 
 export function SystemPage() {
@@ -63,9 +61,9 @@ function AuditTab({ token }: { token: string | null }) {
   async function load(off = 0) { setLoading(true); try { const r = await apiRequest<{ entries: AuditEntry[] }>(`/api/v1/admin/sa/audit-trail?limit=50&offset=${off}`, { token }); setEntries(r.entries || []); setOffset(off); } catch (e: any) { setError(e.message); } setLoading(false); }
   useEffect(() => { void load(); }, []);
   async function purge() {
-    const ok = await confirm({ title: "Purge audit trail?", message: "This will permanently delete all audit log entries. This action is irreversible.", confirmLabel: "Purge All", tone: "danger" });
+    const ok = await confirm({ title: "Clean up old entries?", message: "Entries older than 90 days will be permanently deleted. Recent activity is always kept.", confirmLabel: "Delete old entries", tone: "danger" });
     if (!ok) return;
-    try { await apiRequest("/api/v1/admin/sa/audit-trail", { method: "DELETE", token }); showToast({ title: "Purged", message: "Audit trail cleared", tone: "success" }); void load(); } catch (e: any) { setError(e.message); }
+    try { const r = await apiRequest<{ message: string }>("/api/v1/admin/sa/audit-trail", { method: "DELETE", token }); showToast({ title: "Cleaned up", message: r.message, tone: "success" }); void load(); } catch (e: any) { setError(e.message); }
   }
   const filtered = entries.filter(e => !query || e.actorEmail.toLowerCase().includes(query.toLowerCase()) || e.route.toLowerCase().includes(query.toLowerCase()));
   const methodColor = (m: string) => ({ DELETE: "danger", POST: "warning", PUT: "warning", PATCH: "warning" }[m] || "");
@@ -73,7 +71,7 @@ function AuditTab({ token }: { token: string | null }) {
     {error && <div className="alert alert-error">{error}</div>}
     <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
       <input className="input" placeholder="Search email or route…" value={query} onChange={e => setQuery(e.target.value)} style={{ flex: 1 }} />
-      <button className="btn danger" onClick={purge}>Purge All</button>
+      <button className="btn danger" onClick={purge}>Delete entries older than 90 days</button>
     </div>
     {loading ? <div className="loading-spinner" /> : (
       <div className="card"><table className="data-table"><thead><tr><th>Method</th><th>Actor</th><th>Route</th><th>Item</th><th>Time</th></tr></thead><tbody>
@@ -95,9 +93,9 @@ function AuditTab({ token }: { token: string | null }) {
 function SecurityTab({ token }: { token: string | null }) {
   const [settings, setSettings] = useState<Modules>({}); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [saving, setSaving] = useState(false);
   const { showToast } = useAdminFeedback();
-  async function load() { setLoading(true); try { const r = await apiRequest<{ modules: Modules }>("/api/v1/admin/sa/system/modules", { token }); setSettings(r.modules || {}); } catch (e: any) { setError(e.message); } setLoading(false); }
+  async function load() { setLoading(true); try { const r = await apiRequest<{ policies: Modules }>("/api/v1/admin/sa/system/security", { token }); setSettings(r.policies || {}); } catch (e: any) { setError(e.message); } setLoading(false); }
   useEffect(() => { void load(); }, []);
-  async function save() { setSaving(true); try { await apiRequest("/api/v1/admin/sa/system/modules", { method: "PUT", token, body: { modules: settings } }); showToast({ title: "Saved", message: "Security settings updated", tone: "success" }); } catch (e: any) { setError(e.message); } setSaving(false); }
+  async function save() { setSaving(true); setError(""); try { await apiRequest("/api/v1/admin/sa/system/security", { method: "PUT", token, body: { policies: settings } }); showToast({ title: "Saved", message: "Applies to sign-up, password resets and new accounts", tone: "success" }); } catch (e: any) { setError(e.message); } setSaving(false); }
   if (loading) return <div className="loading-spinner" />;
   return (<div className="card" style={{ padding: 16 }}>
     {error && <div className="alert alert-error">{error}</div>}
@@ -122,12 +120,19 @@ function BackupTab({ token }: { token: string | null }) {
 
   async function triggerBackup() {
     setBackupBusy(true); setBackupResult("");
-    try { await apiRequest("/api/v1/admin/sa/system/backup", { method: "POST", token }); setBackupResult("Backup triggered successfully. Check cloud storage."); } catch (e: any) { setError(e.message); }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/sa/system/backup`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || "Backup failed");
+      const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "")?.[1] || "shekinah-backup.tar.gz";
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a"); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setBackupResult(`Downloaded ${name}. Keep it somewhere safe and private: it contains members' personal data.`);
+    } catch (e: any) { setError(e.message); }
     setBackupBusy(false);
   }
   async function gdprPurge() {
     if (gdprConfirm !== "PURGE") return;
-    const ok = await confirmDialog({ title: "⚠️ GDPR PURGE — FINAL WARNING", message: `This will permanently erase ALL personal data for member ${gdprId}. Financial transactions will be anonymised. THIS CANNOT BE UNDONE.`, confirmLabel: "Execute Purge", tone: "danger" });
+    const ok = await confirmDialog({ title: "⚠️ GDPR PURGE — FINAL WARNING", message: `This will permanently erase ALL personal data for this member. Financial transactions will be anonymised. THIS CANNOT BE UNDONE.`, confirmLabel: "Execute Purge", tone: "danger" });
     if (!ok) return;
     setGdprBusy(true); setGdprResult(""); setError("");
     try { await apiRequest(`/api/v1/admin/sa/members/${gdprId.trim()}/purge-gdpr`, { method: "DELETE", token, body: { reason: gdprReason } }); setGdprResult("Member data purged successfully."); setGdprId(""); setGdprReason(""); setGdprConfirm(""); } catch (e: any) { setError(e.message); }
@@ -137,9 +142,9 @@ function BackupTab({ token }: { token: string | null }) {
   return (<div style={{ display: "grid", gap: 16 }}>
     <div className="card" style={{ padding: 16 }}>
       <h3><Database size={16} style={{ marginRight: 6 }} />Database Backup</h3>
-      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 4 }}>Trigger a manual backup of the Shekinah database to cloud storage.</p>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 4 }}>Download a complete copy of the database (every table as a spreadsheet file, compressed). Nothing is stored on the server.</p>
       {backupResult && <div className="alert alert-success" style={{ marginTop: 8 }}>{backupResult}</div>}
-      <button className="btn primary" style={{ marginTop: 12 }} onClick={triggerBackup} disabled={backupBusy}>{backupBusy ? "Triggering…" : "Trigger Backup Now"}</button>
+      <button className="btn primary" style={{ marginTop: 12 }} onClick={triggerBackup} disabled={backupBusy}>{backupBusy ? "Preparing…" : "Download backup"}</button>
     </div>
     <div className="card" style={{ padding: 16, border: "1px solid var(--danger)" }}>
       <h3 style={{ color: "var(--danger)" }}>🔴 GDPR — Right to be Forgotten</h3>
@@ -147,7 +152,7 @@ function BackupTab({ token }: { token: string | null }) {
       {error && <div className="alert alert-error" style={{ marginTop: 8 }}>{error}</div>}
       {gdprResult && <div className="alert alert-success" style={{ marginTop: 8 }}>{gdprResult}</div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
-        <label>Member ID<input className="input" value={gdprId} onChange={e => setGdprId(e.target.value)} placeholder="UUID of member to purge" /></label>
+        <label>Member<MemberSelect token={token} value={gdprId} onChange={setGdprId} /></label>
         <label>Reason / Legal Basis<input className="input" value={gdprReason} onChange={e => setGdprReason(e.target.value)} placeholder="e.g. Subject Access Request" /></label>
         <label style={{ gridColumn: "1/3" }}>Type PURGE to confirm<input className="input" value={gdprConfirm} onChange={e => setGdprConfirm(e.target.value)} placeholder="PURGE" style={{ borderColor: gdprConfirm === "PURGE" ? "var(--danger)" : undefined }} /></label>
       </div>

@@ -19,7 +19,7 @@ export function AttendancePage() {
     try { await apiRequest("/api/v1/admin/sa/attendance/sessions", { method: "POST", token, body: { title: fTitle, occasion: fOccasion, sessionDate: fDate, headcount: parseInt(fHeadcount) || 0, notes: fNotes } }); showToast({ title: "Created", message: "Session recorded", tone: "success" }); setShowForm(false); setFTitle(""); setFHeadcount(""); setFNotes(""); void load(); } catch (e: any) { setError(e.message); }
   }
   async function del(s: Session, mode: "soft" | "hard") {
-    const ok = await confirm({ title: `${mode === "hard" ? "Permanently purge" : "Archive"} session?`, message: `"${s.title}" on ${s.sessionDate}`, confirmLabel: mode === "hard" ? "Purge" : "Archive", tone: mode === "hard" ? "danger" : "warning" });
+    const ok = await confirm({ title: `${mode === "hard" ? "Permanently purge" : "Archive"} session?`, message: `"${s.title}" on ${s.sessionDate}`, confirmLabel: mode === "hard" ? "Purge" : "Archive", tone: mode === "hard" ? "danger" : "default" });
     if (!ok) return;
     try { await apiRequest(`/api/v1/admin/sa/attendance/sessions/${s.id}?mode=${mode}`, { method: "DELETE", token }); void load(); } catch (e: any) { setError(e.message); }
   }

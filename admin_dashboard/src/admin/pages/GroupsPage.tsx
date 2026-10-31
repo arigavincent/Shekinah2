@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../api/client";
+import { MemberSelect } from "../components/MemberSelect";
 import { getToken } from "../auth/session";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 
@@ -23,7 +24,7 @@ export function GroupsPage() {
     try { await apiRequest("/api/v1/admin/sa/groups", { method: "PUT", token, body: { name: formName, type: formType, leaderId: formLead || undefined, location: formLoc, schedule: formSched, maxCapacity: parseInt(formCap) || 0 } }); showToast({ title: "Saved", message: "Group saved", tone: "success" }); setShowForm(false); void load(); } catch (e: any) { setError(e.message); }
   }
   async function del(g: Group, mode: "soft"|"hard") {
-    const ok = await confirm({ title: `${mode === "hard" ? "PERMANENTLY" : "Archive"} group ${g.name}?`, message: mode === "hard" ? "All data, rosters and history will be erased." : "Group will be archived but data preserved.", confirmLabel: mode === "hard" ? "Delete permanently" : "Archive", tone: mode === "hard" ? "danger" : "warning" });
+    const ok = await confirm({ title: `${mode === "hard" ? "PERMANENTLY" : "Archive"} group ${g.name}?`, message: mode === "hard" ? "All data, rosters and history will be erased." : "Group will be archived but data preserved.", confirmLabel: mode === "hard" ? "Delete permanently" : "Archive", tone: mode === "hard" ? "danger" : "default" });
     if (!ok) return;
     try { await apiRequest(`/api/v1/admin/sa/groups/${g.id}?mode=${mode}`, { method: "DELETE", token }); setSelected(null); void load(); } catch (e: any) { setError(e.message); }
   }
@@ -46,7 +47,7 @@ export function GroupsPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
         <label>Name<input className="input" value={formName} onChange={e => setFormName(e.target.value)} /></label>
         <label>Type<select className="input" value={formType} onChange={e => setFormType(e.target.value)}><option value="ministry">Ministry</option><option value="department">Department</option><option value="small_group">Small Group</option><option value="sunday_school">Sunday School</option><option value="committee">Committee</option></select></label>
-        <label>Leader ID<input className="input" value={formLead} onChange={e => setFormLead(e.target.value)} /></label>
+        <label>Leader<MemberSelect token={token} value={formLead} onChange={setFormLead} /></label>
         <label>Location<input className="input" value={formLoc} onChange={e => setFormLoc(e.target.value)} /></label>
         <label>Schedule<input className="input" value={formSched} onChange={e => setFormSched(e.target.value)} /></label>
         <label>Max Capacity<input className="input" type="number" value={formCap} onChange={e => setFormCap(e.target.value)} /></label>
@@ -66,7 +67,7 @@ export function GroupsPage() {
           <p style={{ color: "var(--text-secondary)", marginBottom: 12 }}>{selected.type} · {selected.leaderName || "No leader"} · {selected.location || "No location"}</p>
           <h3>Roster ({roster.length})</h3>
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            <input className="input" placeholder="User ID" value={addUserId} onChange={e => setAddUserId(e.target.value)} style={{ flex: 1 }} />
+            <div style={{ flex: 1 }}><MemberSelect token={token} value={addUserId} onChange={setAddUserId} /></div>
             <select className="input" value={addRole} onChange={e => setAddRole(e.target.value)} style={{ width: 120 }}><option value="member">Member</option><option value="leader">Leader</option><option value="assistant">Assistant</option></select>
             <button className="btn primary compact" onClick={assignMember} disabled={!addUserId}>Add</button>
           </div>

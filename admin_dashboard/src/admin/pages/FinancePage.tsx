@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../api/client";
+import { MemberSelect } from "../components/MemberSelect";
 import { getToken } from "../auth/session";
 import { useAdminFeedback } from "../feedback/AdminFeedback";
 
@@ -71,7 +72,7 @@ function TransactionTab({ token }: { token: string | null }) {
       <label>Fund ID<input className="input" value={fundId} onChange={e => setFundId(e.target.value)} /></label>
       <label>Amount<input className="input" type="number" value={amount} onChange={e => setAmount(e.target.value)} /></label>
       <label>Type<select className="input" value={type} onChange={e => setType(e.target.value)}><option value="cash">Cash</option><option value="check">Check</option><option value="transfer">Transfer</option><option value="mpesa">M-Pesa</option></select></label>
-      <label>Donor ID (optional)<input className="input" value={donorId} onChange={e => setDonorId(e.target.value)} /></label>
+      <label>Donor (optional)<MemberSelect token={token} value={donorId} onChange={setDonorId} /></label>
       <label style={{ gridColumn: "1/3" }}>Notes<textarea className="input" value={notes} onChange={e => setNotes(e.target.value)} rows={2} /></label>
     </div>
     <button className="btn primary" style={{ marginTop: 12 }} onClick={submit} disabled={!fundId || !amount}>Record</button>
@@ -115,7 +116,7 @@ function RefundsTab({ token }: { token: string | null }) {
     {error && <div className="alert alert-error">{error}</div>}
     {success && <div className="alert alert-success">{success}</div>}
     <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-      <input className="input" placeholder="Transaction ID" value={txId} onChange={e => setTxId(e.target.value)} style={{ flex: 1 }} />
+      <input className="input" placeholder="Payment reference (shown on the Payments page and the receipt)" value={txId} onChange={e => setTxId(e.target.value.trim())} style={{ flex: 1 }} />
       <input className="input" placeholder="Reason" value={reason} onChange={e => setReason(e.target.value)} style={{ flex: 2 }} />
       <button className="btn danger" onClick={submit} disabled={!txId || !reason}>Refund</button>
     </div>
@@ -124,16 +125,33 @@ function RefundsTab({ token }: { token: string | null }) {
 
 function StatementsTab({ token }: { token: string | null }) {
   const [memberId, setMemberId] = useState(""); const [year, setYear] = useState(new Date().getFullYear().toString());
-  const [data, setData] = useState<any>(null); const [error, setError] = useState("");
-  async function fetch_() { setError(""); try { const r = await apiRequest<any>(`/api/v1/admin/sa/members/${memberId}/donation-statement?year=${year}`, { token }); setData(r); } catch (e: any) { setError(e.message); } }
+  const [data, setData] = useState<StatementData | null>(null); const [error, setError] = useState("");
+  async function fetch_() { setError(""); try { const r = await apiRequest<StatementData>(`/api/v1/admin/sa/members/${memberId}/donation-statement?year=${year}`, { token }); setData(r); } catch (e: any) { setError(e.message); } }
   return (<div className="card" style={{ padding: 16 }}>
     <h3>Donor Statement</h3>
     {error && <div className="alert alert-error">{error}</div>}
     <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-      <input className="input" placeholder="Member ID" value={memberId} onChange={e => setMemberId(e.target.value)} style={{ flex: 2 }} />
+      <div style={{ flex: 2 }}><MemberSelect token={token} value={memberId} onChange={setMemberId} includeArchived /></div>
       <input className="input" placeholder="Year" value={year} onChange={e => setYear(e.target.value)} style={{ width: 90 }} />
       <button className="btn primary" onClick={fetch_} disabled={!memberId}>Generate</button>
     </div>
-    {data && <pre style={{ marginTop: 12, padding: 12, background: "var(--surface-hover)", borderRadius: 8, overflow: "auto", maxHeight: 400, fontSize: 12 }}>{JSON.stringify(data, null, 2)}</pre>}
+    {data && <Statement data={data} />}
+  </div>);
+}
+
+type StatementData = { member: { name: string; email: string }; year: string; totals: Record<string, number>; contributions: { date: string; amount: number; currency: string; category: string; method: string; reference: string }[] };
+function Statement({ data }: { data: StatementData }) {
+  const money = (n: number, c: string) => `${c} ${n.toLocaleString()}`;
+  return (<div className="statement" style={{ marginTop: 16 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+      <div><h3 style={{ margin: 0 }}>Giving statement {data.year}</h3><p style={{ margin: "4px 0 0", color: "var(--text-secondary)" }}>{data.member.name} · {data.member.email}</p></div>
+      <button className="btn compact" onClick={() => window.print()}>Print</button>
+    </div>
+    {data.contributions.length === 0 ? <p style={{ marginTop: 12 }}>No confirmed giving in {data.year}.</p> : (<>
+      <table className="data-table" style={{ marginTop: 12 }}><thead><tr><th>Date</th><th>Towards</th><th>Method</th><th>Reference</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead><tbody>
+        {data.contributions.map((c, i) => <tr key={i}><td>{new Date(c.date).toLocaleDateString()}</td><td>{c.category}</td><td>{c.method.replace(/_/g, " ")}</td><td><code style={{ fontSize: 12 }}>{c.reference}</code></td><td style={{ textAlign: "right" }}>{money(c.amount, c.currency)}</td></tr>)}
+      </tbody></table>
+      <p style={{ textAlign: "right", fontWeight: 600, marginTop: 8 }}>Total: {Object.entries(data.totals).map(([c, n]) => money(n, c)).join(" + ")}</p>
+    </>)}
   </div>);
 }
