@@ -1,7 +1,6 @@
-import { proxyAdminApiRequest } from "./proxy.functions";
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "https://shekinah-sons-backend.onrender.com";
+  import.meta.env.VITE_API_BASE_URL || "";
 
 export class ApiError extends Error {
   status?: number;
@@ -25,24 +24,6 @@ export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  if (API_BASE_URL === "https://shekinah-sons-backend.onrender.com") {
-    const result = await proxyAdminApiRequest({
-      data: {
-        path,
-        method: options.method || "GET",
-        token: options.token,
-        body: options.body,
-      },
-    });
-
-    if (!result.ok) {
-      const payload = result.payload as { message?: string } | null;
-      throw new ApiError(payload?.message || "Request failed", result.status, result.payload);
-    }
-
-    return result.payload as T;
-  }
-
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method || "GET",
     headers: {

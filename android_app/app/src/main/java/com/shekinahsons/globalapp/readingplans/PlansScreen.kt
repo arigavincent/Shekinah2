@@ -135,7 +135,7 @@ private fun chaptersOf(bible: BibleDb, reference: String): List<Triple<Int, Stri
 @Composable
 fun PlansScreen(session: Session, openProfile: () -> Unit, openReference: (String) -> Unit, onBack: () -> Unit) {
     val plans = remember { mutableStateListOf<Plan>() }
-    var open by remember { mutableStateOf<String?>(null) }
+    var open by remember { mutableStateOf(com.shekinahsons.globalapp.notify.OpenLink.planId?.takeIf { it.isNotBlank() }.also { com.shekinahsons.globalapp.notify.OpenLink.planId=null }) }
     var reload by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -144,6 +144,7 @@ fun PlansScreen(session: Session, openProfile: () -> Unit, openReference: (Strin
         runCatching { Api.decode<List<Plan>>(Api.get(path)["plans"]) }.onSuccess { plans.clear(); plans.addAll(it) }.onFailure { error = it.message }
         loading = false
     }
+    LaunchedEffect(com.shekinahsons.globalapp.notify.OpenLink.planId) {com.shekinahsons.globalapp.notify.OpenLink.planId?.takeIf{it.isNotBlank()}?.let{open=it;com.shekinahsons.globalapp.notify.OpenLink.planId=null}}
     BackHandler { if (open != null) { open = null; reload++ } else onBack() }
     AnimatedContent(open, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "plans", modifier = Modifier.fillMaxSize().background(Brand.Black)) { id ->
         if (id != null) PlanPage(id, session, openProfile, openReference) { open = null; reload++ }
@@ -368,7 +369,7 @@ private fun PlanPage(id: String, session: Session, openProfile: () -> Unit, open
                 ReminderRow(p) { on, time ->
                     act {
                         Api.patch("/reading-plans/$id/reminder", mapOf("enabled" to on, "reminderTime" to time))
-                        PlanReminder.set(context, on, time, p.title)
+                        PlanReminder.set(context, on, time, p.title, id)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -376,7 +377,7 @@ private fun PlanPage(id: String, session: Session, openProfile: () -> Unit, open
                 if (!confirm) GhostButton("Restart or leave this plan") { confirm = true }
                 else Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.weight(1f)) { GhostButton("Restart from Day 1") { act { Api.post("/reading-plans/$id/start", mapOf("restart" to true)); day = 1 }; confirm = false } }
-                    Box(Modifier.weight(1f)) { GhostButton("Leave plan") { act { Api.delete("/reading-plans/$id/start"); PlanReminder.set(context, false, "", p.title) }; onBack() } }
+                    Box(Modifier.weight(1f)) { GhostButton("Leave plan") { act { Api.delete("/reading-plans/$id/start"); PlanReminder.set(context, false, "", p.title, id) }; onBack() } }
                 }
                 ErrorNote(error)
             }
@@ -445,29 +446,38 @@ private fun Passage(reference: String, scale: Float, openInBible: (String) -> Un
 
 // A daily notification at the chosen time.
 object PlanReminder {
-    fun set(context: Context, on: Boolean, time: String, title: String) {
-        val alarms = context.getSystemService(AlarmManager::class.java)
-        val pending = PendingIntent.getBroadcast(context, 31, Intent(context, PlanReminderReceiver::class.java).putExtra("title", title), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    fun set(context: Context, on: Boolean, time: String, title: String, id: String) {
+        val account=com.shekinahsons.globalapp.data.Accounts.current
+        val key="$account|$id"
+        val prefs=context.getSharedPreferences("plan-reminders",0)
+        if(on) prefs.edit().putString(key, org.json.JSONObject().put("time",time).put("title",title).toString()).apply()
+        else prefs.edit().remove(key).apply()
+        schedule(context,key,if(on) time else null,title)
+    }
+    private fun schedule(context: Context,key: String,time: String?,title: String) {
+        val alarms=context.getSystemService(AlarmManager::class.java)
+        val intent=Intent(context,PlanReminderReceiver::class.java).setData(android.net.Uri.parse("shekinah://plan-reminder/${android.net.Uri.encode(key)}")).putExtra("title",title).putExtra("key",key)
+        val pending=PendingIntent.getBroadcast(context,0,intent,PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         alarms.cancel(pending)
-        if (!on) return
-        val (h, m) = time.split(":").map { it.toIntOrNull() ?: 0 }.let { (it.getOrElse(0) { 6 }) to (it.getOrElse(1) { 0 }) }
-        val cal = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m); set(Calendar.SECOND, 0)
-            if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
+        if(time==null || key.substringBefore('|')!=com.shekinahsons.globalapp.data.Accounts.current) return
+        val parsed=runCatching { java.time.LocalTime.parse(time) }.getOrDefault(java.time.LocalTime.of(6,0))
+        val cal=Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY,parsed.hour);set(Calendar.MINUTE,parsed.minute);set(Calendar.SECOND,0);set(Calendar.MILLISECOND,0)
+            if(timeInMillis<=System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR,1)
         }
-        alarms.setInexactRepeating(AlarmManager.RTC_WAKEUP, cal.timeInMillis, AlarmManager.INTERVAL_DAY, pending)
+        alarms.setInexactRepeating(AlarmManager.RTC_WAKEUP,cal.timeInMillis,AlarmManager.INTERVAL_DAY,pending)
+    }
+    fun restore(context: Context) {
+        context.getSharedPreferences("plan-reminders",0).all.forEach { (key,value) ->
+            runCatching { val json=org.json.JSONObject(value as String); schedule(context,key,json.getString("time"),json.getString("title")) }
+        }
     }
 }
-
 class PlanReminderReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel("plans", "Reading plan reminders", NotificationManager.IMPORTANCE_DEFAULT))
-        val open = PendingIntent.getActivity(context, 31, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val n = NotificationCompat.Builder(context, "plans").setSmallIcon(R.drawable.dove_mark)
-            .setContentTitle("Today's reading is ready")
-            .setContentText("Continue ${intent.getStringExtra("title") ?: "your reading plan"} in the Shekinah app.")
-            .setContentIntent(open).setAutoCancel(true).build()
-        runCatching { manager.notify(31, n) }
+    override fun onReceive(context: Context,intent: Intent) {
+        if(intent.action==Intent.ACTION_BOOT_COMPLETED || intent.action==Intent.ACTION_TIME_CHANGED || intent.action==Intent.ACTION_TIMEZONE_CHANGED) { PlanReminder.restore(context); return }
+        val key=intent.getStringExtra("key") ?: return
+        if(key.substringBefore('|')!=com.shekinahsons.globalapp.data.Accounts.current) return
+        com.shekinahsons.globalapp.notify.Notify.show(context,key.hashCode(),"Today's reading is ready","Continue ${intent.getStringExtra("title") ?: "your reading plan"}.","devotion","plans",key.substringAfter('|'))
     }
 }

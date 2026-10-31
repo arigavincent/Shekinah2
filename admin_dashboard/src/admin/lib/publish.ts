@@ -1,18 +1,18 @@
-export const PUBLISH_TIME_ZONE = "UTC";
+export const PUBLISH_TIME_ZONE = "Africa/Nairobi";
 
 export function publishNowValue() {
-  return new Date().toISOString().slice(0, 16);
+  return new Date(Date.now()+3*3600000).toISOString().slice(0,16);
 }
 
 export function tomorrowMorningValue(hour = 5, minute = 0) {
-  const date = new Date();
+  const date = new Date(Date.now()+3*3600000);
   date.setUTCDate(date.getUTCDate() + 1);
   date.setUTCHours(hour, minute, 0, 0);
   return date.toISOString().slice(0, 16);
 }
 
 export function nextSundayMorningValue(hour = 8, minute = 0) {
-  const date = new Date();
+  const date = new Date(Date.now()+3*3600000);
   const day = date.getUTCDay();
   const daysUntilSunday = day === 0 ? 7 : 7 - day;
   date.setUTCDate(date.getUTCDate() + daysUntilSunday);
@@ -26,11 +26,11 @@ function parsePublishDate(value: string) {
 
   const normalized =
     /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
-      ? `${trimmed}T00:00:00Z`
+      ? `${trimmed}T00:00:00+03:00`
       : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)
-        ? `${trimmed}:00Z`
+        ? `${trimmed}:00+03:00`
         : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(trimmed)
-          ? `${trimmed}Z`
+          ? `${trimmed}+03:00`
           : trimmed;
 
   const date = new Date(normalized);
@@ -72,3 +72,5 @@ export function getPublishVisibility(value: string) {
     ? { ...state, label: "Visible in APK now" }
     : { ...state, label: "Scheduled - hidden from APK" };
 }
+
+export function publishInputValue(value:string){const d=new Date(value);return Number.isNaN(d.getTime())?value:new Date(d.getTime()+3*3600000).toISOString().slice(0,16);}

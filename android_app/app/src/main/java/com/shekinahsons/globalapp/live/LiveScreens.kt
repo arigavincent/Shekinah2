@@ -146,7 +146,7 @@ fun rememberLiveSession(active: Boolean, session: Session): LiveSession? {
     LaunchedEffect(active, session.member) {
         while (active) {
             runCatching { Api.decode<LiveSession?>(Api.get("/live/current")["session"]) }.onSuccess { current = it }
-            delay(10_000)
+            delay(2_000)
         }
     }
     return current
@@ -159,27 +159,48 @@ private fun money(n: Int) = "KSh ${"%,d".format(n)}"
 fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
     val context = LocalContext.current
     val token = com.shekinahsons.globalapp.data.Api.token
+    val retries = remember(url, token) { android.os.Handler(android.os.Looper.getMainLooper()) }
     val player = remember(url, token) {
         // The member's sign-in goes with every request, so paid lives play for those who paid.
-        val http = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-            .setDefaultRequestProperties(token?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap())
-        ExoPlayer.Builder(context).setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http)).build().apply {
-            setMediaItem(MediaItem.Builder().setUri(url).setMimeType(MimeTypes.APPLICATION_M3U8)
-                .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(2500).build()).build())
+        val http = com.shekinahsons.globalapp.playback.LiveDataSource
+        ExoPlayer.Builder(context)
+            .setLoadControl(androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(4_000, 12_000, 500, 750)
+                .setPrioritizeTimeOverSizeThresholds(true).build())
+            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http)).build().apply {
+            val current = this
+            addListener(object : Player.Listener {
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    retries.removeCallbacksAndMessages(null)
+                    retries.postDelayed({ current.seekToDefaultPosition(); current.prepare(); current.playWhenReady = true }, 1500)
+                }
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) retries.removeCallbacksAndMessages(null)
+                }
+            })
+            setMediaItem(MediaItem.Builder().setUri(if (url.startsWith("/")) com.shekinahsons.globalapp.BuildConfig.API_BASE+url else url).setMimeType(MimeTypes.APPLICATION_M3U8)
+                .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(1500)
+                    .setMinOffsetMs(1000).setMaxOffsetMs(4000)
+                    .setMinPlaybackSpeed(1f).setMaxPlaybackSpeed(1.08f).build()).build())
             prepare()
             playWhenReady = true
         }
     }
     LaunchedEffect(muted) { player.volume = if (muted) 0f else 1f }
-    DisposableEffect(player) { onDispose { player.release() } }
+    DisposableEffect(player) { onDispose { retries.removeCallbacksAndMessages(null); player.release() } }
     return player
 }
 
 @Composable
 fun LivePicture(player: ExoPlayer, modifier: Modifier, fill: Boolean = true) {
     var ready by remember { mutableStateOf(false) }
+    var buffering by remember { mutableStateOf(true) }
     DisposableEffect(player) {
-        val l = object : Player.Listener { override fun onRenderedFirstFrame() { ready = true } }
+        val l = object : Player.Listener {
+            override fun onRenderedFirstFrame() { ready = true }
+            override fun onPlaybackStateChanged(state: Int) { buffering = state != Player.STATE_READY }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) { buffering = true }
+        }
         player.addListener(l)
         onDispose { player.removeListener(l) }
     }
@@ -197,7 +218,7 @@ fun LivePicture(player: ExoPlayer, modifier: Modifier, fill: Boolean = true) {
             update = { it.resizeMode = if (fill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT },
             modifier = Modifier.fillMaxSize(),
         )
-        if (!ready) CircularProgressIndicator(color = Brand.Red, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(30.dp))
+        if (!ready || buffering) CircularProgressIndicator(color = Brand.Red, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(30.dp))
     }
 }
 
@@ -254,8 +275,10 @@ fun LiveTab(content: HomeContent, session: Session, openGoLive: () -> Unit, open
     val on = content.live.isLive && content.live.playbackHlsUrl.isNotBlank()
     val live = rememberLiveSession(on, session)
     var paying by remember { mutableStateOf(false) }
+    var replays by remember { mutableStateOf(false) }
+    if(replays) { Replays(session,openProfile){replays=false};return }
     when {
-        !on -> LiveOffline(content, session, openGoLive)
+        !on -> LiveOffline(content, session, openGoLive) { replays=true }
         live == null -> Box(Modifier.fillMaxSize().background(Brand.Black), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Gold) }
         live.price > 0 && !live.access && paying -> Column(Modifier.fillMaxSize().background(Brand.Black)) {
             TopBar(title = "Get access", onBack = { paying = false })
@@ -318,48 +341,101 @@ private fun LockedLive(live: LiveSession, modifier: Modifier, onClick: (() -> Un
 }
 
 @Composable
-private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -> Unit) {
+private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -> Unit, replays: () -> Unit) {
     val glow = Breathing(3600, 0.45f, 1f)
     val start = remember(content.live.nextService) { ServiceReminder.nextStart(content.live.nextService) }
-    Column(Modifier.fillMaxSize().background(Brand.Black)) {
-        TopBar()
-        Column(Modifier.padding(horizontal = 20.dp)) {
-            Text("Live", style = Type.Display, color = Brand.White)
-            Text("Services stream here, with chat for the whole family.", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.Text2)
+    LazyColumn(
+        Modifier.fillMaxSize().background(Brand.Black),
+        contentPadding = PaddingValues(bottom = 120.dp)
+    ) {
+        item { TopBar() }
+        item {
+            Column(Modifier.padding(horizontal = 20.dp)) {
+                Text("Live Service", style = Type.Display, color = Brand.White)
+                Text("Services stream here, with live chat for the whole family.", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.Text2)
+            }
         }
-        Spacer(Modifier.height(22.dp))
-        Box(Modifier.padding(horizontal = 20.dp)) {
-            ColorGlow(Brand.Gold.copy(alpha = 0.4f * glow), Modifier.matchParentSize().padding(10.dp), blur = 40.dp)
+        item { Spacer(Modifier.height(18.dp)) }
+        item {
+            Box(Modifier.padding(horizontal = 20.dp)) {
+                ColorGlow(Brand.Gold.copy(alpha = 0.4f * glow), Modifier.matchParentSize().padding(10.dp), blur = 40.dp)
+                Column(
+                    Modifier.fillMaxWidth().aspectRatio(16 / 10f).clip(RoundedCornerShape(22.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFF2A1F07), Color(0xFF0B0B0D), Color(0xFF0B1630))))
+                        .border(1.dp, Brand.Gold.copy(alpha = 0.35f), RoundedCornerShape(22.dp)).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                ) {
+                    Image(painterResource(R.drawable.dove_mark), null, Modifier.size(54.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Text("NEXT SERVICE", style = Type.Label, color = Brand.Gold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(content.live.nextService.ifBlank { "Sunday Service" }, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
+                    if (start != null) Text(ServiceReminder.countdown(start), style = Type.Meta, color = Brand.Text2)
+                    Spacer(Modifier.height(8.dp))
+                    Text("You'll get a notification the moment we go live.", style = Type.Meta.copy(fontSize = 13.sp), color = Brand.Text2, textAlign = TextAlign.Center)
+                }
+            }
+        }
+        item {
+            Box(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                GoldButton("Watch service replays", onClick = replays)
+            }
+        }
+        item {
             Column(
-                Modifier.fillMaxWidth().aspectRatio(16 / 10f).clip(RoundedCornerShape(22.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF2A1F07), Color(0xFF0B0B0D), Color(0xFF0B1630))))
-                    .border(1.dp, Brand.Gold.copy(alpha = 0.35f), RoundedCornerShape(22.dp)).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
+                    .lifted(RoundedCornerShape(22.dp), 10.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Brush.linearGradient(listOf(Color(0xFF18171C), Color(0xFF0F0F12))))
+                    .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(22.dp))
+                    .padding(18.dp)
             ) {
-                Image(painterResource(R.drawable.dove_mark), null, Modifier.size(54.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Color(0x22D4AF37)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Tune, null, tint = Brand.Gold, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("WEEKLY GATHERINGS", style = Type.Label.copy(fontSize = 10.5.sp), color = Brand.Gold)
+                        Text("Join us in person or online", style = Type.CardTitle.copy(fontSize = 15.sp), color = Brand.White)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Sunday Main Service", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                    Text("9:00 AM & 11:30 AM", color = Brand.GoldLight, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                }
                 Spacer(Modifier.height(10.dp))
-                Text("NEXT SERVICE", style = Type.Label, color = Brand.Gold)
-                Spacer(Modifier.height(6.dp))
-                Text(content.live.nextService.ifBlank { "Sunday Service" }, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
-                if (start != null) Text(ServiceReminder.countdown(start), style = Type.Meta, color = Brand.Text2)
-                Spacer(Modifier.height(8.dp))
-                Text("You'll get a notification the moment we go live.", style = Type.Meta.copy(fontSize = 13.sp), color = Brand.Text2, textAlign = TextAlign.Center)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x14FFFFFF)))
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Midweek Communion", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                    Text("Wednesday 5:30 PM", color = Brand.GoldLight, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
         if (session.canBroadcast) {
-            Spacer(Modifier.height(24.dp))
-            Box(Modifier.padding(horizontal = 20.dp)) {
-                Row(
-                    Modifier.fillMaxWidth().height(62.dp).lifted(RoundedCornerShape(50), 18.dp, Brand.Red).clip(RoundedCornerShape(50))
-                        .background(Brush.horizontalGradient(listOf(Color(0xFFFF5A4E), Color(0xFFD7263D)))).clickable(onClick = openGoLive),
-                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    PulsingDot(Color.White, 9.dp); Spacer(Modifier.width(10.dp))
-                    Text("Go Live", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            item { Spacer(Modifier.height(18.dp)) }
+            item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().height(62.dp).lifted(RoundedCornerShape(50), 18.dp, Brand.Red).clip(RoundedCornerShape(50))
+                            .background(Brush.horizontalGradient(listOf(Color(0xFFFF5A4E), Color(0xFFD7263D)))).clickable(onClick = openGoLive),
+                        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        PulsingDot(Color.White, 9.dp); Spacer(Modifier.width(10.dp))
+                        Text("Go Live", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
                 }
             }
-            Text("You're allowed to broadcast. Everyone gets notified when you go live.", style = Type.Meta, color = Brand.Muted,
-                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 10.dp))
+            item {
+                Text(
+                    "You're allowed to broadcast. Everyone gets notified when you go live.",
+                    style = Type.Meta, color = Brand.Muted,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 10.dp)
+                )
+            }
         }
     }
 }

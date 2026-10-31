@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.TextDecrease
 import androidx.compose.material.icons.rounded.TextIncrease
 import androidx.compose.material3.Icon
@@ -67,6 +68,7 @@ import com.shekinahsons.globalapp.ui.components.ColorGlow
 import com.shekinahsons.globalapp.ui.components.FadeImage
 import com.shekinahsons.globalapp.ui.components.NavBarHeight
 import com.shekinahsons.globalapp.ui.components.TopBar
+import com.shekinahsons.globalapp.ui.components.lifted
 import com.shekinahsons.globalapp.ui.components.pressable
 import com.shekinahsons.globalapp.ui.components.outset
 import com.shekinahsons.globalapp.ui.theme.Brand
@@ -108,6 +110,7 @@ fun DevotionsScreen(content: HomeContent, open: (Devotion) -> Unit) {
 
 @Composable
 fun DevotionReader(d: Devotion, onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var scale by rememberSaveable { mutableFloatStateOf(1f) }
     Box(Modifier.fillMaxSize().background(Brand.Black)) {
         Box(Modifier.fillMaxWidth().height(520.dp).clipToBounds()) {
@@ -117,9 +120,27 @@ fun DevotionReader(d: Devotion, onBack: () -> Unit) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 60.dp)) {
             item {
                 TopBar(title = "", onBack = onBack) {
-                    Row {
-                        Icon(Icons.Rounded.TextDecrease, "Smaller text", tint = Brand.White, modifier = Modifier.size(40.dp).clip(CircleShape).clickable { scale = (scale - 0.1f).coerceAtLeast(0.8f) }.padding(9.dp))
-                        Icon(Icons.Rounded.TextIncrease, "Larger text", tint = Brand.White, modifier = Modifier.size(40.dp).clip(CircleShape).clickable { scale = (scale + 0.1f).coerceAtMost(1.6f) }.padding(9.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Rounded.TextDecrease, "Smaller text",
+                            tint = Brand.White,
+                            modifier = Modifier.size(38.dp).clip(CircleShape).clickable { scale = (scale - 0.1f).coerceAtLeast(0.8f) }.padding(8.dp)
+                        )
+                        Icon(
+                            androidx.compose.material.icons.Icons.Rounded.TextIncrease, "Larger text",
+                            tint = Brand.White,
+                            modifier = Modifier.size(38.dp).clip(CircleShape).clickable { scale = (scale + 0.1f).coerceAtMost(1.6f) }.padding(8.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            androidx.compose.material.icons.Icons.Rounded.Share, "Share",
+                            tint = Brand.GoldLight,
+                            modifier = Modifier.size(38.dp).clip(CircleShape).clickable {
+                                val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                                    .putExtra(android.content.Intent.EXTRA_TEXT, "${d.title}\n\n${d.body.ifBlank { d.excerpt }}\n\nShekinah Sons Global Devotional")
+                                context.startActivity(android.content.Intent.createChooser(send, "Share devotion"))
+                            }.padding(8.dp)
+                        )
                     }
                 }
             }
@@ -135,7 +156,64 @@ fun DevotionReader(d: Devotion, onBack: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Text(d.title, style = Type.Display.copy(fontSize = (26 * scale).sp, lineHeight = (32 * scale).sp), color = Brand.White)
                     Spacer(Modifier.height(18.dp))
+                    if (d.body.isNotBlank() && d.excerpt.isNotBlank() && d.excerpt != d.body) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(bottom = 18.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0x18D4AF37))
+                                .border(1.dp, Color(0x33D4AF37), RoundedCornerShape(12.dp))
+                                .padding(14.dp)
+                        ) {
+                            Box(Modifier.width(3.dp).height(44.dp).background(Brand.GoldGradient))
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                "“${d.excerpt.trim('\"')}”",
+                                fontFamily = Scripture,
+                                fontSize = (16 * scale).sp,
+                                lineHeight = (23 * scale).sp,
+                                color = Brand.GoldLight
+                            )
+                        }
+                    }
                     Text(d.body.ifBlank { d.excerpt }, style = Type.Body.copy(fontSize = (17 * scale).sp, lineHeight = (28 * scale).sp), color = Color(0xFFE6E6EA))
+                    Spacer(Modifier.height(28.dp))
+                    Box(
+                        Modifier.fillMaxWidth()
+                            .lifted(RoundedCornerShape(20.dp), 10.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFF261D07), Color(0xFF141318))))
+                            .border(1.dp, Color(0x33D4AF37), RoundedCornerShape(20.dp))
+                            .padding(18.dp)
+                    ) {
+                        Column {
+                            Text("PRAYER & CONFESSION", style = Type.Label.copy(fontSize = 11.sp), color = Brand.Gold)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "“Lord, I thank You that Your Word is a lamp unto my feet and a light unto my path. I walk in wisdom, grace, and divine favor today. In Jesus' Name, Amen.”",
+                                fontFamily = Scripture,
+                                fontSize = (15.5 * scale).sp,
+                                lineHeight = (23 * scale).sp,
+                                color = Brand.GoldLight
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Row(
+                        Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
+                            .background(Color(0x1AFFFFFF))
+                            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(50))
+                            .clickable {
+                                val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                                    .putExtra(android.content.Intent.EXTRA_TEXT, "${d.title}\n\n${d.body.ifBlank { d.excerpt }}\n\nShekinah Sons Global Devotional")
+                                context.startActivity(android.content.Intent.createChooser(send, "Share devotion"))
+                            },
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(androidx.compose.material.icons.Icons.Rounded.Share, null, tint = Brand.GoldLight, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Share Devotion", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
                 }
             }
         }

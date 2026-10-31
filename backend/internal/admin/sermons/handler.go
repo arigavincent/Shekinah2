@@ -48,6 +48,7 @@ func (h Handler) Create(c *gin.Context) {
 		return
 	}
 
+	c.Set("audit_item_id", item.ID)
 	httpx.Created(c, gin.H{
 		"sermon": item,
 	})

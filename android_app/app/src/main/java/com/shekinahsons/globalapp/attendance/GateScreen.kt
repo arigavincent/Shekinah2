@@ -294,7 +294,7 @@ private fun Records() {
         item {
             Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.85f).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, "Previous day", tint = Color.White, modifier = Modifier.size(44.dp).clip(CircleShape).clickable { date = date.minusDays(1); occasion = "" }.padding(8.dp))
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.weight(1f).clickable {android.app.DatePickerDialog(context,{_,y,m,d->date=LocalDate.of(y,m+1,d);occasion=""},date.year,date.monthValue-1,date.dayOfMonth).show()}, horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(date.format(DateTimeFormatter.ofPattern("EEEE")), style = Type.Meta, color = Brand.GoldLight)
                     Text(date.format(DateTimeFormatter.ofPattern("d MMMM yyyy")), style = Type.CardTitle, color = Color.White)
                 }
@@ -366,6 +366,12 @@ private suspend fun savePdf(context: Context, date: String, occasion: String): S
     val req = Request.Builder().url(url).apply { Api.token?.let { header("Authorization", "Bearer $it") } }.build()
     val bytes = Api.http.newCall(req).execute().use { r -> if (!r.isSuccessful) error("Couldn't get the PDF (${r.code})"); r.body!!.bytes() }
     val name = "Attendance $date" + (if (occasion.isNotBlank()) " $occasion" else "") + ".pdf"
+    if(android.os.Build.VERSION.SDK_INT < 29) {
+        val file=java.io.File(context.cacheDir,"share").apply { mkdirs() }.let { java.io.File(it,name.replace('/','_')) }.apply { writeBytes(bytes) }
+        val uri=androidx.core.content.FileProvider.getUriForFile(context,"${context.packageName}.files",file)
+        withContext(Dispatchers.Main) { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"Save attendance PDF").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        return@withContext name
+    }
     val values = ContentValues().apply {
         put(MediaStore.Downloads.DISPLAY_NAME, name)
         put(MediaStore.Downloads.MIME_TYPE, "application/pdf")

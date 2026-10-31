@@ -19,9 +19,18 @@ import (
 
 // Teams: the places to serve (each with the leader who receives requests),
 // and members' requests to join them, emailed to that leader.
-type Teams struct{ db *pgxpool.Pool }
+type Teams struct {
+	db   *pgxpool.Pool
+	smtp mailer.Store
+}
 
-func NewTeams(db *pgxpool.Pool) Teams { return Teams{db: db} }
+func NewTeams(db *pgxpool.Pool, secret ...string) Teams {
+	key := ""
+	if len(secret) > 0 {
+		key = secret[0]
+	}
+	return Teams{db: db, smtp: mailer.Store{DB: db, Secret: key}}
+}
 
 type Team struct {
 	ID          string `json:"id"`
@@ -134,7 +143,12 @@ func (t Teams) Request(c *gin.Context) {
 	// Tell the team leader by email (or the serve coordinator, or the admins).
 	to := t.recipients(ctx, team.LeaderEmail)
 	go func() {
-		err := mailer.Send(mailer.Message{
+		config, _, err := t.smtp.Load(context.Background())
+		if err != nil {
+			log.Printf("serve request %s: SMTP configuration unavailable", id)
+			return
+		}
+		err = mailer.SendWithConfig(config, mailer.Message{
 			To:      to,
 			ReplyTo: email,
 			Subject: name + " would like to serve in " + team.Name,
@@ -147,7 +161,7 @@ func (t Teams) Request(c *gin.Context) {
 			},
 			Footer: "You can see every request and mark it as contacted in the admin console under More > Serve.",
 		})
-		if err == nil && mailer.Configured() {
+		if err == nil && config.Configured() {
 			_, _ = t.db.Exec(context.Background(), `UPDATE serve_requests SET emailed = TRUE WHERE id = $1`, id)
 		} else if err != nil {
 			log.Printf("serve request %s: email failed: %v", id, err)
@@ -225,7 +239,8 @@ func (t Teams) AdminOverview(c *gin.Context) {
 	}
 	var contact string
 	_ = t.db.QueryRow(ctx, `SELECT value FROM app_settings WHERE key = $1`, contactKey).Scan(&contact)
-	c.JSON(http.StatusOK, gin.H{"teams": teams, "requests": reqs, "contactEmail": contact, "emailReady": mailer.Configured()})
+	config, _, configErr := t.smtp.Load(ctx)
+	c.JSON(http.StatusOK, gin.H{"teams": teams, "requests": reqs, "contactEmail": contact, "emailReady": configErr == nil && config.Configured()})
 }
 
 func validEmail(s string) bool {
@@ -266,7 +281,11 @@ func (t Teams) AdminSaveTeam(c *gin.Context) {
 }
 
 func (t Teams) AdminDeleteTeam(c *gin.Context) {
-	_, _ = t.db.Exec(c.Request.Context(), `DELETE FROM serve_teams WHERE id = $1`, c.Param("id"))
+	tag, err := t.db.Exec(c.Request.Context(), `UPDATE serve_teams SET is_active=FALSE WHERE id = $1`, c.Param("id"))
+	if err != nil || tag.RowsAffected() == 0 {
+		c.JSON(404, gin.H{"message": "Team not found"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

@@ -34,10 +34,10 @@ object Notify {
         return context.getSharedPreferences("notify", Context.MODE_PRIVATE).getBoolean(key, true)
     }
 
-    fun show(context: Context, id: Int, title: String, body: String, category: String) {
+    fun show(context: Context, id: Int, title: String, body: String, category: String, screen: String = category, itemId: String = "") {
         if (!wanted(context, category)) return
         channels(context)
-        val open = PendingIntent.getActivity(context, id, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
+        val open = PendingIntent.getActivity(context, id, Intent(context, MainActivity::class.java).setData(OpenLink.uri(screen,itemId)).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val channel = if (categories.any { it.first == category }) category else "general"
         val n = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.dove_mark)

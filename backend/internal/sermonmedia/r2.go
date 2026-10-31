@@ -78,6 +78,11 @@ type DirectUpload struct {
 var ErrInvalidUpload = errors.New("invalid upload")
 
 func (p R2Presigner) Presign(ctx context.Context, req DirectUploadRequest) (DirectUpload, error) {
+	return p.PresignForKey(ctx, req, "")
+}
+
+// PresignForKey allows a durable upload session to retry the same owned object.
+func (p R2Presigner) PresignForKey(ctx context.Context, req DirectUploadRequest, key string) (DirectUpload, error) {
 	if !p.Configured() {
 		return DirectUpload{}, ErrR2NotConfigured
 	}
@@ -104,6 +109,9 @@ func (p R2Presigner) Presign(ctx context.Context, req DirectUploadRequest) (Dire
 	}
 	objectKey := fmt.Sprintf("sermons/%s/%s/%s%s", kind, time.Now().UTC().Format("2006/01"), hex.EncodeToString(suffix), ext)
 
+	if key != "" {
+		objectKey = key
+	}
 	cfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion("auto"),
 		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(p.accessKeyID, p.secretKey, "")),

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ariga/shekinah-backend/internal/integrations"
 	"io"
 	"log"
 	"mime"
@@ -37,6 +38,8 @@ const (
 
 type Handler struct {
 	client *http.Client
+	store  *integrations.Store
+	values map[string]string
 }
 
 type cloudinaryUploadResponse struct {
@@ -57,7 +60,28 @@ func NewHandler() Handler {
 	}
 }
 
+func (h Handler) WithIntegrations(store integrations.Store) Handler { h.store = &store; return h }
+func (h Handler) providerValue(key string) string {
+	if h.values != nil {
+		return h.values[key]
+	}
+	return env(key)
+}
+func (h Handler) cloudinaryReady() bool {
+	return h.providerValue("CLOUDINARY_CLOUD_NAME") != "" && h.providerValue("CLOUDINARY_API_KEY") != "" && h.providerValue("CLOUDINARY_API_SECRET") != ""
+}
 func (h Handler) Upload(c *gin.Context) {
+	if h.store != nil {
+		cfg, _, err := h.store.Load(c.Request.Context(), "cloudinary")
+		if err != nil {
+			httpx.Error(c, 503, "provider_unavailable", "Media settings are unavailable")
+			return
+		}
+		h.values = map[string]string{}
+		if cfg.Enabled {
+			h.values = cfg.Values
+		}
+	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadBytes)
 
 	kind := strings.ToLower(strings.TrimSpace(c.PostForm("kind")))
@@ -96,7 +120,7 @@ func (h Handler) Upload(c *gin.Context) {
 		return
 
 	case "cloudinary", "":
-		if cloudinaryConfigured() {
+		if h.cloudinaryReady() {
 			h.uploadCloudinary(c, kind, file, header, ext)
 			return
 		}
@@ -240,7 +264,7 @@ func (h Handler) uploadR2(c *gin.Context, kind string, file multipart.File, head
 	if err != nil {
 		log.Printf("r2 upload failed: %v", err)
 
-		if cloudinaryConfigured() {
+		if h.cloudinaryReady() {
 			if seeker, ok := file.(io.Seeker); ok {
 				_, seekErr := seeker.Seek(0, io.SeekStart)
 				if seekErr == nil {
@@ -273,9 +297,9 @@ func (h Handler) uploadR2(c *gin.Context, kind string, file multipart.File, head
 }
 
 func (h Handler) uploadCloudinary(c *gin.Context, kind string, file multipart.File, header *multipart.FileHeader, ext string) {
-	cloudName := env("CLOUDINARY_CLOUD_NAME")
-	apiKey := env("CLOUDINARY_API_KEY")
-	apiSecret := env("CLOUDINARY_API_SECRET")
+	cloudName := h.providerValue("CLOUDINARY_CLOUD_NAME")
+	apiKey := h.providerValue("CLOUDINARY_API_KEY")
+	apiSecret := h.providerValue("CLOUDINARY_API_SECRET")
 
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
 	folder := "shekinah/" + kind

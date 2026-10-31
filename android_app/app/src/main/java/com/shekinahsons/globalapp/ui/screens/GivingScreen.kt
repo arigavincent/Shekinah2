@@ -99,7 +99,7 @@ data class Paybill(val enabled: Boolean = false, val paybill: String = "", val a
 data class Bank(val enabled: Boolean = false, val bankName: String = "", val accountName: String = "", val accountNumber: String = "", val branch: String = "", val swiftCode: String = "", val reference: String = "")
 
 @Serializable
-data class GivingDetails(val mpesa: Paybill = Paybill(), val airtel: Paybill = Paybill(), val bank: Bank = Bank(), val note: String = "", val categories: List<String> = emptyList())
+data class GivingDetails(val mpesaPrompt:Boolean=false,val cards:Boolean=false,val mpesa: Paybill = Paybill(), val airtel: Paybill = Paybill(), val bank: Bank = Bank(), val note: String = "", val categories: List<String> = emptyList())
 
 @Serializable
 data class Gift(
@@ -161,7 +161,7 @@ fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> 
         history.clear()
         if (session.member != null) runCatching { history.addAll(Api.decode<List<Gift>>(Api.get("/giving/mine")["transactions"])) }
         else prefs.getString("ids", "")!!.split(",").filter { it.isNotBlank() }.reversed().take(20).forEach { id ->
-            runCatching { history += Api.decode<Gift>(Api.get("/giving/transactions/$id")["transaction"]) }
+            runCatching { history += Api.decode<Gift>(Api.get("/giving/transactions/$id", prefs.getString("receipt-$id", null)?.let { mapOf("X-Receipt-Token" to it) } ?: emptyMap())["transaction"]) }
         }
     }
     BackHandler(enabled = step != Step.Method && step != Step.Done) {
@@ -175,7 +175,7 @@ fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> 
         when {
             d == null && loadError == null -> Text("Loading…", style = Type.Body, color = Brand.Muted)
             d == null -> ErrorNote(loadError)
-            !d.mpesa.enabled && !d.airtel.enabled && !d.bank.enabled -> Text("Giving details will appear here soon.", style = Type.Body, color = Brand.Muted)
+            !d.mpesaPrompt && !d.cards && !d.mpesa.enabled && !d.airtel.enabled && !d.bank.enabled -> Text("Giving details will appear here soon.", style = Type.Body, color = Brand.Muted)
             else -> AnimatedContent(
                 step,
                 transitionSpec = {
@@ -187,7 +187,9 @@ fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> 
                 Column(Modifier.fillMaxWidth()) {
                     when (st) {
                         Step.Method -> {
-                            if (purchase != null) {
+                            if(d.mpesaPrompt||d.cards)GatewayPayments(session,d,purchase){reload++;if(purchase!=null)onPurchased()}
+                            if(d.mpesaPrompt||d.cards){if(d.mpesa.enabled||d.airtel.enabled||d.bank.enabled)Text("Other payment methods",style=Type.CardTitle,color=Brand.White)}
+                            else if (purchase != null) {
                                 Text("How would you like to pay?", style = Type.Title, color = Brand.White)
                                 Spacer(Modifier.height(4.dp))
                                 Text("${purchase.title} · ${money(purchase.price)}", color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
@@ -260,6 +262,8 @@ fun GivingPage(session: Session, purchase: Purchase? = null, onPurchased: () -> 
                                     runCatching {
                                         val res = Api.post("/giving/confirm", mapOf("method" to way.key, "category" to category, "amount" to (amount.toIntOrNull() ?: 0), "reference" to code, "phone" to phone, "name" to name, "itemId" to (purchase?.itemId ?: "")))
                                         val gift = Api.decode<Gift>(res["transaction"])
+                                        val raw = res["transaction"] as? kotlinx.serialization.json.JsonObject
+                                        (raw?.get("receiptToken") as? kotlinx.serialization.json.JsonPrimitive)?.content?.let { prefs.edit().putString("receipt-${gift.id}", it).apply() }
                                         prefs.edit().putString("ids", (prefs.getString("ids", "") + "," + gift.id).trim(',')).apply()
                                     }.onSuccess { step = Step.Done; reload++ }.onFailure { error = it.message }
                                     busy = false
@@ -560,6 +564,8 @@ private fun ThankYou(amount: String, category: String, again: () -> Unit) {
 @Composable
 private fun HistoryRow(g: Gift) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var receiptError by remember { mutableStateOf<String?>(null) }
     val (label, color, icon) = when (g.status) {
         "success" -> Triple("Received", Color(0xFF4ADE80), Icons.Rounded.CheckCircle)
         "awaiting_verification", "pending" -> Triple("Awaiting confirmation", Brand.GoldLight, Icons.Rounded.HourglassTop)
@@ -574,10 +580,13 @@ private fun HistoryRow(g: Gift) {
             val date = runCatching { OffsetDateTime.parse(g.createdAt).format(DateTimeFormatter.ofPattern("d MMM yyyy")) }.getOrDefault("")
             Text(listOf(via, g.providerReference, date).filter { it.isNotBlank() }.joinToString(" · "), style = Type.Meta, color = Brand.Text2)
             Text(label, color = color, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+            ErrorNote(receiptError)
         }
         if (g.status == "success") {
             Text("Receipt", color = Brand.BlueText, fontSize = 13.sp, modifier = Modifier.clickable {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("${BuildConfig.API_BASE}/api/v1/giving/transactions/${g.id}/receipt.pdf")))
+                scope.launch {
+                    runCatching { com.shekinahsons.globalapp.data.Documents.openReceipt(context, g.id) }.onFailure { receiptError = it.message }
+                }
             }.padding(6.dp))
         }
     }

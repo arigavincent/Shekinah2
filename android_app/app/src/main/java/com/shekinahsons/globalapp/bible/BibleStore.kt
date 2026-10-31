@@ -31,7 +31,7 @@ fun ref(bookId: Int, chapter: Int, verse: Int) = "$bookId:$chapter:$verse"
 
 // The reader's own marks and settings, kept on the phone.
 class BibleStore(context: Context) {
-    private val prefs = context.getSharedPreferences("bible-state", Context.MODE_PRIVATE)
+    private val prefs = com.shekinahsons.globalapp.data.Accounts.prefs(context,"bible-state")
     private val json = Json { ignoreUnknownKeys = true }
 
     var state: BibleState = runCatching { json.decodeFromString<BibleState>(prefs.getString("state", "") ?: "") }.getOrDefault(BibleState())

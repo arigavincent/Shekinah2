@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	mailer "github.com/ariga/shekinah-backend/internal/mail"
 	"log"
 	"math/big"
 	"strings"
@@ -34,7 +35,7 @@ func NewService(repository Repository, jwtSecret string) Service {
 	return Service{
 		repository: repository,
 		jwtSecret:  jwtSecret,
-		mailer:     passwordResetMailer{},
+		mailer:     passwordResetMailer{store: mailer.Store{DB: repository.db, Secret: jwtSecret}},
 	}
 }
 
@@ -128,7 +129,7 @@ func (s Service) ChangePassword(ctx context.Context, userID string, req ChangePa
 		return AuthResponse{}, ErrInvalidInput
 	}
 
-	if len(newPassword) < 12 {
+	if len(newPassword) < 8 {
 		return AuthResponse{}, ErrWeakPassword
 	}
 
@@ -316,6 +317,15 @@ func (s Service) ParseToken(tokenString string) (string, error) {
 		return "", ErrInvalidCredentials
 	}
 
+	var version int64
+	var active bool
+	if err := s.repository.db.QueryRow(context.Background(), `SELECT session_version,is_active FROM users WHERE id=$1`, sub).Scan(&version, &active); err != nil || !active {
+		return "", ErrInvalidCredentials
+	}
+	claimed, _ := claims["sv"].(float64)
+	if int64(claimed) != version {
+		return "", ErrInvalidCredentials
+	}
 	return sub, nil
 }
 
@@ -329,7 +339,12 @@ func (s Service) issueToken(user User) (string, error) {
 		ttl = 24 * time.Hour
 	}
 
+	var version int64
+	if err := s.repository.db.QueryRow(context.Background(), `SELECT session_version FROM users WHERE id=$1`, user.ID).Scan(&version); err != nil {
+		return "", err
+	}
 	claims := jwt.MapClaims{
+		"sv":   version,
 		"sub":  user.ID,
 		"role": user.Role,
 		"iat":  now.Unix(),

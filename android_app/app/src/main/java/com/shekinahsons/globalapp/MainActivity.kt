@@ -3,6 +3,7 @@ package com.shekinahsons.globalapp
 import android.Manifest
 import android.os.Build
 import android.os.Bundle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -80,6 +81,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        com.shekinahsons.globalapp.notify.OpenLink.receive(intent)
         val app = application as ShekinahApp
         audio = AudioController(applicationContext, app.library::playableUri, { app.library.position(it.id) }, { s, p, d -> app.library.savePosition(s.id, p, d) }).also { it.connect() }
         val repo = app.content
@@ -88,15 +90,17 @@ class MainActivity : ComponentActivity() {
                 val content by repo.content.collectAsState()
                 val refreshing by repo.refreshing.collectAsState()
                 val scope = rememberCoroutineScope()
-                LaunchedEffect(Unit) { repo.refresh(); app.session.refresh() }
+                LaunchedEffect(Unit) { launch { com.shekinahsons.globalapp.data.Ministry.load(this@MainActivity) }; repo.refresh(); app.session.refresh() }
                 // Keep Home current (a service going live shows up by itself).
-                LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(20_000); repo.refresh() } }
+                LaunchedEffect(Unit) { lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) { while (true) { kotlinx.coroutines.delay(20_000); repo.refresh() } } }
                 val c = content
                 // Admin accounts open the admin console; "View app" switches to the member app.
                 val session = app.session
                 var adminMode by rememberSaveable { mutableStateOf(session.isAdmin) }
                 LaunchedEffect(session.member?.id) { adminMode = session.isAdmin }
-                if (adminMode && session.isAdmin) com.shekinahsons.globalapp.admin.AdminConsole(
+                LaunchedEffect(com.shekinahsons.globalapp.notify.OpenLink.pending) { if(com.shekinahsons.globalapp.notify.OpenLink.pending!=null)adminMode=false }
+                if (session.member?.passwordResetRequired == true) com.shekinahsons.globalapp.ui.screens.AccountPage(session)
+                else if (adminMode && session.hasStaffTools) com.shekinahsons.globalapp.admin.StaffConsole(
                     session,
                     openApp = { adminMode = false },
                     openLive = { startOnLive = true; adminMode = false },
@@ -105,6 +109,12 @@ class MainActivity : ComponentActivity() {
                 else AppShell(c, audio, app.library, session, refreshing, openAdmin = { adminMode = true }) { scope.launch { repo.refresh() } }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        com.shekinahsons.globalapp.notify.OpenLink.receive(intent)
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
@@ -125,13 +135,31 @@ private fun Route.key(): String = when (this) {
 
 @Composable
 private fun AppShell(content: HomeContent, audio: AudioController, library: Library, session: com.shekinahsons.globalapp.data.Session, refreshing: Boolean, openAdmin: () -> Unit, refresh: () -> Unit) {
-    val nav = remember { Navigator() }
+    val nav = remember(session.member?.id) { Navigator() }
     val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
     BackHandler(enabled = menuOpen) { menuOpen = false }
     BackHandler(enabled = !menuOpen && (nav.stack.size > 1 || nav.tab != Tab.Home)) { nav.back() }
 
     LaunchedEffect(Unit) { if (startOnLive) { startOnLive = false; nav.select(Tab.Live) } }
+    LaunchedEffect(com.shekinahsons.globalapp.notify.OpenLink.pending) {
+        val target=com.shekinahsons.globalapp.notify.OpenLink.pending ?: return@LaunchedEffect
+        val repo=(context.applicationContext as ShekinahApp).content
+        if(target.id.isNotBlank())repo.refresh()
+        val linked=repo.content.value ?: content
+        com.shekinahsons.globalapp.notify.OpenLink.pending=null
+        when(target.screen) {
+            "live" -> nav.select(Tab.Live)
+            "sermons" -> linked.sermons.firstOrNull { it.id==target.id }?.let { nav.push(if(it.type=="audio") Route.Audio(it,content.audioSermons) else Route.Video(it,content.sermons)) } ?: nav.select(Tab.Sermons)
+            "devotion" -> linked.devotions.firstOrNull { it.id==target.id }?.let { nav.push(Route.DevotionRead(it)) } ?: nav.select(Tab.Devotions)
+            "events" -> { com.shekinahsons.globalapp.notify.OpenLink.eventId=target.id; nav.push(Route.Page("Events")) }
+            "plans" -> { com.shekinahsons.globalapp.notify.OpenLink.planId=target.id; nav.push(Route.Page("ReadingPlans")) }
+            "library" -> { com.shekinahsons.globalapp.notify.OpenLink.bookId=target.id; nav.push(Route.Page("Library")) }
+            "updates" -> nav.push(Route.Page("Updates"))
+            else -> nav.push(Route.Page("Notifications"))
+        }
+    }
+    LaunchedEffect(session.member?.id) { audio.close() }
     val route = nav.current
     val saveable = rememberSaveableStateHolder()
     val openVideo = { s: Sermon, q: List<Sermon> -> nav.push(Route.Video(s, q)) }
@@ -212,12 +240,12 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                 if (item.page == "Admin") openAdmin()
                 else if (item.page == "Share") {
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
-                        .putExtra(android.content.Intent.EXTRA_TEXT, "Get the Shekinah Sons Global app for sermons, devotions and live services.")
+                        .putExtra(android.content.Intent.EXTRA_TEXT, "Get the Shekinah Sons Global app for sermons, devotions and live services."+com.shekinahsons.globalapp.data.Ministry.details.appUrl.takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty())
                     context.startActivity(android.content.Intent.createChooser(send, "Share app"))
                 } else nav.push(Route.Page(item.page))
             },
             version = BuildConfig.VERSION_NAME,
-            admin = session.isAdmin,
+            admin = session.hasStaffTools,
             scanner = session.canScan,
         )
 

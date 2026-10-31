@@ -177,8 +177,9 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
     }
 
     fun end() {
+        val id = Broadcast.directSession
         Broadcast.stop(context)
-        scope.launch { runCatching { Api.post("/live/stop") } }
+        scope.launch { runCatching { Api.post("/live/stop", id?.let { mapOf("sessionId" to it) } ?: emptyMap()) } }
         onClose()
     }
     BackHandler {
@@ -200,7 +201,7 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
                         view.holder.addCallback(object : SurfaceHolder.Callback {
                             override fun surfaceCreated(holder: SurfaceHolder) {}
                             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                                if (!stream.isStreaming && !stream.isOnPreview) {
+                                if (!stream.isStreaming && !stream.isRecording && !stream.isOnPreview) {
                                     Broadcast.prepare(hd, portrait, CameraHelper.getCameraOrientation(ctx))
                                 }
                                 if (!stream.isOnPreview) stream.startPreview(view)
@@ -322,6 +323,13 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
                     Pill("Logo", Broadcast.logoOn) { Broadcast.setLogo(!Broadcast.logoOn) }
                 }
                 Spacer(Modifier.height(8.dp))
+                androidx.compose.foundation.lazy.LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    item { Pill(if(Broadcast.micOn) "Microphone on" else "Microphone off",Broadcast.micOn,enabled=granted && state!="connecting"){Broadcast.setMic(!Broadcast.micOn)} }
+                    item { Pill(if(Broadcast.showing==Showing.Camera) "Camera on" else "Camera off",Broadcast.showing==Showing.Camera,enabled=granted && state!="connecting"){if(Broadcast.showing==Showing.Camera)Broadcast.cameraOff(title)else Broadcast.showCamera(context)} }
+                    item { Pill("Flip camera",false,enabled=granted && Broadcast.showing==Showing.Camera){Broadcast.flipCamera()} }
+                    item { Pill("On-screen",Broadcast.bannerOn,enabled=granted){sheet="effects"} }
+                }
+                Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Pill("Free for everyone", !paid) { paid = false }
                     Pill("Paid live", paid) { paid = true }
@@ -339,13 +347,16 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
                         .background(Brush.horizontalGradient(listOf(Color(0xFFFF5A4E), Color(0xFFD7263D))))
                         .clickable(enabled = granted && state != "connecting" && (!paid || (price.toIntOrNull() ?: 0) > 0)) {
                             scope.launch {
-                                runCatching { Api.post("/live/start", mapOf("title" to title, "price" to (if (paid) price.toIntOrNull() ?: 0 else 0))) }
+                                runCatching { Api.post("/live/start", mapOf("title" to title, "price" to (if (paid) price.toIntOrNull() ?: 0 else 0), "transport" to "r2", "format" to "mpegts")) }
                                     .onSuccess { res ->
                                         val url = (res["publishUrl"] as kotlinx.serialization.json.JsonPrimitive).content
                                         // The stream keeps the shape the phone is held in now.
                                         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
                                         Broadcast.bannerTitle = title
-                                        Broadcast.start(context, url)
+                                        if ((res["transport"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "r2") {
+                                            val id = res["session"]!!.let { it as kotlinx.serialization.json.JsonObject }["id"]!!.let { it as kotlinx.serialization.json.JsonPrimitive }.content
+                                            Broadcast.startDirect(context,id,(res["encryptionKey"] as kotlinx.serialization.json.JsonPrimitive).content)
+                                        } else Broadcast.start(context, url)
                                     }
                                     .onFailure { Broadcast.failed(it.message ?: "Couldn't start the live.") }
                             }

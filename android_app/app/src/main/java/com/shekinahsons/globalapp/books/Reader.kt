@@ -120,9 +120,9 @@ data class Marks(
 
 private val markJson = Json { ignoreUnknownKeys = true }
 private fun loadMarks(context: Context, id: String) =
-    runCatching { markJson.decodeFromString<Marks>(context.getSharedPreferences("book-marks", Context.MODE_PRIVATE).getString(id, "") ?: "") }.getOrDefault(Marks())
+    runCatching { markJson.decodeFromString<Marks>(com.shekinahsons.globalapp.data.Accounts.prefs(context,"book-marks").getString(id, "") ?: "") }.getOrDefault(Marks())
 private fun saveMarks(context: Context, id: String, marks: Marks) =
-    context.getSharedPreferences("book-marks", Context.MODE_PRIVATE).edit().putString(id, markJson.encodeToString(Marks.serializer(), marks)).apply()
+    com.shekinahsons.globalapp.data.Accounts.prefs(context,"book-marks").edit().putString(id, markJson.encodeToString(Marks.serializer(), marks)).apply()
 
 private val pens = listOf("gold" to Color(0xFFE9C23C), "blue" to Color(0xFF4A8BFF), "green" to Color(0xFF4ADE80), "pink" to Color(0xFFF07EB5))
 private fun pen(name: String) = pens.firstOrNull { it.first == name }?.second ?: pens.first().second
@@ -161,11 +161,13 @@ fun Reader(book: Book, onBack: () -> Unit) {
     var pages by remember { mutableStateOf<Pages?>(null) }
     var temp by remember { mutableStateOf<File?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var retry by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var marks by remember { mutableStateOf(loadMarks(context, book.id)) }
     fun update(change: (Marks) -> Marks) { marks = change(marks); saveMarks(context, book.id, marks) }
 
     // Fetch into the vault once, then open a private plain copy while reading.
-    LaunchedEffect(book.id) {
+    LaunchedEffect(book.id,retry) {
+        error=null
         // Never open a paid book the reader hasn't got.
         if (!book.readable) { error = "Get this book to read it."; return@LaunchedEffect }
         runCatching {
@@ -188,11 +190,16 @@ fun Reader(book: Book, onBack: () -> Unit) {
     Box(Modifier.fillMaxSize().background(if (marks.theme == "night") Color(0xFF0B0B0D) else Color(0xFF1B1A18))) {
         if (p == null) {
             Column(Modifier.align(Alignment.Center).padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (error != null) ErrorNote(error) else {
+                if (error != null) {
+                    ErrorNote(error)
+                    com.shekinahsons.globalapp.ui.components.GoldButton("Retry"){retry++}
+                    com.shekinahsons.globalapp.ui.components.GhostButton("Cancel download"){scope.launch{com.shekinahsons.globalapp.data.Downloads.cancel(context,Books.vaultId(book));onBack()}}
+                } else {
                     CircularProgressIndicator(color = Brand.Gold, strokeWidth = 2.dp)
                     Spacer(Modifier.height(12.dp))
                     val dl = Books.downloading[book.id]
                     Text(if (dl != null) "Getting your book ${(dl * 100).toInt()}%" else "Opening…", color = Brand.Text2)
+                    if(dl!=null) com.shekinahsons.globalapp.ui.components.GhostButton("Pause download"){com.shekinahsons.globalapp.data.Downloads.pause(context,Books.vaultId(book))}
                 }
             }
         } else ReaderPages(book, p, marks, ::update, onBack)

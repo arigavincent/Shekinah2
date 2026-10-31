@@ -31,6 +31,8 @@ import (
 
 	"github.com/ariga/shekinah-backend/internal/auth"
 	"github.com/ariga/shekinah-backend/internal/permissions"
+	"github.com/ariga/shekinah-backend/internal/uploads"
+	"regexp"
 )
 
 const maxFileBytes = 150 << 20
@@ -116,17 +118,18 @@ func (h Handler) open(sealed []byte) ([]byte, error) {
 }
 
 type Item struct {
-	ID            string    `json:"id"`
-	Title         string    `json:"title"`
-	Description   string    `json:"description"`
-	Author        string    `json:"author"`
-	Category      string    `json:"category"`
-	Kind          string    `json:"kind"`
-	CoverURL      string    `json:"coverUrl"`
-	Price         int       `json:"price"`
-	FileSizeBytes int64     `json:"fileSizeBytes"`
-	PublishedAt   time.Time `json:"publishedAt"`
-	IsPublished   bool      `json:"isPublished"`
+	NotifyOnPublish bool      `json:"notifyOnPublish"`
+	ID              string    `json:"id"`
+	Title           string    `json:"title"`
+	Description     string    `json:"description"`
+	Author          string    `json:"author"`
+	Category        string    `json:"category"`
+	Kind            string    `json:"kind"`
+	CoverURL        string    `json:"coverUrl"`
+	Price           int       `json:"price"`
+	FileSizeBytes   int64     `json:"fileSizeBytes"`
+	PublishedAt     time.Time `json:"publishedAt"`
+	IsPublished     bool      `json:"isPublished"`
 	// For the signed-in member:
 	Owned   bool `json:"owned"`
 	Pending bool `json:"pending"`
@@ -135,18 +138,19 @@ type Item struct {
 	PublishedBy   string `json:"publishedBy,omitempty"`
 	PublisherName string `json:"publisherName,omitempty"`
 	Sales         int    `json:"sales,omitempty"`
+	Encrypted     bool   `json:"encrypted"`
 }
 
 const itemColumns = `
-	l.id, l.title, l.description, l.author, l.category, l.kind, l.cover_url, l.price, l.file_size_bytes, l.published_at, l.is_published,
+	l.id, l.title, l.description, l.author, l.category, l.kind, l.cover_url, l.price, l.file_size_bytes, l.published_at, l.is_published, l.notify_on_publish,
 	EXISTS (SELECT 1 FROM giving_transactions g WHERE g.item_id = l.id AND g.user_id::text = $1 AND g.status = 'success'),
 	EXISTS (SELECT 1 FROM giving_transactions g WHERE g.item_id = l.id AND g.user_id::text = $1 AND g.status = 'awaiting_verification'),
 	COALESCE(l.published_by::text, ''), COALESCE((SELECT u.name FROM users u WHERE u.id = l.published_by), ''),
-	(SELECT COUNT(*) FROM giving_transactions g WHERE g.item_id = l.id AND g.status = 'success')`
+	(SELECT COUNT(*) FROM giving_transactions g WHERE g.item_id = l.id AND g.status = 'success'), l.file_key <> ''`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var it Item
-	err := row.Scan(&it.ID, &it.Title, &it.Description, &it.Author, &it.Category, &it.Kind, &it.CoverURL, &it.Price, &it.FileSizeBytes, &it.PublishedAt, &it.IsPublished, &it.Owned, &it.Pending, &it.PublishedBy, &it.PublisherName, &it.Sales)
+	err := row.Scan(&it.ID, &it.Title, &it.Description, &it.Author, &it.Category, &it.Kind, &it.CoverURL, &it.Price, &it.FileSizeBytes, &it.PublishedAt, &it.IsPublished, &it.NotifyOnPublish, &it.Owned, &it.Pending, &it.PublishedBy, &it.PublisherName, &it.Sales, &it.Encrypted)
 	return it, err
 }
 
@@ -173,7 +177,7 @@ func (h Handler) List(c *gin.Context) {
 	canPublish := userID != "" && h.perms.Has(ctx, userID, permissions.BooksPublish)
 	admin := userID != "" && h.perms.IsAdmin(ctx, userID)
 	rows, err := h.db.Query(ctx, `SELECT `+itemColumns+` FROM library_items l
-		WHERE l.is_published = TRUE OR $2 OR ($3 AND l.published_by::text = $1)
+		WHERE (l.is_published = TRUE AND l.published_at<=NOW()) OR $2 OR ($3 AND l.published_by::text = $1)
 		ORDER BY l.is_featured DESC, l.published_at DESC LIMIT 300`, userID, admin, canPublish)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load the library"})
@@ -199,7 +203,7 @@ func (h Handler) File(c *gin.Context) {
 	var price int
 	var fileKey, fileURL, publishedBy string
 	var owned, published bool
-	err := h.db.QueryRow(ctx, `SELECT price, file_key, file_url, is_published, COALESCE(published_by::text, ''),
+	err := h.db.QueryRow(ctx, `SELECT price, file_key, file_url, (is_published AND published_at<=NOW()), COALESCE(published_by::text, ''),
 		EXISTS (SELECT 1 FROM giving_transactions g WHERE g.item_id = l.id AND g.user_id::text = $2 AND g.status = 'success')
 		FROM library_items l WHERE id = $1`, c.Param("id"), userID).Scan(&price, &fileKey, &fileURL, &published, &publishedBy, &owned)
 	if err != nil {
@@ -311,56 +315,124 @@ func (h Handler) Publish(c *gin.Context) {
 	if !kinds[kind] {
 		kind = "book"
 	}
+	userID, _ := auth.UserIDFromContext(c)
+	uploadID := strings.TrimSpace(c.PostForm("uploadedFile"))
+	id := "book-" + randomHex(6)
+	if uploadID != "" {
+		if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`).MatchString(uploadID) {
+			c.JSON(400, gin.H{"message": "Invalid staged PDF"})
+			return
+		}
+
+		id = "book-" + uploadID
+		if existing, e := scanItem(h.db.QueryRow(c.Request.Context(), `SELECT `+itemColumns+` FROM library_items l WHERE l.id=$2 AND l.published_by::text=$1`, userID, id)); e == nil {
+			if raw := strings.TrimSpace(c.PostForm("coverUrl")); raw != "" && raw != existing.CoverURL {
+				if !h.validCoverURL(raw) {
+					c.JSON(400, gin.H{"message": "Choose a cover uploaded to ministry storage"})
+					return
+				}
+				if _, err := h.db.Exec(c.Request.Context(), `UPDATE library_items SET cover_url=$2,updated_at=NOW() WHERE id=$1`, id, raw); err != nil {
+					c.JSON(500, gin.H{"message": "Could not save supplied cover"})
+					return
+				}
+				existing.CoverURL = raw
+			}
+			existing.CanEdit = true
+			c.JSON(200, gin.H{"item": existing})
+			return
+		}
+	}
+	publishedAt := time.Now().UTC()
+	if raw := c.PostForm("publishedAt"); raw != "" {
+		v, e := time.Parse(time.RFC3339, raw)
+		if e != nil {
+			c.JSON(400, gin.H{"message": "Use a publication time with timezone"})
+			return
+		}
+		publishedAt = v
+	}
+	isPublished := c.PostForm("isPublished") != "false"
+	notify := c.PostForm("notifyOnPublish") != "false"
 	pdf, ext, err := readPart(c, "file", maxFileBytes)
+	if uploadID != "" {
+		pdf, err = uploads.New(h.db, h.perms).ReadBook(c.Request.Context(), uploadID, userID)
+		ext = ".pdf"
+	}
 	if err != nil || ext != ".pdf" || !bytes.HasPrefix(pdf, []byte("%PDF")) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Choose a PDF file (up to 150 MB)"})
 		return
 	}
 	ctx := c.Request.Context()
+	coverURL := strings.TrimSpace(c.PostForm("coverUrl"))
+	if coverURL != "" && !h.validCoverURL(coverURL) {
+		c.JSON(400, gin.H{"message": "Choose a cover uploaded to ministry storage"})
+		return
+	}
+	var cover []byte
+	coverContentType := ""
+	if probe, _, partErr := c.Request.FormFile("cover"); partErr == nil {
+		_ = probe.Close()
+		cover, _, err = readPart(c, "cover", 10<<20)
+		coverContentType = coverType(cover)
+		if err != nil || len(cover) == 0 || coverContentType == "" {
+			c.JSON(400, gin.H{"message": "Choose a JPG, PNG or WebP cover up to 10 MB"})
+			return
+		}
+	}
+	if coverURL == "" && len(cover) == 0 {
+		cover, err = firstPageCover(ctx, pdf)
+		coverContentType = "image/jpeg"
+		if err != nil {
+			c.JSON(422, gin.H{"message": err.Error()})
+			return
+		}
+	}
+	// A supplied image always overrides extraction, including retried uploads.
+	if len(cover) > 0 {
+		ext := map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[coverContentType]
+		key := "books/covers/" + randomHex(10) + ext
+		if err = h.put(ctx, key, coverContentType, cover); err != nil {
+			c.JSON(502, gin.H{"message": "Could not store the cover; retry the upload"})
+			return
+		}
+		coverURL = h.publicBase + "/" + key
+	}
 	sealed, err := h.seal(pdf)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not secure the file"})
+		c.JSON(500, gin.H{"message": "Could not secure the file"})
 		return
 	}
 	fileKey := "books/files/" + randomHex(16) + ".bin"
-	if err := h.put(ctx, fileKey, "application/octet-stream", sealed); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"message": "Could not store the file"})
+	if err = h.put(ctx, fileKey, "application/octet-stream", sealed); err != nil {
+		c.JSON(502, gin.H{"message": "Could not store the file"})
 		return
 	}
-	coverURL := ""
-	if cover, cext, err := readPart(c, "cover", 10<<20); err == nil && len(cover) > 0 {
-		types := map[string]string{".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
-		if ct, ok := types[cext]; ok {
-			key := "books/covers/" + randomHex(10) + cext
-			if h.put(ctx, key, ct, cover) == nil {
-				coverURL = h.publicBase + "/" + key
-			}
-		}
-	}
-	userID, _ := auth.UserIDFromContext(c)
-	id := "book-" + randomHex(6)
-	_, err = h.db.Exec(ctx, `INSERT INTO library_items (id, title, description, author, category, cover_url, file_url, file_type, file_size_bytes, price, kind, file_key, published_by)
-		VALUES ($1, $2, $3, $4, $5, $6, '', 'pdf', $7, $8, $9, $10, $11)`,
+	_, err = h.db.Exec(ctx, `INSERT INTO library_items (id, title, description, author, category, cover_url, file_url, file_type, file_size_bytes, price, kind, file_key, published_by, published_at, is_published, notify_on_publish)
+		VALUES ($1, $2, $3, $4, $5, $6, '', 'pdf', $7, $8, $9, $10, $11, $12, $13, $14)`,
 		id, title, strings.TrimSpace(c.PostForm("description")), strings.TrimSpace(c.PostForm("author")), strings.TrimSpace(c.PostForm("category")),
-		coverURL, len(pdf), price, kind, fileKey, userID)
+		coverURL, len(pdf), price, kind, fileKey, userID, publishedAt, isPublished, notify)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not save the book"})
 		return
 	}
 	item, _ := scanItem(h.db.QueryRow(ctx, `SELECT `+itemColumns+` FROM library_items l WHERE l.id = $2`, userID, id))
 	item.CanEdit = true
+	c.Set("audit_item_id", item.ID)
 	c.JSON(http.StatusCreated, gin.H{"item": item})
 }
 
 // PATCH /library/:id (publishers): title, description, price, published.
 func (h Handler) Update(c *gin.Context) {
 	var req struct {
-		Title       *string `json:"title"`
-		Description *string `json:"description"`
-		Author      *string `json:"author"`
-		Category    *string `json:"category"`
-		Price       *int    `json:"price"`
-		IsPublished *bool   `json:"isPublished"`
+		Title           *string    `json:"title"`
+		Description     *string    `json:"description"`
+		Author          *string    `json:"author"`
+		CoverURL        *string    `json:"coverUrl"`
+		Category        *string    `json:"category"`
+		Price           *int       `json:"price"`
+		IsPublished     *bool      `json:"isPublished"`
+		PublishedAt     *time.Time `json:"publishedAt"`
+		NotifyOnPublish *bool      `json:"notifyOnPublish"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || (req.Price != nil && (*req.Price < 0 || *req.Price > 1_000_000)) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid changes"})
@@ -368,8 +440,8 @@ func (h Handler) Update(c *gin.Context) {
 	}
 	userID, _ := auth.UserIDFromContext(c)
 	ctx := c.Request.Context()
-	var publishedBy string
-	if err := h.db.QueryRow(ctx, `SELECT COALESCE(published_by::text, '') FROM library_items WHERE id = $1`, c.Param("id")).Scan(&publishedBy); err != nil {
+	var publishedBy, existingFileKey string
+	if err := h.db.QueryRow(ctx, `SELECT COALESCE(published_by::text, ''),file_key FROM library_items WHERE id = $1`, c.Param("id")).Scan(&publishedBy, &existingFileKey); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
 		return
 	}
@@ -377,13 +449,34 @@ func (h Handler) Update(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"message": "Only the publisher of this book or an admin can change it"})
 		return
 	}
+	if req.Price != nil && *req.Price > 0 && existingFileKey == "" {
+		c.JSON(400, gin.H{"message": "Publish an encrypted PDF before setting a paid price"})
+		return
+	}
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" || len(title) > 160 {
+			c.JSON(400, gin.H{"message": "Use a title between 1 and 160 characters"})
+			return
+		}
+		req.Title = &title
+	}
+	if req.CoverURL != nil && !h.validCoverURL(*req.CoverURL) {
+		c.JSON(400, gin.H{"message": "Choose a cover uploaded to ministry storage"})
+		return
+	}
 	tag, err := h.db.Exec(ctx, `UPDATE library_items SET
 		title = COALESCE($2, title), description = COALESCE($3, description), author = COALESCE($4, author),
-		category = COALESCE($5, category), price = COALESCE($6, price), is_published = COALESCE($7, is_published), updated_at = NOW()
-		WHERE id = $1`, c.Param("id"), req.Title, req.Description, req.Author, req.Category, req.Price, req.IsPublished)
+		category = COALESCE($5, category), price = COALESCE($6, price), is_published = COALESCE($7, is_published), published_at=COALESCE($8,published_at),notify_on_publish=COALESCE($9,notify_on_publish), cover_url=COALESCE($10,cover_url), updated_at = NOW()
+		WHERE id = $1`, c.Param("id"), req.Title, req.Description, req.Author, req.Category, req.Price, req.IsPublished, req.PublishedAt, req.NotifyOnPublish, req.CoverURL)
 	if err != nil || tag.RowsAffected() == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// Cover URLs are images in our public storage; never accept an encrypted file URL.
+func (h Handler) validCoverURL(value string) bool {
+	return h.publicBase != "" && (strings.HasPrefix(value, h.publicBase+"/uploads/") || strings.HasPrefix(value, h.publicBase+"/books/covers/")) && !strings.ContainsAny(value, "\r\n?#") && !strings.Contains(value, "..")
 }

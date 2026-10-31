@@ -141,12 +141,20 @@ func (r Repository) Sermons(ctx context.Context) ([]Sermon, error) {
 			s.media_url,
 			s.code,
 			s.source,
-			s.stream_uid
+			s.stream_uid,
+            '' AS replay_id, 'ready' AS replay_status, 0 AS replay_price, s.sermon_date::text AS sort_date
 		FROM sermons s
 		LEFT JOIN sermon_categories c ON c.id = s.category_id
-		WHERE s.published_at <= NOW()
+		WHERE s.published_at <= NOW() AND s.is_published
 			AND s.status = 'ready'
-		ORDER BY s.sermon_date DESC
+		UNION ALL
+        SELECT 'replay-'||l.id,'video',l.title,'Shekinah Sons Global',
+            to_char(l.started_at AT TIME ZONE 'Africa/Nairobi','FMMonth FMDD, YYYY'),
+            'Service replays',FALSE,'','', 'Recorded service',
+            '/api/v1/live/replays/'||l.id||'/file','', 'r2_replay',l.id,l.id,a.status,l.price,(l.started_at AT TIME ZONE 'Africa/Nairobi')::date::text
+        FROM live_sessions l JOIN live_archives a ON a.session_id=l.id
+        WHERE l.status='ended'
+        ORDER BY sort_date DESC
 	`
 
 	rows, err := r.db.Query(ctx, query)
@@ -159,6 +167,7 @@ func (r Repository) Sermons(ctx context.Context) ([]Sermon, error) {
 
 	for rows.Next() {
 		var item Sermon
+		var sortDate string
 
 		if err := rows.Scan(
 			&item.ID,
@@ -175,6 +184,7 @@ func (r Repository) Sermons(ctx context.Context) ([]Sermon, error) {
 			&item.Code,
 			&item.Source,
 			&item.StreamUID,
+			&item.ReplayID, &item.Status, &item.Price, &sortDate,
 		); err != nil {
 			return nil, fmt.Errorf("scan sermon: %w", err)
 		}
@@ -199,7 +209,7 @@ func (r Repository) Categories(ctx context.Context) ([]Category, error) {
 		FROM sermon_categories c
 		LEFT JOIN sermons s
 		  ON s.category_id = c.id
-		 AND s.published_at <= NOW()
+		 AND s.published_at <= NOW() AND s.is_published AND s.status='ready'
 		GROUP BY c.id, c.name, c.image_url
 		ORDER BY c.name ASC
 	`
@@ -248,6 +258,7 @@ func (r Repository) Events(ctx context.Context) ([]Event, error) {
 			price,
 			to_char(event_date, 'YYYY-MM-DD')
 		FROM events
+        WHERE is_published AND published_at<=NOW()
 		ORDER BY event_date ASC
 	`
 

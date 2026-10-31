@@ -24,10 +24,19 @@ import {
   Sun,
   Moon,
   Palette,
+  Users,
+  DollarSign,
+  UsersRound,
+  CalendarCheck,
+  MessageSquareText,
+  KeyRound,
+  Webhook,
+  ShieldAlert,
   type LucideIcon
 } from "lucide-react";
 
-import { clearSession, getUser } from "../auth/session";
+import { clearSession, getUser, getToken } from "../auth/session";
+import {apiRequest} from "../api/client";
 import { useAdminTheme } from "../theme";
 
 type NavItem = { label: string; to: string; icon: LucideIcon };
@@ -60,10 +69,12 @@ const navSections: NavSection[] = [
     items: [
       { label: "Live", to: "/live", icon: Radio },
       { label: "Check-In", to: "/checkins", icon: ClipboardCheck },
-      { label: "Giving", to: "/giving", icon: Wallet },
+      { label: "Payments", to: "/giving", icon: Wallet },
+      { label: "Monetization", to: "/monetization", icon: Wallet },
       { label: "Notifications", to: "/notifications", icon: BellRing },
-      { label: "Serve Settings", to: "/serve-settings", icon: HandHeart },
-      { label: "Team & Permissions", to: "/team", icon: ShieldCheck }
+      {label:"Settings",to:"/settings",icon:ShieldCheck},
+      { label: "Serve Teams", to: "/serve-settings", icon: HandHeart },
+      { label: "Users", to: "/users", icon: ShieldCheck }
     ]
   },
   {
@@ -74,6 +85,20 @@ const navSections: NavSection[] = [
   }
 ];
 
+const superAdminNavSection: NavSection = {
+  label: "Super Admin",
+  items: [
+    { label: "Members", to: "/sa/members", icon: Users },
+    { label: "Finance & Funds", to: "/sa/finance", icon: DollarSign },
+    { label: "Groups", to: "/sa/groups", icon: UsersRound },
+    { label: "Attendance", to: "/sa/attendance", icon: CalendarCheck },
+    { label: "Comm Templates", to: "/sa/comm-templates", icon: MessageSquareText },
+    { label: "API Keys", to: "/sa/api-keys", icon: KeyRound },
+    { label: "Webhooks", to: "/sa/webhooks", icon: Webhook },
+    { label: "System & Governance", to: "/sa/system", icon: ShieldAlert },
+  ]
+};
+
 const COLLAPSED_KEY = "shekinah-admin-sidebar-collapsed";
 const SIDEBAR_DRAWER_QUERY = "(max-width: 1180px)";
 
@@ -82,6 +107,16 @@ export function AdminLayout() {
   const location = useLocation();
   const user = getUser();
   const { mode, toggleTheme } = useAdminTheme();
+  const admin=user?.role==="admin"||user?.role==="super_admin";
+  const [permissions,setPermissions]=useState<string[]|null>(null);
+  const scopes:Record<string,string>={"/sermons":"sermons:manage","/library":"books:publish","/events":"events:manage","/devotions":"content:manage","/updates":"content:manage","/reading-plans":"content:manage","/community":"community:moderate","/testimonies":"community:moderate","/giving":"finance:manage","/monetization":"finance:manage","/checkins":"checkin:scan"};
+  const isSuperAdmin = user?.role === "super_admin";
+  const allowed=(path:string)=>admin||(path==="/live"&&Boolean(permissions?.some(p=>["live:broadcast","live:moderate"].includes(p))))||path==="/appearance"||Boolean(scopes[path]&&permissions?.includes(scopes[path]))||path.startsWith("/sa/");
+  const baseSections = navSections.map(s=>({...s,items:s.items.filter(i=>allowed(i.to))})).filter(s=>s.items.length);
+  const visibleSections = isSuperAdmin ? [...baseSections, superAdminNavSection] : baseSections;
+  useEffect(()=>{void apiRequest<{permissions:string[]}>("/api/v1/permissions/me",{token:getToken()}).then(r=>setPermissions(r.permissions)).catch(()=>setPermissions([]));},[user?.id]);
+  useEffect(()=>{if(permissions!==null&&!allowed(location.pathname))navigate(visibleSections[0]?.items[0]?.to||"/appearance",{replace:true});},[permissions,location.pathname]);
+
 
   // Mobile drawer
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -159,7 +194,7 @@ export function AdminLayout() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Sections">
-          {navSections.map(section => (
+          {visibleSections.map(section => (
             <div key={section.label} className="nav-group">
               <p className="nav-group-label">{section.label}</p>
 

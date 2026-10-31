@@ -3,6 +3,7 @@ package apibible
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/ariga/shekinah-backend/internal/integrations"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,6 +18,7 @@ import (
 )
 
 type Handler struct {
+	store  *integrations.Store
 	cfg    config.Config
 	client *http.Client
 }
@@ -151,6 +153,7 @@ var exportCache = struct {
 	items: make(map[string]exportCacheEntry),
 }
 
+func (h Handler) WithIntegrations(store integrations.Store) Handler { h.store = &store; return h }
 func (h Handler) configured(c *gin.Context) bool {
 	if strings.TrimSpace(h.cfg.APIBibleKey) == "" {
 		httpx.Error(
@@ -175,6 +178,17 @@ func (h Handler) baseURL() string {
 }
 
 func (h Handler) getJSON(c *gin.Context, path string, query url.Values, target any) bool {
+	if h.store != nil {
+		cfg, _, err := h.store.Load(c.Request.Context(), "apibible")
+		if err != nil {
+			httpx.Error(c, 503, "provider_unavailable", "Bible settings are temporarily unavailable")
+			return false
+		}
+		h.cfg.APIBibleKey = ""
+		if cfg.Enabled {
+			h.cfg.APIBibleKey = cfg.Values["API_BIBLE_KEY"]
+		}
+	}
 	if !h.configured(c) {
 		return false
 	}

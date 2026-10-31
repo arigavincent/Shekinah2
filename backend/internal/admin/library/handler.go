@@ -74,9 +74,9 @@ func parsePublishedAt(value string) (time.Time, error) {
 		return time.Now().UTC(), nil
 	}
 
-	layouts := []string{time.RFC3339, "2006-01-02T15:04", "2006-01-02 15:04", "2006-01-02"}
+	layouts := []string{time.RFC3339, "2006-01-02T15:04Z07:00", "2006-01-02T15:04", "2006-01-02 15:04", "2006-01-02"}
 	for _, layout := range layouts {
-		if parsed, err := time.Parse(layout, trimmed); err == nil {
+		if parsed, err := time.ParseInLocation(layout, trimmed, time.FixedZone("Africa/Nairobi", 10800)); err == nil {
 			return parsed.UTC(), nil
 		}
 	}

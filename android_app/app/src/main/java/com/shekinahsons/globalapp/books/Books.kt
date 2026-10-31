@@ -10,6 +10,7 @@ import com.shekinahsons.globalapp.BuildConfig
 import com.shekinahsons.globalapp.data.Api
 import com.shekinahsons.globalapp.data.ApiException
 import com.shekinahsons.globalapp.data.VaultFiles
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -25,7 +26,7 @@ import okio.source
 data class Book(
     val id: String = "", val title: String = "", val description: String = "", val author: String = "",
     val category: String = "", val kind: String = "book", val coverUrl: String = "", val price: Int = 0,
-    val fileSizeBytes: Long = 0, val publishedAt: String = "", val isPublished: Boolean = true,
+    val notifyOnPublish:Boolean=false, val fileSizeBytes: Long = 0, val publishedAt: String = "", val isPublished: Boolean = true,
     val owned: Boolean = false, val pending: Boolean = false, val canEdit: Boolean = false,
     // Record keeping, sent only to whoever manages the book.
     val publisherName: String = "", val sales: Int = 0,
@@ -40,15 +41,36 @@ data class Book(
 // where each reader stopped.
 object Books {
     private const val PREFIX = "book-"
-    val downloading = mutableStateMapOf<String, Float>()
+    val downloading get() = com.shekinahsons.globalapp.data.Downloads.entries.filterKeys { it.startsWith("book-") }.filterValues { it.state in listOf("Downloading","Waiting for connection") }.mapKeys { it.key.removePrefix("book-").removePrefix("$user-") }.mapValues { it.value.progress }
     var version by mutableStateOf(0); private set
     // The signed-in member. A paid book's saved copy belongs to the account
     // that downloaded it, so another account on the same phone can't open it.
     var user = ""
 
-    suspend fun list(): Pair<List<Book>, Boolean> = withContext(Dispatchers.IO) {
-        val res = Api.get("/library")
-        Api.decode<List<Book>>(res["items"]) to ((res["canPublish"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true")
+    var offline by mutableStateOf(false); private set
+    private fun catalogue(context: Context, account: String = com.shekinahsons.globalapp.data.Accounts.current) = java.io.File(context.filesDir,"books-$account.json")
+    fun cached(context: Context): List<Book> = runCatching {
+        val raw=Api.json.parseToJsonElement(catalogue(context).readText()) as kotlinx.serialization.json.JsonObject
+        Api.decode<List<Book>>(raw["items"])
+    }.getOrDefault(emptyList())
+    suspend fun list(context: Context): Pair<List<Book>, Boolean> = withContext(Dispatchers.IO) {
+        val account=com.shekinahsons.globalapp.data.Accounts.current
+        try {
+            val res=Api.get("/library")
+            check(account==com.shekinahsons.globalapp.data.Accounts.current) { "Account changed" }
+            val items=Api.decode<List<Book>>(res["items"])
+            val file=catalogue(context,account)
+            val part=java.io.File(file.path+".tmp").apply { writeText(res.toString()) }
+            check(part.renameTo(file)) { "Could not save the shelf" }
+            offline=false
+            items to ((res["canPublish"] as? kotlinx.serialization.json.JsonPrimitive)?.content=="true")
+        } catch (e: Exception) {
+            if(e is kotlinx.coroutines.CancellationException || account!=com.shekinahsons.globalapp.data.Accounts.current) throw e
+            val items=cached(context)
+            if (items.isEmpty()) throw e
+            offline=true
+            items to false
+        }
     }
 
     fun vaultId(b: Book) = if (b.free) PREFIX + b.id else "$PREFIX$user-${b.id}"
@@ -56,17 +78,12 @@ object Books {
 
     // Downloads the book (the server only sends it to those allowed) straight into the vault.
     suspend fun fetch(context: Context, b: Book) = withContext(Dispatchers.IO) {
-        downloading[b.id] = 0f
-        try {
-            val headers = Api.token?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap()
-            VaultFiles.save(context, vaultId(b), "${BuildConfig.API_BASE}/api/v1/library/${b.id}/file", headers) { downloading[b.id] = it }
-            version++
-        } finally {
-            downloading.remove(b.id)
-        }
+        val id=vaultId(b)
+        val work=com.shekinahsons.globalapp.data.Downloads.start(context,id,"${BuildConfig.API_BASE}/api/v1/library/${b.id}/file",Api.token)
+        com.shekinahsons.globalapp.data.Downloads.await(context,work)
+        version++
     }
-
-    fun remove(context: Context, b: Book) { VaultFiles.delete(context, vaultId(b)); version++ }
+    fun remove(context: Context, b: Book) { kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { com.shekinahsons.globalapp.data.Downloads.cancel(context,vaultId(b)); version++ } }
 
     // Publishing: the PDF and cover go to the server, which encrypts and stores them.
     suspend fun publish(

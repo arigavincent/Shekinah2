@@ -206,6 +206,8 @@ private fun UpdatesPage(content: HomeContent) {
 @Composable
 private fun AboutPage(content: HomeContent) {
     val a = content.about
+    val context=LocalContext.current
+    val details=com.shekinahsons.globalapp.data.Ministry.details
     LazyColumn(contentPadding = PaddingValues(20.dp)) {
         item {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -217,7 +219,9 @@ private fun AboutPage(content: HomeContent) {
             Spacer(Modifier.height(26.dp))
             if (a.vision.isNotBlank()) Block("Our Vision", a.vision)
             if (a.description.isNotBlank()) Block("Who We Are", a.description)
-            if (a.contactSummary.isNotBlank()) Block("Get In Touch", a.contactSummary)
+            if (details.address.isNotBlank()) Block("Visit us",details.address)
+            listOf("Call" to details.phone.takeIf{it.isNotBlank()}?.let{"tel:$it"},"Email" to details.email.takeIf{it.isNotBlank()}?.let{"mailto:$it"},"Website" to details.website.takeIf{it.isNotBlank()}).forEach{(label,link)->if(link!=null){com.shekinahsons.globalapp.ui.components.GhostButton(label){runCatching{context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(link)))}};Spacer(Modifier.height(10.dp))}}
+            if(details.phone.isBlank()&&details.email.isBlank()&&details.address.isBlank()) Text("Contact details will be available here once the ministry adds them.",style=Type.Body,color=Brand.Text2)
         }
     }
 }

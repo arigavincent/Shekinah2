@@ -22,7 +22,16 @@ class Navigator {
     val tab get() = stack.filterIsInstance<Route.Root>().last().tab
 
     fun select(tab: Tab) { stack.clear(); stack.add(Route.Root(tab)) }
-    fun push(route: Route) { stack.add(route) }
+    fun push(route: Route) {
+        val same=when(val old=current){
+            is Route.Page -> route is Route.Page && old.page==route.page
+            is Route.Video -> route is Route.Video && old.sermon.id==route.sermon.id
+            is Route.Audio -> route is Route.Audio && old.sermon.id==route.sermon.id
+            is Route.DevotionRead -> route is Route.DevotionRead && old.devotion.id==route.devotion.id
+            else -> old==route
+        }
+        if(!same)stack.add(route)
+    }
     fun back(): Boolean {
         if (stack.size > 1) { stack.removeAt(stack.lastIndex); return true }
         if (tab != Tab.Home) { select(Tab.Home); return true }

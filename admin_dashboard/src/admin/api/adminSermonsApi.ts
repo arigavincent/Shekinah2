@@ -5,6 +5,7 @@ export type SermonSource = "manual" | "cloudflare_stream" | "live_recording" | "
 export type SermonStatus = "processing" | "ready" | "error";
 
 export type Sermon = {
+ isPublished:boolean;notifyOnPublish:boolean;
   id: string;
   externalId: string;
   type: "video" | "audio";
@@ -28,6 +29,7 @@ export type Sermon = {
 };
 
 export type SermonPayload = {
+ isPublished?:boolean;notifyOnPublish?:boolean;
   externalId?: string;
   type: "video" | "audio";
   code: string;

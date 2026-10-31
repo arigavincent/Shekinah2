@@ -40,11 +40,13 @@ type BankDetails struct {
 }
 
 type GivingDetails struct {
-	Mpesa      PaybillDetails `json:"mpesa"`
-	Airtel     PaybillDetails `json:"airtel"`
-	Bank       BankDetails    `json:"bank"`
-	Note       string         `json:"note"`
-	Categories []string       `json:"categories"`
+	MpesaPrompt bool           `json:"mpesaPrompt"`
+	Cards       bool           `json:"cards"`
+	Mpesa       PaybillDetails `json:"mpesa"`
+	Airtel      PaybillDetails `json:"airtel"`
+	Bank        BankDetails    `json:"bank"`
+	Note        string         `json:"note"`
+	Categories  []string       `json:"categories"`
 }
 
 var defaultCategories = []string{"Tithe", "Offering", "Thanksgiving", "Project", "Special Seed"}
@@ -75,6 +77,8 @@ func (h Handler) Details(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load giving details"})
 		return
 	}
+	details.MpesaPrompt = h.providerAvailable(c.Request.Context(), "mpesa")
+	details.Cards = h.providerAvailable(c.Request.Context(), "flutterwave")
 	c.JSON(http.StatusOK, gin.H{"details": details})
 }
 
@@ -170,6 +174,17 @@ func (h Handler) Confirm(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Enter the transaction code from your confirmation message (for example SJK4XY7Z2P)"})
 		return
 	}
+	ctx := c.Request.Context()
+	tx, err := h.db.Begin(ctx)
+	if err != nil {
+		c.JSON(500, gin.H{"message": "Could not record payment"})
+		return
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, method+":"+reference); err != nil {
+		c.JSON(500, gin.H{"message": "Could not record payment"})
+		return
+	}
 	category := clean(req.Category, 40)
 	if category == "" {
 		category = "Offering"
@@ -184,13 +199,17 @@ func (h Handler) Confirm(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"message": "Sign in to pay for this"})
 			return
 		}
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "purchase:"+buyer+":"+itemID); err != nil {
+			c.JSON(500, gin.H{"message": "Could not record purchase"})
+			return
+		}
 		title, price, kind, err := h.itemPrice(c.Request.Context(), itemID)
 		if err != nil || price <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "This isn't for sale"})
 			return
 		}
 		var already bool
-		_ = h.db.QueryRow(c.Request.Context(), `SELECT EXISTS (SELECT 1 FROM giving_transactions WHERE item_id = $1 AND user_id::text = $2 AND status IN ('success','awaiting_verification'))`, itemID, buyer).Scan(&already)
+		_ = tx.QueryRow(c.Request.Context(), `SELECT EXISTS (SELECT 1 FROM giving_transactions WHERE item_id = $1 AND user_id::text = $2 AND status IN ('success','awaiting_verification'))`, itemID, buyer).Scan(&already)
 		if already {
 			c.JSON(http.StatusConflict, gin.H{"message": "You've already paid for this (or your payment is being confirmed)."})
 			return
@@ -201,7 +220,7 @@ func (h Handler) Confirm(c *gin.Context) {
 	}
 
 	var exists bool
-	_ = h.db.QueryRow(c.Request.Context(), `SELECT EXISTS (SELECT 1 FROM giving_transactions WHERE method = $1 AND provider_reference = $2)`, method, reference).Scan(&exists)
+	_ = tx.QueryRow(c.Request.Context(), `SELECT EXISTS (SELECT 1 FROM giving_transactions WHERE method = $1 AND provider_reference = $2)`, method, reference).Scan(&exists)
 	if exists {
 		c.JSON(http.StatusConflict, gin.H{"message": "This transaction code has already been submitted. Thank you!"})
 		return
@@ -213,7 +232,7 @@ func (h Handler) Confirm(c *gin.Context) {
 	}
 	provider := map[string]string{"mpesa_paybill": "mpesa", "airtel_paybill": "airtel", "bank": "bank"}[method]
 	id := "giv-" + strings.ToLower(strconvBase36(time.Now().UnixNano()))
-	_, err := h.db.Exec(c.Request.Context(), `
+	_, err = tx.Exec(c.Request.Context(), `
 		INSERT INTO giving_transactions (id, category, method, phone, amount, note, status, provider, provider_reference, email, user_id, payer_name, item_id)
 		VALUES ($1, $2, $3, $4, $5, $6, 'awaiting_verification', $7, $8, '', $9, $10, $11)
 	`, id, category, method, clean(req.Phone, 20), req.Amount, note, provider, reference, userID, clean(req.Name, 80), itemID)
@@ -221,7 +240,14 @@ func (h Handler) Confirm(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not record your confirmation. Please try again."})
 		return
 	}
+	if err := tx.Commit(ctx); err != nil {
+		c.JSON(500, gin.H{"message": "Could not save payment"})
+		return
+	}
 	transaction, _, _ := h.getTransaction(c.Request.Context(), id)
+	if userID == nil {
+		transaction["receiptToken"] = h.receiptToken(id)
+	}
 	c.JSON(http.StatusCreated, gin.H{"transaction": transaction})
 }
 
@@ -292,13 +318,13 @@ func (h Handler) itemPrice(ctx context.Context, itemID string) (title string, pr
 	switch {
 	case strings.HasPrefix(itemID, "evt-"):
 		kind = "Event"
-		err = h.db.QueryRow(ctx, `SELECT title, price FROM events WHERE id = $1`, itemID).Scan(&title, &price)
+		err = h.db.QueryRow(ctx, `SELECT title, price FROM events WHERE id = $1 AND is_published AND published_at<=NOW()`, itemID).Scan(&title, &price)
 	case strings.HasPrefix(itemID, "live-"):
 		kind = "Live"
-		err = h.db.QueryRow(ctx, `SELECT title, price FROM live_sessions WHERE id = $1 AND status IN ('starting', 'live')`, itemID).Scan(&title, &price)
+		err = h.db.QueryRow(ctx, `SELECT l.title, l.price FROM live_sessions l WHERE l.id = $1 AND (l.status IN ('starting','live') OR EXISTS(SELECT 1 FROM live_archives a WHERE a.session_id=l.id AND a.status='ready'))`, itemID).Scan(&title, &price)
 	default:
 		kind = "Book"
-		err = h.db.QueryRow(ctx, `SELECT title, price FROM library_items WHERE id = $1`, itemID).Scan(&title, &price)
+		err = h.db.QueryRow(ctx, `SELECT title, price FROM library_items WHERE id = $1 AND is_published AND published_at<=NOW()`, itemID).Scan(&title, &price)
 	}
 	return title, price, kind, err
 }

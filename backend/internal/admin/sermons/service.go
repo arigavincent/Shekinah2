@@ -33,6 +33,14 @@ func (s Service) List(ctx context.Context) ([]Sermon, error) {
 }
 
 func (s Service) Create(ctx context.Context, req CreateRequest) (Sermon, error) {
+	if req.ID != "" {
+		if existing, e := s.repository.FindByID(ctx, req.ID); e == nil {
+			if existing.Title != strings.TrimSpace(req.Title) {
+				return Sermon{}, ErrInvalidInput
+			}
+			return existing, nil
+		}
+	}
 	command, err := createCommandFromRequest(req)
 	if err != nil {
 		return Sermon{}, err
@@ -142,6 +150,7 @@ func (s Service) Update(ctx context.Context, id string, req UpdateRequest) (Serm
 	}
 
 	command := Command{
+		IsPublished: current.IsPublished, NotifyOnPublish: current.NotifyOnPublish,
 		ID:           current.ID,
 		ExternalID:   current.ExternalID,
 		Type:         current.Type,
@@ -161,6 +170,12 @@ func (s Service) Update(ctx context.Context, id string, req UpdateRequest) (Serm
 		Status:       current.Status,
 	}
 
+	if req.IsPublished != nil {
+		command.IsPublished = *req.IsPublished
+	}
+	if req.NotifyOnPublish != nil {
+		command.NotifyOnPublish = *req.NotifyOnPublish
+	}
 	if req.ExternalID != nil {
 		command.ExternalID = strings.TrimSpace(*req.ExternalID)
 	}
@@ -394,23 +409,25 @@ func createCommandFromRequest(req CreateRequest) (Command, error) {
 	}
 
 	command := Command{
-		ID:           id,
-		ExternalID:   externalID,
-		Type:         normalize(req.Type),
-		Code:         normalizeCode(req.Code),
-		Title:        strings.TrimSpace(req.Title),
-		Speaker:      strings.TrimSpace(req.Speaker),
-		SermonDate:   sermonDate,
-		PublishedAt:  publishedAt,
-		CategoryID:   strings.TrimSpace(req.CategoryID),
-		IsLive:       req.IsLive,
-		ThumbnailURL: strings.TrimSpace(req.ThumbnailURL),
-		Duration:     strings.TrimSpace(req.Duration),
-		Description:  strings.TrimSpace(req.Description),
-		MediaURL:     strings.TrimSpace(req.MediaURL),
-		Source:       defaultString(normalize(req.Source), SourceManual),
-		StreamUID:    strings.TrimSpace(req.StreamUID),
-		Status:       defaultString(normalize(req.Status), StatusReady),
+		IsPublished:     req.IsPublished == nil || *req.IsPublished,
+		NotifyOnPublish: (req.NotifyOnPublish == nil && publishedAt.After(time.Now().Add(-48*time.Hour))) || (req.NotifyOnPublish != nil && *req.NotifyOnPublish),
+		ID:              id,
+		ExternalID:      externalID,
+		Type:            normalize(req.Type),
+		Code:            normalizeCode(req.Code),
+		Title:           strings.TrimSpace(req.Title),
+		Speaker:         strings.TrimSpace(req.Speaker),
+		SermonDate:      sermonDate,
+		PublishedAt:     publishedAt,
+		CategoryID:      strings.TrimSpace(req.CategoryID),
+		IsLive:          req.IsLive,
+		ThumbnailURL:    strings.TrimSpace(req.ThumbnailURL),
+		Duration:        strings.TrimSpace(req.Duration),
+		Description:     strings.TrimSpace(req.Description),
+		MediaURL:        strings.TrimSpace(req.MediaURL),
+		Source:          defaultString(normalize(req.Source), SourceManual),
+		StreamUID:       strings.TrimSpace(req.StreamUID),
+		Status:          defaultString(normalize(req.Status), StatusReady),
 	}
 
 	if err := validateCommand(command); err != nil {
@@ -463,14 +480,14 @@ func parseDate(value string) (time.Time, error) {
 func parsePublishedAt(value string) (time.Time, error) {
 	trimmed := strings.TrimSpace(value)
 	layouts := []string{
-		time.RFC3339,
+		time.RFC3339, "2006-01-02T15:04Z07:00",
 		"2006-01-02T15:04",
 		"2006-01-02 15:04",
 		"2006-01-02",
 	}
 
 	for _, layout := range layouts {
-		if parsed, err := time.Parse(layout, trimmed); err == nil {
+		if parsed, err := time.ParseInLocation(layout, trimmed, time.FixedZone("Africa/Nairobi", 3*60*60)); err == nil {
 			return parsed.UTC(), nil
 		}
 	}

@@ -3,17 +3,15 @@ package giving
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"image"
 	_ "image/jpeg"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"regexp"
@@ -28,22 +26,28 @@ import (
 type Handler struct {
 	db     *pgxpool.Pool
 	client *http.Client
+	secret string
+	values map[string]string
 }
 
 type STKPushRequest struct {
-	Category string `json:"category"`
-	Phone    string `json:"phone"`
-	Amount   int    `json:"amount"`
-	Note     string `json:"note"`
+	ItemID    string `json:"itemId"`
+	RequestID string `json:"requestId"`
+	Category  string `json:"category"`
+	Phone     string `json:"phone"`
+	Amount    int    `json:"amount"`
+	Note      string `json:"note"`
 }
 
 type CardCheckoutRequest struct {
-	Category string `json:"category"`
-	Email    string `json:"email"`
-	Name     string `json:"name"`
-	Phone    string `json:"phone"`
-	Amount   int    `json:"amount"`
-	Note     string `json:"note"`
+	ItemID    string `json:"itemId"`
+	RequestID string `json:"requestId"`
+	Category  string `json:"category"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	Phone     string `json:"phone"`
+	Amount    int    `json:"amount"`
+	Note      string `json:"note"`
 }
 
 type mpesaTokenResponse struct {
@@ -83,9 +87,14 @@ type givingErrorResponse struct {
 
 var phonePattern = regexp.MustCompile(`^(?:\+254|254|0)?[17]\d{8}$`)
 
-func NewHandler(db *pgxpool.Pool) Handler {
+func NewHandler(db *pgxpool.Pool, secrets ...string) Handler {
+	secret := env("JWT_SECRET")
+	if len(secrets) > 0 {
+		secret = secrets[0]
+	}
 	return Handler{
-		db: db,
+		db:     db,
+		secret: secret,
 		client: &http.Client{
 			Timeout: 25 * time.Second,
 		},
@@ -96,8 +105,8 @@ func env(key string) string {
 	return strings.TrimSpace(os.Getenv(key))
 }
 
-func mpesaBaseURL() string {
-	if strings.EqualFold(env("MPESA_ENV"), "production") || strings.EqualFold(env("MPESA_ENV"), "live") {
+func (h Handler) mpesaBaseURL() string {
+	if strings.EqualFold(h.env("MPESA_ENV"), "production") || strings.EqualFold(h.env("MPESA_ENV"), "live") {
 		return "https://api.safaricom.co.ke"
 	}
 
@@ -146,6 +155,12 @@ func emailValid(value string) bool {
 }
 
 func (h Handler) STKPush(c *gin.Context) {
+	var ready bool
+	h, ready = h.operational(c, "mpesa", true)
+	if !ready {
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
 	var req STKPushRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -159,6 +174,9 @@ func (h Handler) STKPush(c *gin.Context) {
 		return
 	}
 
+	if !h.bindPurchase(c, req.ItemID, &req.Amount, &req.Category, &req.Note) {
+		return
+	}
 	if req.Amount <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Amount must be greater than zero"})
 		return
@@ -169,50 +187,32 @@ func (h Handler) STKPush(c *gin.Context) {
 		return
 	}
 
-	configError := validateMpesaConfig()
+	configError := h.validateMpesaConfig()
 	if configError != "" {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"message": configError})
 		return
 	}
 
-	txID := newID("give")
-
-	_, err := h.db.Exec(
-		c.Request.Context(),
-		`
-			INSERT INTO giving_transactions (
-				id,
-				category,
-				method,
-				phone,
-				amount,
-				note,
-				status
-			)
-			VALUES ($1, $2, 'mpesa', $3, $4, $5, 'pending')
-		`,
-		txID,
-		category(req.Category),
-		phone,
-		req.Amount,
-		strings.TrimSpace(req.Note),
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create giving transaction"})
+	txID, existing, ok := h.automaticIntent(c, "mpesa", req.RequestID, req.ItemID, category(req.Category), strings.TrimSpace(req.Note), phone, "", "KES", req.Amount)
+	if !ok {
 		return
 	}
-
+	if existing {
+		h.existingPayment(c, txID)
+		return
+	}
 	token, err := h.accessToken(c.Request.Context())
 	if err != nil {
 		_ = h.markTransactionFailed(c.Request.Context(), txID, err.Error())
-		c.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"message": "Payment provider is unavailable. Check your payment history before retrying."})
 		return
 	}
 
 	stkResponse, rawResponse, err := h.sendSTKPush(c.Request.Context(), token, txID, phone, req.Amount, category(req.Category))
 	if err != nil {
 		description := humanizeMpesaError(err.Error())
-		_ = h.markTransactionFailed(c.Request.Context(), txID, description)
+		// Keep an uncertain submission pending; retrying the same client request never sends a second prompt.
+		_, _ = h.db.Exec(c.Request.Context(), `UPDATE giving_transactions SET result_description=$2,updated_at=NOW() WHERE id=$1 AND status='pending'`, txID, description)
 
 		transaction, ok, loadErr := h.getTransaction(c.Request.Context(), txID)
 		if loadErr != nil {
@@ -247,7 +247,7 @@ func (h Handler) STKPush(c *gin.Context) {
 			    result_description = $5,
 			    provider_response = $6::jsonb,
 			    updated_at = NOW()
-			WHERE id = $1
+			WHERE id = $1 AND status = 'pending'
 		`,
 		txID,
 		stkResponse.CheckoutRequestID,
@@ -276,11 +276,21 @@ func (h Handler) STKPush(c *gin.Context) {
 	})
 }
 
-func flutterwaveBaseURL() string {
-	return firstNonEmpty(env("FLUTTERWAVE_BASE_URL"), "https://developersandbox-api.flutterwave.com")
+func (h Handler) flutterwaveBaseURL() string {
+	return firstNonEmpty(h.env("FLUTTERWAVE_BASE_URL"), "https://api.flutterwave.com/v3")
 }
 
 func (h Handler) CardCheckout(c *gin.Context) {
+	var ready bool
+	h, ready = h.operational(c, "flutterwave", true)
+	if !ready {
+		return
+	}
+	if h.env("FLUTTERWAVE_SECRET_KEY") == "" {
+		c.JSON(503, gin.H{"message": "Card payments are not configured. Use M-Pesa paybill, Airtel Money or bank."})
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
 	var req CardCheckoutRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -288,6 +298,9 @@ func (h Handler) CardCheckout(c *gin.Context) {
 		return
 	}
 
+	if !h.bindPurchase(c, req.ItemID, &req.Amount, &req.Category, &req.Note) {
+		return
+	}
 	if req.Amount <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Amount must be greater than zero"})
 		return
@@ -303,50 +316,31 @@ func (h Handler) CardCheckout(c *gin.Context) {
 		return
 	}
 
-	txID := newID("card")
-	currency := firstNonEmpty(strings.TrimSpace(env("GIVING_CURRENCY")), "KES")
-
-	_, err := h.db.Exec(
-		c.Request.Context(),
-		`
-			INSERT INTO giving_transactions (
-				id,
-				category,
-				method,
-				phone,
-				email,
-				amount,
-				note,
-				status,
-				currency,
-				provider
-			)
-			VALUES ($1, $2, 'card', $3, $4, $5, $6, 'pending', $7, 'flutterwave')
-		`,
-		txID,
-		category(req.Category),
-		strings.TrimSpace(req.Phone),
-		strings.TrimSpace(strings.ToLower(req.Email)),
-		req.Amount,
-		strings.TrimSpace(req.Note),
-		currency,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create card giving transaction"})
+	currency := firstNonEmpty(h.env("GIVING_CURRENCY"), "KES")
+	if req.ItemID != "" {
+		currency = "KES"
+	}
+	txID, existing, ok := h.automaticIntent(c, "card", req.RequestID, req.ItemID, category(req.Category), strings.TrimSpace(req.Note), strings.TrimSpace(req.Phone), strings.TrimSpace(req.Email), currency, req.Amount)
+	if !ok {
 		return
 	}
-
+	if existing {
+		h.existingPayment(c, txID)
+		return
+	}
+	var err error
 	checkoutURL := ""
 	providerReference := txID
 	status := "pending"
 
-	if strings.TrimSpace(env("FLUTTERWAVE_SECRET_KEY")) == "" {
-		checkoutURL = strings.TrimRight(baseURLFromRequest(c), "/") + "/api/v1/giving/card/mock-checkout/" + txID
+	if strings.TrimSpace(h.env("FLUTTERWAVE_SECRET_KEY")) == "" {
+		c.JSON(503, gin.H{"message": "Card payments are unavailable"})
+		return
 	} else {
 		checkoutURL, providerReference, err = h.createFlutterwaveCheckout(c.Request.Context(), txID, req, currency)
 		if err != nil {
 			_ = h.markTransactionFailed(c.Request.Context(), txID, err.Error())
-			c.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{"message": "Payment provider is unavailable. Check your payment history before retrying."})
 			return
 		}
 	}
@@ -404,7 +398,7 @@ func (h Handler) createFlutterwaveCheckout(ctx context.Context, txID string, req
 		"tx_ref":          txID,
 		"amount":          req.Amount,
 		"currency":        currency,
-		"redirect_url":    firstNonEmpty(env("FLUTTERWAVE_REDIRECT_URL"), "https://example.com/giving/flutterwave/return"),
+		"redirect_url":    firstNonEmpty(h.env("FLUTTERWAVE_REDIRECT_URL"), "https://example.com/giving/flutterwave/return"),
 		"payment_options": "card",
 		"customer": map[string]any{
 			"email":       strings.TrimSpace(strings.ToLower(req.Email)),
@@ -426,14 +420,14 @@ func (h Handler) createFlutterwaveCheckout(ctx context.Context, txID string, req
 	request, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
-		strings.TrimRight(flutterwaveBaseURL(), "/")+"/payments",
+		strings.TrimRight(h.flutterwaveBaseURL(), "/")+"/payments",
 		bytes.NewReader(body),
 	)
 	if err != nil {
 		return "", "", err
 	}
 
-	request.Header.Set("Authorization", "Bearer "+env("FLUTTERWAVE_SECRET_KEY"))
+	request.Header.Set("Authorization", "Bearer "+h.env("FLUTTERWAVE_SECRET_KEY"))
 	request.Header.Set("Content-Type", "application/json")
 
 	response, err := h.client.Do(request)
@@ -450,7 +444,7 @@ func (h Handler) createFlutterwaveCheckout(ctx context.Context, txID string, req
 		} `json:"data"`
 	}
 
-	if err := json.NewDecoder(response.Body).Decode(&payloadResponse); err != nil {
+	if err := json.NewDecoder(io.LimitReader(response.Body, 256<<10)).Decode(&payloadResponse); err != nil {
 		return "", "", err
 	}
 
@@ -461,13 +455,14 @@ func (h Handler) createFlutterwaveCheckout(ctx context.Context, txID string, req
 	return strings.TrimSpace(payloadResponse.Data.Link), txID, nil
 }
 
-func validateMpesaConfig() string {
+func (h Handler) validateMpesaConfig() string {
 	required := map[string]string{
-		"MPESA_CONSUMER_KEY":    env("MPESA_CONSUMER_KEY"),
-		"MPESA_CONSUMER_SECRET": env("MPESA_CONSUMER_SECRET"),
-		"MPESA_SHORTCODE":       env("MPESA_SHORTCODE"),
-		"MPESA_PASSKEY":         env("MPESA_PASSKEY"),
-		"MPESA_CALLBACK_URL":    env("MPESA_CALLBACK_URL"),
+		"MPESA_CONSUMER_KEY":    h.env("MPESA_CONSUMER_KEY"),
+		"MPESA_CONSUMER_SECRET": h.env("MPESA_CONSUMER_SECRET"),
+		"MPESA_SHORTCODE":       h.env("MPESA_SHORTCODE"),
+		"MPESA_PASSKEY":         h.env("MPESA_PASSKEY"),
+		"MPESA_CALLBACK_URL":    h.env("MPESA_CALLBACK_URL"),
+		"MPESA_CALLBACK_TOKEN":  h.env("MPESA_CALLBACK_TOKEN"),
 	}
 
 	for key, value := range required {
@@ -480,27 +475,19 @@ func validateMpesaConfig() string {
 }
 
 func (h Handler) accessToken(ctx context.Context) (string, error) {
-	log.Printf(
-		"mpesa oauth start env=%s base=%s key=%s secret=%s shortcode=%s callback=%s",
-		env("MPESA_ENV"),
-		mpesaBaseURL(),
-		secretFingerprint(env("MPESA_CONSUMER_KEY")),
-		secretFingerprint(env("MPESA_CONSUMER_SECRET")),
-		secretFingerprint(env("MPESA_SHORTCODE")),
-		strings.TrimSpace(env("MPESA_CALLBACK_URL")),
-	)
+	log.Printf("mpesa oauth start environment=%s", h.env("MPESA_ENV"))
 
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		mpesaBaseURL()+"/oauth/v1/generate?grant_type=client_credentials",
+		h.mpesaBaseURL()+"/oauth/v1/generate?grant_type=client_credentials",
 		nil,
 	)
 	if err != nil {
 		return "", err
 	}
 
-	auth := base64.StdEncoding.EncodeToString([]byte(env("MPESA_CONSUMER_KEY") + ":" + env("MPESA_CONSUMER_SECRET")))
+	auth := base64.StdEncoding.EncodeToString([]byte(h.env("MPESA_CONSUMER_KEY") + ":" + h.env("MPESA_CONSUMER_SECRET")))
 	req.Header.Set("Authorization", "Basic "+auth)
 
 	resp, err := h.client.Do(req)
@@ -509,7 +496,7 @@ func (h Handler) accessToken(ctx context.Context) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
 	if err != nil {
 		return "", err
 	}
@@ -522,8 +509,8 @@ func (h Handler) accessToken(ctx context.Context) (string, error) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || payload.AccessToken == "" {
-		log.Printf("mpesa oauth failed status=%d body=%s", resp.StatusCode, sanitizeMpesaErrorBody(body))
-		return "", fmt.Errorf("mpesa token request failed: status=%d body=%s", resp.StatusCode, sanitizeMpesaErrorBody(body))
+		log.Printf("mpesa oauth failed status=%d", resp.StatusCode)
+		return "", fmt.Errorf("M-Pesa authentication failed (%d). Check the saved consumer credentials", resp.StatusCode)
 	}
 
 	log.Printf("mpesa oauth success expires_in=%s", payload.ExpiresIn)
@@ -560,47 +547,17 @@ func humanizeMpesaError(message string) string {
 		return "M-Pesa credentials are not configured correctly for STK Push."
 	}
 
-	return strings.TrimSpace(message)
-}
-
-func secretFingerprint(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "<empty>"
-	}
-
-	sum := sha256.Sum256([]byte(value))
-	fingerprint := hex.EncodeToString(sum[:])
-	if len(fingerprint) > 12 {
-		fingerprint = fingerprint[:12]
-	}
-
-	return fmt.Sprintf("len=%d tail=%s sha=%s", len(value), tail(value, 4), fingerprint)
-}
-
-func tail(value string, size int) string {
-	if len(value) <= size {
-		return value
-	}
-	return value[len(value)-size:]
+	return "M-Pesa could not confirm this request. Check your payment history before trying again."
 }
 
 func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, phone string, amount int, givingCategory string) (stkPushResponse, []byte, error) {
-	timestamp := time.Now().Format("20060102150405")
-	shortcode := env("MPESA_SHORTCODE")
-	password := base64.StdEncoding.EncodeToString([]byte(shortcode + env("MPESA_PASSKEY") + timestamp))
-	transactionType := firstNonEmpty(env("MPESA_TRANSACTION_TYPE"), "CustomerPayBillOnline")
+	zone := time.FixedZone("Africa/Nairobi", 3*60*60)
+	timestamp := time.Now().In(zone).Format("20060102150405")
+	shortcode := h.env("MPESA_SHORTCODE")
+	password := base64.StdEncoding.EncodeToString([]byte(shortcode + h.env("MPESA_PASSKEY") + timestamp))
+	transactionType := firstNonEmpty(h.env("MPESA_TRANSACTION_TYPE"), "CustomerPayBillOnline")
 
-	log.Printf(
-		"mpesa stk start tx=%s phone=%s amount=%d type=%s shortcode=%s passkey=%s callback=%s",
-		txID,
-		phone,
-		amount,
-		transactionType,
-		secretFingerprint(shortcode),
-		secretFingerprint(env("MPESA_PASSKEY")),
-		strings.TrimSpace(env("MPESA_CALLBACK_URL")),
-	)
+	log.Printf("mpesa stk start transaction=%s", txID)
 
 	payload := stkPushPayload{
 		BusinessShortCode: shortcode,
@@ -609,11 +566,11 @@ func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, pho
 		TransactionType:   transactionType,
 		Amount:            amount,
 		PartyA:            phone,
-		PartyB:            shortcode,
+		PartyB:            firstNonEmpty(h.env("MPESA_PARTY_B"), shortcode),
 		PhoneNumber:       phone,
-		CallBackURL:       env("MPESA_CALLBACK_URL"),
-		AccountReference:  firstNonEmpty(env("MPESA_ACCOUNT_REFERENCE"), "Shekinah"),
-		TransactionDesc:   fmt.Sprintf("%s - %s", givingCategory, txID),
+		CallBackURL:       h.callbackURL(txID),
+		AccountReference:  firstNonEmpty(h.env("MPESA_ACCOUNT_REFERENCE"), "Shekinah"),
+		TransactionDesc:   string([]rune(category(givingCategory))[:min(13, len([]rune(category(givingCategory))))]),
 	}
 
 	body, _ := json.Marshal(payload)
@@ -621,7 +578,7 @@ func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, pho
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
-		mpesaBaseURL()+"/mpesa/stkpush/v1/processrequest",
+		h.mpesaBaseURL()+"/mpesa/stkpush/v1/processrequest",
 		bytes.NewReader(body),
 	)
 	if err != nil {
@@ -640,7 +597,7 @@ func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, pho
 	var result stkPushResponse
 	var raw map[string]any
 
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 256<<10)).Decode(&raw); err != nil {
 		return stkPushResponse{}, nil, err
 	}
 
@@ -648,9 +605,8 @@ func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, pho
 	_ = json.Unmarshal(rawBytes, &result)
 
 	log.Printf(
-		"mpesa stk response status=%d body=%s code=%s error_code=%s",
+		"mpesa stk response status=%d code=%s error_code=%s",
 		resp.StatusCode,
-		sanitizeMpesaErrorBody(rawBytes),
 		result.ResponseCode,
 		result.ErrorCode,
 	)
@@ -667,6 +623,12 @@ func (h Handler) sendSTKPush(ctx context.Context, token string, txID string, pho
 }
 
 func (h Handler) Callback(c *gin.Context) {
+	provided := c.Query("token")
+	if provided == "" || len(provided) > 4096 {
+		c.JSON(403, gin.H{"message": "Untrusted callback"})
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
 	var payload map[string]any
 
 	if err := c.ShouldBindJSON(&payload); err != nil {
@@ -679,7 +641,85 @@ func (h Handler) Callback(c *gin.Context) {
 	merchantRequestID := stringValue(callback["MerchantRequestID"])
 	resultCode := intValue(callback["ResultCode"])
 	resultDescription := stringValue(callback["ResultDesc"])
+	var expectedHash, knownID string
+	intent := c.Query("intent")
+	if len(intent) > 80 {
+		c.JSON(400, gin.H{"message": "Invalid checkout intent"})
+		return
+	}
+	if checkoutRequestID != "" {
+		_ = h.db.QueryRow(c.Request.Context(), `SELECT id,callback_token_hash FROM giving_transactions WHERE checkout_request_id=$1 AND method='mpesa'`, checkoutRequestID).Scan(&knownID, &expectedHash)
+	}
+	pendingIntent := false
+	var intentAmount int
+	var intentPhone string
+	if knownID == "" && intent != "" {
+		if h.db.QueryRow(c.Request.Context(), `SELECT callback_token_hash,amount,phone FROM giving_transactions WHERE id=$1 AND method='mpesa' AND status='pending' AND checkout_request_id='' AND callback_token_hash<>''`, intent).Scan(&expectedHash, &intentAmount, &intentPhone) == nil {
+			pendingIntent = true
+		}
+	}
+	accepted := false
+	if expectedHash != "" {
+		accepted = subtle.ConstantTimeCompare([]byte(expectedHash), []byte(tokenHash(provided))) == 1
+	} else {
+		var ready bool
+		h, ready = h.operational(c, "mpesa", false)
+		if !ready {
+			return
+		}
+		secret := h.env("MPESA_CALLBACK_TOKEN")
+		accepted = secret != "" && subtle.ConstantTimeCompare([]byte(secret), []byte(provided)) == 1
+	}
+	if !accepted {
+		c.JSON(403, gin.H{"message": "Untrusted callback"})
+		return
+	}
+	if knownID != "" && intent != "" && intent != knownID {
+		c.JSON(409, gin.H{"message": "Callback does not match this checkout"})
+		return
+	}
 	receipt := callbackReceipt(callback)
+	if checkoutRequestID == "" || merchantRequestID == "" || resultCode < 0 {
+		c.JSON(400, gin.H{"ResultCode": 1, "ResultDesc": "Missing checkout details"})
+		return
+	}
+	// Recover a genuine callback if the STK submission response was lost. Its
+	// protected intent identifies the payer; validate metadata before binding IDs.
+	if pendingIntent {
+		paid, phone := callbackPayment(callback)
+		if resultCode == 0 && (receipt == "" || paid != intentAmount || phone != intentPhone) {
+			c.JSON(409, gin.H{"message": "Callback does not match this checkout"})
+			return
+		}
+		result, e := h.db.Exec(c.Request.Context(), `UPDATE giving_transactions SET checkout_request_id=$2,merchant_request_id=$3,updated_at=NOW() WHERE id=$1 AND method='mpesa' AND status='pending' AND checkout_request_id='' AND NOT EXISTS(SELECT 1 FROM giving_transactions WHERE checkout_request_id=$2 AND id<>$1)`, intent, checkoutRequestID, merchantRequestID)
+		if e != nil || result.RowsAffected() != 1 {
+			c.JSON(409, gin.H{"message": "Could not match this checkout"})
+			return
+		}
+	}
+	var expectedMerchant string
+	if h.db.QueryRow(c.Request.Context(), `SELECT merchant_request_id FROM giving_transactions WHERE checkout_request_id=$1 AND method='mpesa'`, checkoutRequestID).Scan(&expectedMerchant) != nil {
+		c.JSON(404, gin.H{"message": "Checkout not found"})
+		return
+	}
+	if expectedMerchant != merchantRequestID {
+		c.JSON(409, gin.H{"message": "Callback does not match this checkout"})
+		return
+	}
+	if resultCode == 0 {
+		var amount int
+		var phone, merchant string
+		err := h.db.QueryRow(c.Request.Context(), `SELECT amount,phone,merchant_request_id FROM giving_transactions WHERE checkout_request_id=$1 AND method='mpesa'`, checkoutRequestID).Scan(&amount, &phone, &merchant)
+		if err != nil {
+			c.JSON(404, gin.H{"message": "Checkout not found"})
+			return
+		}
+		paid, paidPhone := callbackPayment(callback)
+		if receipt == "" || paid != amount || paidPhone != phone || merchant != merchantRequestID {
+			c.JSON(409, gin.H{"message": "Callback does not match this checkout"})
+			return
+		}
+	}
 
 	status := "failed"
 	if resultCode == 0 {
@@ -699,7 +739,7 @@ func (h Handler) Callback(c *gin.Context) {
 			    result_description = $6,
 			    provider_response = $7::jsonb,
 			    updated_at = NOW()
-			WHERE checkout_request_id = $1
+			WHERE checkout_request_id = $1 AND checkout_request_id <> '' AND method = 'mpesa' AND status = 'pending'
 		`,
 		checkoutRequestID,
 		status,
@@ -717,91 +757,11 @@ func (h Handler) Callback(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ResultCode": 0, "ResultDesc": "Accepted"})
 }
 
-func (h Handler) CardReturn(c *gin.Context) {
-	txRef := strings.TrimSpace(c.Query("tx_ref"))
-	status := strings.TrimSpace(strings.ToLower(c.Query("status")))
-	transactionID := strings.TrimSpace(c.Query("transaction_id"))
-
-	if txRef != "" {
-		nextStatus := "pending"
-		description := "Waiting for card provider confirmation."
-
-		switch status {
-		case "successful", "completed":
-			nextStatus = "success"
-			description = "Card payment reported as successful."
-		case "failed", "cancelled":
-			nextStatus = status
-			description = "Card payment did not complete."
-		}
-
-		_, _ = h.db.Exec(
-			c.Request.Context(),
-			`
-				UPDATE giving_transactions
-				SET status = $2,
-				    provider_reference = COALESCE(NULLIF($3, ''), provider_reference),
-				    result_description = $4,
-				    updated_at = NOW()
-				WHERE id = $1
-			`,
-			txRef,
-			nextStatus,
-			transactionID,
-			description,
-		)
-	}
-
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.String(http.StatusOK, "<html><body style='background:#000;color:#fff;font-family:sans-serif;padding:32px;'><h2>Payment received</h2><p>You can return to the Shekinah app and refresh Giving History.</p></body></html>")
-}
-
-func (h Handler) MockCheckoutPage(c *gin.Context) {
-	id := strings.TrimSpace(c.Param("id"))
-	if id == "" {
-		c.String(http.StatusBadRequest, "Missing transaction id")
-		return
-	}
-
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	page := `
-	<html>
-		<body style="background:#000;color:#fff;font-family:sans-serif;padding:32px;">
-			<h2>Flutterwave Sandbox Mock</h2>
-			<p>This local page simulates a hosted card checkout for transaction {{.ID}}.</p>
-			<p><a style="color:#d4af37" href="/api/v1/giving/card/mock-complete/{{.ID}}">Mark Payment Successful</a></p>
-		</body>
-	</html>`
-
-	_ = template.Must(template.New("mock").Parse(page)).Execute(c.Writer, gin.H{"ID": id})
-}
-
-func (h Handler) MockComplete(c *gin.Context) {
-	id := strings.TrimSpace(c.Param("id"))
-	if id == "" {
-		c.String(http.StatusBadRequest, "Missing transaction id")
-		return
-	}
-
-	_, _ = h.db.Exec(
-		c.Request.Context(),
-		`
-			UPDATE giving_transactions
-			SET status = 'success',
-			    provider_reference = COALESCE(NULLIF(provider_reference, ''), id),
-			    result_description = 'Sandbox mock payment completed.',
-			    updated_at = NOW()
-			WHERE id = $1
-		`,
-		id,
-	)
-
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.String(http.StatusOK, "<html><body style='background:#000;color:#fff;font-family:sans-serif;padding:32px;'><h2>Payment marked successful</h2><p>Return to the Shekinah app and refresh Giving History.</p></body></html>")
-}
-
 func (h Handler) GetTransaction(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
+	if !h.authorizeTransaction(c, id) {
+		return
+	}
 
 	transaction, ok, err := h.getTransaction(c.Request.Context(), id)
 	if err != nil {
@@ -819,6 +779,9 @@ func (h Handler) GetTransaction(c *gin.Context) {
 
 func (h Handler) DownloadReceipt(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
+	if !h.authorizeTransaction(c, id) {
+		return
+	}
 	transaction, ok, err := h.getTransaction(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load transaction"})
@@ -839,6 +802,9 @@ func (h Handler) DownloadReceipt(c *gin.Context) {
 
 func (h Handler) DownloadInvoice(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
+	if !h.authorizeTransaction(c, id) {
+		return
+	}
 	transaction, ok, err := h.getTransaction(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load transaction"})
@@ -1266,15 +1232,47 @@ func stringValue(value any) string {
 func intValue(value any) int {
 	switch typed := value.(type) {
 	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed != math.Trunc(typed) || typed > float64(1<<53) || typed < float64(-(1<<53)) {
+			return -1
+		}
 		return int(typed)
 	case int:
 		return typed
 	case string:
-		value, _ := strconv.Atoi(typed)
+		value, e := strconv.Atoi(typed)
+		if e != nil {
+			return -1
+		}
 		return value
 	default:
 		return -1
 	}
+}
+
+func callbackPayment(callback map[string]any) (int, string) {
+	metadata := mapValue(callback, "CallbackMetadata")
+	items, _ := metadata["Item"].([]any)
+	amount := -1
+	phone := ""
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch stringValue(item["Name"]) {
+		case "Amount":
+			amount = intValue(item["Value"])
+		case "PhoneNumber":
+			if number, ok := item["Value"].(float64); ok {
+				if number == math.Trunc(number) {
+					phone = strconv.FormatInt(int64(number), 10)
+				}
+			} else {
+				phone = stringValue(item["Value"])
+			}
+		}
+	}
+	return amount, phone
 }
 
 func callbackReceipt(callback map[string]any) string {

@@ -123,7 +123,7 @@ private fun price(b: Book) = if (b.free) "Free" else "KSh ${"%,d".format(b.price
 
 // Books & Library: the ministry's books, journals and study materials.
 @Composable
-fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit, bottomInset: androidx.compose.ui.unit.Dp = 0.dp) {
+fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit, bottomInset: androidx.compose.ui.unit.Dp = 0.dp, onFullScreen: (Boolean)->Unit = {}) {
     val context = LocalContext.current
     var view by remember { mutableStateOf<View>(View.Shelf) }
     val books = remember { mutableStateListOf<Book>() }
@@ -131,11 +131,17 @@ fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit,
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
+    LaunchedEffect(view) { onFullScreen(view!=View.Shelf) }
+    androidx.compose.runtime.DisposableEffect(Unit) {onDispose {onFullScreen(false)}}
     Books.user = session.member?.id.orEmpty()
+    LaunchedEffect(session.member?.id) { view=View.Shelf }
+    LaunchedEffect(Unit) { while(true) { kotlinx.coroutines.delay(8_000);if(books.any{it.pending})reload++ } }
     LaunchedEffect(reload, session.member) {
-        runCatching { Books.list() }.onSuccess { (list, publish) -> books.clear(); books.addAll(list); canPublish = publish; error = null }.onFailure { error = it.message }
+        canPublish=false; books.clear(); books.addAll(Books.cached(context))
+        runCatching { Books.list(context) }.onSuccess { (list, publish) -> books.clear(); books.addAll(list); canPublish = publish; error = null }.onFailure { error = it.message }
         loading = false
     }
+    LaunchedEffect(books.toList(),com.shekinahsons.globalapp.notify.OpenLink.bookId) { val id=com.shekinahsons.globalapp.notify.OpenLink.bookId;books.firstOrNull{it.id==id}?.let{view=View.Detail(it);com.shekinahsons.globalapp.notify.OpenLink.bookId=null} }
     BackHandler { view = when (val v = view) { View.Shelf -> { onBack(); View.Shelf }; is View.Read -> View.Detail(v.book); is View.Buy -> View.Detail(v.book); else -> View.Shelf } }
 
     AnimatedContent(view, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "library", modifier = Modifier.fillMaxSize().background(Brand.Black)) { v ->
@@ -151,7 +157,10 @@ fun LibraryScreen(session: Session, openProfile: () -> Unit, onBack: () -> Unit,
                 TopBar(title = "Get this book", onBack = { view = View.Detail(v.book) })
                 GivingPage(session, Purchase(v.book.id, v.book.title, v.book.price)) { reload++; view = View.Shelf }
             }
-            View.Publish -> Publish(onBack = { view = View.Shelf }) { reload++; view = View.Shelf }
+            View.Publish -> Column(Modifier.fillMaxSize()) {
+                TopBar(title="Publish books",onBack={reload++;view=View.Shelf})
+                androidx.compose.foundation.lazy.LazyColumn(contentPadding=PaddingValues(18.dp,12.dp,18.dp,100.dp)){item{com.shekinahsons.globalapp.admin.BatchPublishingPane("book")}}
+            }
         }
     }
 }
@@ -225,7 +234,7 @@ private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublis
             item(span = { GridItemSpan(3) }) {
                 Column {
                     Text("Books & Library", style = Type.Display, color = Brand.White)
-                    Text("Ministry books, journals and study guides", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.GoldLight)
+                    Text(if (Books.offline) "Offline shelf · saved books are ready to read" else "Ministry books, journals and study guides", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.GoldLight)
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth().height(50.dp).glass(RoundedCornerShape(50), 0.8f).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Search, null, tint = Brand.Text2, modifier = Modifier.size(20.dp))
@@ -253,7 +262,7 @@ private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublis
                     GhostButton("Try again", onClick = retry)
                 }
             } }
-            if (!loading && books.isEmpty()) item(span = { GridItemSpan(3) }) {
+            if (!loading && books.isEmpty() && error == null) item(span = { GridItemSpan(3) }) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.AutoMirrored.Rounded.MenuBook, null, tint = Brand.Gold, modifier = Modifier.size(42.dp))
                     Spacer(Modifier.height(10.dp))
@@ -396,6 +405,7 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
                     Text(b.description, style = Type.Body, color = Brand.Text2)
                 }
                 if (b.canEdit) {
+                    com.shekinahsons.globalapp.admin.PublicationEditor("/library/${b.id}",b.publishedAt,b.isPublished,b.notifyOnPublish,changed)
                     Spacer(Modifier.height(26.dp))
                     Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.7f).padding(16.dp)) {
                         Text("PUBLISHER", style = Type.Label, color = Brand.Gold)
@@ -419,7 +429,7 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
                         }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(if (b.isPublished) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, tint = Brand.GoldLight)
                             Spacer(Modifier.width(10.dp))
-                            Text(if (b.isPublished) "Visible to everyone · tap to hide" else "Hidden · tap to publish", color = Brand.White)
+                            Text(if (b.isPublished) "Publication enabled · tap to hide" else "Hidden · tap to publish", color = Brand.White)
                         }
                         ErrorNote(error)
                     }
@@ -472,7 +482,7 @@ private fun Publish(onBack: () -> Unit, done: () -> Unit) {
                     if (cover != null) AsyncImage(cover, "Cover", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     else Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Rounded.Image, null, tint = Brand.Gold, modifier = Modifier.size(30.dp))
-                        Text("Add cover", color = Brand.Text2, fontSize = 12.sp)
+                        Text("Cover override", color = Brand.Text2, fontSize = 12.sp)
                         Text("(optional)", color = Brand.Muted, fontSize = 11.sp)
                     }
                 }

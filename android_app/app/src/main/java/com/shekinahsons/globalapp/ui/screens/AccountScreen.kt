@@ -65,7 +65,7 @@ private enum class Mode { SignIn, Register, Forgot, Reset }
 fun AccountPage(session: Session, onDone: (() -> Unit)? = null) {
     val member = session.member
     if (member == null) { SignInFlow(session, onDone); return }
-    var changing by remember { mutableStateOf(false) }
+    var changing by remember(member.passwordResetRequired) { mutableStateOf(member.passwordResetRequired) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.padding(top = 8.dp).size(108.dp).clip(CircleShape).border(2.dp, Brand.GoldGradient, CircleShape).padding(6.dp), contentAlignment = Alignment.Center) {
             Avatar(member.name, member.id, 96.dp)

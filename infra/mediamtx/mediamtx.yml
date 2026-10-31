@@ -30,9 +30,24 @@ hlsPartDuration: 200ms
 hlsAlwaysRemux: true
 
 rtsp: false
-webrtc: false
+# Browser publishers use WHIP with the same session key and recording pipeline.
+webrtc: true
+webrtcAddress: :8889
+webrtcAllowOrigins: ["*"]
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcAdditionalHosts: [127.0.0.1]
 srt: false
+moq: false
 
 paths:
   church:
     source: publisher
+    overridePublisher: false
+    record: true
+    recordPath: /recordings/unassigned/%path/%Y-%m-%d_%H-%M-%S-%f
+    recordFormat: fmp4
+    recordPartDuration: 1s
+    recordSegmentDuration: 10m
+    # Only the archive worker removes segments after a successful R2 upload.
+    recordDeleteAfter: 0s

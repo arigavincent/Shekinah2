@@ -1,3 +1,6 @@
+import {DateTimeField} from "../components/DateTimeFields";
+import {DateField,TimeField} from "../components/DateTimeFields";
+import {publishInputValue} from "../lib/publish";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -322,7 +325,7 @@ export function DevotionsPage() {
       title: devotion.title,
       excerpt: devotion.excerpt,
       devotionDate: devotion.devotionDate,
-      publishedAt: devotion.publishedAt.slice(0, 16),
+      publishedAt: publishInputValue(devotion.publishedAt),
       imageUrl: devotion.imageUrl || "",
       body: devotion.body
     });
@@ -561,35 +564,9 @@ export function DevotionsPage() {
             />
           </label>
 
-          <label>
-            Date
-            <input
-              value={form.devotionDate}
-              onChange={event => updateField("devotionDate", event.target.value)}
-              placeholder="YYYY-MM-DD"
-            />
-          </label>
+          <DateField label="Date" value={form.devotionDate} onChange={value=>updateField("devotionDate",value)}/>
 
-          <label>
-            <div className="section-title-row compact">
-              <span>Publish At (UTC)</span>
-              <button
-                type="button"
-                className="secondary compact"
-                onClick={() => updateField("publishedAt", publishNowValue())}
-              >
-                Publish now
-              </button>
-            </div>
-            <input
-              type="datetime-local"
-              value={form.publishedAt}
-              onChange={event => updateField("publishedAt", event.target.value)}
-            />
-            <p className="small-muted">
-              Stored as UTC. Browser timezone: {publishTimeZoneLabel()}.
-            </p>
-          </label>
+          <DateTimeField label="Publication · Nairobi" value={form.publishedAt} onChange={value=>updateField("publishedAt",value)} allowNow/>
 
           <label>
             Image URL
@@ -881,8 +858,8 @@ export function DevotionsPage() {
                           <p className="small-muted">{row.externalId}</p>
                         </div>
                         <div className="row-actions">
-                          <span className={`status-chip ${getPublishState(row.publishedAt).tone}`}>
-                            {getPublishState(row.publishedAt).label}
+                          <span className={`status-chip ${getPublishState(row.publishedAt || "").tone}`}>
+                            {getPublishState(row.publishedAt || "").label}
                           </span>
                           <button type="button" className="secondary compact" onClick={() => publishWizardRowNow(index)}>
                             Publish now
@@ -898,17 +875,7 @@ export function DevotionsPage() {
                             onChange={event => updateWizardRow(index, { externalId: event.target.value })}
                           />
                         </label>
-                        <label>
-                          Publish At (UTC)
-                          <input
-                            type="datetime-local"
-                            value={row.publishedAt}
-                            onChange={event => updateWizardRow(index, { publishedAt: event.target.value })}
-                          />
-                          <p className="small-muted">
-                            {formatPublishAt(row.publishedAt)} · UTC
-                          </p>
-                        </label>
+                        <DateTimeField label="Publication · Nairobi" value={row.publishedAt} onChange={value=>updateWizardRow(index,{publishedAt:value})} allowNow/>
                       </div>
 
                       <label>
@@ -1006,8 +973,8 @@ export function DevotionsPage() {
                             {row.publishedAt ? <p className="small-muted">Publishes {formatPublishAt(row.publishedAt)}</p> : null}
                           </div>
                           <div className="preview-row-meta">
-                            <span className={`status-chip ${getPublishState(row.publishedAt).tone}`}>
-                              {getPublishState(row.publishedAt).label}
+                            <span className={`status-chip ${getPublishState(row.publishedAt || "").tone}`}>
+                              {getPublishState(row.publishedAt || "").label}
                             </span>
                             <span className={`status-chip ${row.action === "reject" ? "danger" : row.action === "update" ? "warning" : "success"}`}>
                               {row.action}

@@ -13,23 +13,26 @@ import (
 	adminprayers "github.com/ariga/shekinah-backend/internal/admin/prayers"
 	adminreadingplans "github.com/ariga/shekinah-backend/internal/admin/readingplans"
 	adminsermons "github.com/ariga/shekinah-backend/internal/admin/sermons"
+	"github.com/ariga/shekinah-backend/internal/admin/superadmin"
 	adminupdates "github.com/ariga/shekinah-backend/internal/admin/updates"
 	"github.com/ariga/shekinah-backend/internal/apibible"
+	"github.com/ariga/shekinah-backend/internal/attendance"
 	"github.com/ariga/shekinah-backend/internal/auth"
+	"github.com/ariga/shekinah-backend/internal/bibleaudio"
 	"github.com/ariga/shekinah-backend/internal/bibleversions"
 	"github.com/ariga/shekinah-backend/internal/books"
 	"github.com/ariga/shekinah-backend/internal/checkins"
 	"github.com/ariga/shekinah-backend/internal/community"
 	"github.com/ariga/shekinah-backend/internal/config"
 	"github.com/ariga/shekinah-backend/internal/content"
+	"github.com/ariga/shekinah-backend/internal/eventreg"
 	"github.com/ariga/shekinah-backend/internal/giving"
 	"github.com/ariga/shekinah-backend/internal/health"
 	"github.com/ariga/shekinah-backend/internal/httpx"
+	"github.com/ariga/shekinah-backend/internal/integrations"
 	"github.com/ariga/shekinah-backend/internal/library"
 	"github.com/ariga/shekinah-backend/internal/live"
 	"github.com/ariga/shekinah-backend/internal/notifications"
-	"github.com/ariga/shekinah-backend/internal/attendance"
-	"github.com/ariga/shekinah-backend/internal/eventreg"
 	"github.com/ariga/shekinah-backend/internal/overview"
 	"github.com/ariga/shekinah-backend/internal/permissions"
 	"github.com/ariga/shekinah-backend/internal/prayers"
@@ -39,6 +42,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/serve"
 	"github.com/ariga/shekinah-backend/internal/settings"
 	"github.com/ariga/shekinah-backend/internal/testimonies"
+	"github.com/ariga/shekinah-backend/internal/uploads"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"time"
@@ -46,6 +50,7 @@ import (
 
 // StartBackground runs scheduled jobs until ctx is cancelled.
 func StartBackground(ctx context.Context, cfg config.Config, db *pgxpool.Pool) {
+	providers := integrations.Store{DB: db, Secret: cfg.JWTSecret}
 	repository := adminsermons.NewRepository(db)
 	media := sermonmedia.NewService(
 		sermonmedia.NewStreamClient(cfg.CloudflareAccountID, cfg.CloudflareStreamAPIToken),
@@ -53,10 +58,28 @@ func StartBackground(ctx context.Context, cfg config.Config, db *pgxpool.Pool) {
 		repository,
 		db,
 	)
+	media = media.WithIntegrations(providers)
 	go media.Run(ctx, 2*time.Minute)
+	go func() {
+		h := uploads.New(db, permissions.New(db))
+		t := time.NewTicker(time.Hour)
+		defer t.Stop()
+		for {
+			h.Cleanup(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	}()
 }
 
-func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
+func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine { return newRouter(cfg, db, nil) }
+func NewWithContext(ctx context.Context, cfg config.Config, db *pgxpool.Pool) *gin.Engine {
+	return newRouter(cfg, db, ctx)
+}
+func newRouter(cfg config.Config, db *pgxpool.Pool, background context.Context) *gin.Engine {
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -69,6 +92,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	r.Use(httpx.Recoverer())
 	r.Use(httpx.JSONHeaders())
 
+	providers := integrations.Store{DB: db, Secret: cfg.JWTSecret}
 	contentRepository := content.NewRepository(db)
 	contentService := content.NewService(contentRepository)
 	contentHandler := content.NewHandler(contentService)
@@ -90,6 +114,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		adminSermonRepository,
 		db,
 	)
+	sermonMediaService = sermonMediaService.WithIntegrations(providers)
 	sermonMediaHandler := sermonmedia.NewHandler(sermonMediaService)
 	adminCategoryHandler := admincategories.NewHandler(admincategories.NewService(admincategories.NewRepository(db)))
 
@@ -106,20 +131,21 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 	adminBranchHandler := adminbranches.NewHandler(adminBranchService)
 
 	adminLiveConfigRepository := adminliveconfig.NewRepository(db)
-	adminLiveConfigService := adminliveconfig.NewService(adminLiveConfigRepository, cfg)
+	adminLiveConfigService := adminliveconfig.NewService(adminLiveConfigRepository, cfg).WithIntegrations(providers)
 	adminLiveConfigHandler := adminliveconfig.NewHandler(adminLiveConfigService)
 	adminPrayerRepository := adminprayers.NewRepository(db)
 	adminPrayerService := adminprayers.NewService(adminPrayerRepository)
 	adminPrayerHandler := adminprayers.NewHandler(adminPrayerService)
 	adminLibraryHandler := adminlibrary.NewHandler(db)
 	adminReadingPlanHandler := adminreadingplans.NewHandler(db)
-	adminMediaHandler := adminmedia.NewHandler()
-	givingHandler := giving.NewHandler(db)
-	notificationHandler := notifications.NewHandler(db)
+	adminMediaHandler := adminmedia.NewHandler().WithIntegrations(providers)
+	givingHandler := giving.NewHandler(db, cfg.JWTSecret).WithProviderClient(cfg.ProviderHTTPClient)
+	notificationHandler := notifications.NewHandler(db).WithIntegrations(providers)
 	prayerHandler := prayers.NewHandler(db)
 	perms := permissions.New(db)
+	uploadHandler := uploads.New(db, perms)
 	eventReg := eventreg.NewHandler(db)
-	serveTeams := serve.NewTeams(db)
+	serveTeams := serve.NewTeams(db, cfg.JWTSecret)
 	attendanceHandler := attendance.NewHandler(db)
 	communityHandler := community.NewHandler(db, perms)
 	liveHandler := live.NewHandler(db, notificationHandler, communityHandler)
@@ -127,36 +153,40 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		return perms.Has(ctx, userID, permissions.LiveBroadcast) || perms.Has(ctx, userID, permissions.LiveModerate)
 	})
 	// Moves broadcasts from "starting" to "live" and ends dropped ones.
-	go liveHandler.Watch(context.Background())
+	if background != nil {
+		go liveHandler.Watch(background)
+		go liveHandler.ArchiveWatch(background)
+		go notificationHandler.PublishWatch(background)
+	}
 	testimonyHandler := testimonies.NewHandler(db)
 	readingPlanHandler := readingplans.NewHandler(db)
 	checkinHandler := checkins.NewHandler(db)
 	bibleVersionsHandler := bibleversions.NewHandler(db, cfg)
-	apiBibleHandler := apibible.NewHandler(cfg)
+	apiBibleHandler := apibible.NewHandler(cfg).WithIntegrations(providers)
 	privateChatHandler := privatechat.NewHandler(db)
 	libraryHandler := library.NewHandler(db)
-	settingsHandler := settings.NewHandler(db)
+	settingsHandler := settings.NewHandler(db, cfg.JWTSecret).WithProviderClient(cfg.ProviderHTTPClient)
 	serveHandler := serve.NewHandler()
 
 	r.GET("/healthz", health.HandleHealthz(cfg, db))
 	r.Static("/uploads", "./uploads")
 
+	audioHandler := bibleaudio.NewHandler().WithIntegrations(providers)
+	r.GET("/api/v1/bible/audio/:version/:book/:chapter", audioHandler.Chapter)
 	api := r.Group("/api/v1")
 	{
 		api.GET("/healthz", health.HandleHealthz(cfg, db))
 		api.GET("/home", contentHandler.Home)
-		api.POST("/giving/mpesa/stk-push", givingHandler.STKPush)
+		api.POST("/giving/mpesa/stk-push", auth.RequireAuth(authService), givingHandler.STKPush)
 		api.POST("/giving/mpesa/callback", givingHandler.Callback)
-		api.POST("/giving/card/checkout", givingHandler.CardCheckout)
+		api.POST("/giving/card/checkout", auth.RequireAuth(authService), givingHandler.CardCheckout)
 		api.GET("/giving/card/return", givingHandler.CardReturn)
-		api.GET("/giving/card/mock-checkout/:id", givingHandler.MockCheckoutPage)
-		api.GET("/giving/card/mock-complete/:id", givingHandler.MockComplete)
-		api.GET("/giving/transactions/:id", givingHandler.GetTransaction)
+		api.GET("/giving/transactions/:id", auth.OptionalAuth(authService), givingHandler.GetTransaction)
 		api.GET("/giving/details", givingHandler.Details)
 		api.POST("/giving/confirm", auth.OptionalAuth(authService), givingHandler.Confirm)
 		api.GET("/giving/mine", auth.RequireAuth(authService), givingHandler.Mine)
-		api.GET("/giving/transactions/:id/receipt.pdf", givingHandler.DownloadReceipt)
-		api.GET("/giving/transactions/:id/invoice.pdf", givingHandler.DownloadInvoice)
+		api.GET("/giving/transactions/:id/receipt.pdf", auth.OptionalAuth(authService), givingHandler.DownloadReceipt)
+		api.GET("/giving/transactions/:id/invoice.pdf", auth.OptionalAuth(authService), givingHandler.DownloadInvoice)
 		api.POST("/notifications/register", notificationHandler.RegisterDevice)
 		api.PATCH("/notifications/preferences", notificationHandler.UpdatePreferences)
 		api.GET("/notifications/feed", notificationHandler.Feed)
@@ -164,16 +194,30 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.POST("/prayer-requests", auth.RequireAuth(authService), prayerHandler.Create)
 		api.GET("/prayer-requests/mine", auth.RequireAuth(authService), prayerHandler.ListMine)
 		api.POST("/prayer-requests/:id/pray", auth.RequireAuth(authService), prayerHandler.Pray)
+		api.POST("/uploads", auth.RequireAuth(authService), uploadHandler.Create)
+		api.GET("/uploads/:id", auth.RequireAuth(authService), uploadHandler.Get)
+		api.PATCH("/uploads/:id", auth.RequireAuth(authService), uploadHandler.Chunk)
+		api.POST("/uploads/:id/finish", auth.RequireAuth(authService), uploadHandler.Finish)
+		api.DELETE("/uploads/:id", auth.RequireAuth(authService), uploadHandler.Cancel)
 		api.GET("/permissions/me", auth.RequireAuth(authService), perms.Mine)
+		api.GET("/live/replays", auth.OptionalAuth(authService), liveHandler.Replays)
+		api.GET("/live/replays/:id/file", auth.OptionalAuth(authService), liveHandler.Replay)
+		directPublish := []gin.HandlerFunc{auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast)}
+		api.POST("/live/direct/:id/segments", append(directPublish, liveHandler.DirectPrepare)...)
+		api.POST("/live/direct/:id/segments/:sequence/commit", append(directPublish, liveHandler.DirectCommit)...)
+		api.GET("/live/direct/:id/status", append(directPublish, liveHandler.DirectStatus)...)
+		api.GET("/live/direct/:id/key", auth.OptionalAuth(authService), liveHandler.DirectKey)
+		api.GET("/live/direct/:id/index.m3u8", auth.OptionalAuth(authService), liveHandler.DirectPlaylist)
 		api.GET("/live/current", auth.OptionalAuth(authService), liveHandler.Current)
 		api.GET("/events/:id/registration", auth.OptionalAuth(authService), eventReg.Get)
 		api.POST("/events/:id/register", auth.RequireAuth(authService), eventReg.Register)
 		api.DELETE("/events/:id/register", auth.RequireAuth(authService), eventReg.Cancel)
 		api.POST("/live/heartbeat", liveHandler.Heartbeat)
 		api.POST("/live/mediamtx-auth", liveHandler.MediaMTXAuth)
-		api.POST("/live/start", auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast), liveHandler.Start)
-		api.POST("/live/stop", auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast), liveHandler.Stop)
+		api.POST("/live/start", auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast), perms.Audit(), liveHandler.Start)
+		api.POST("/live/stop", auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast), perms.Audit(), liveHandler.Stop)
 		mod := []gin.HandlerFunc{auth.RequireAuth(authService), perms.Require(permissions.LiveModerate)}
+		api.GET("/live/chat/messages", append(mod, communityHandler.ModMessages)...)
 		api.GET("/live/chat/settings", append(mod, communityHandler.GetLiveChatSettings)...)
 		api.GET("/live/chat/status", communityHandler.LiveChatStatus)
 		api.PUT("/live/chat/settings", append(mod, communityHandler.UpdateLiveChatSettings)...)
@@ -184,6 +228,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		api.DELETE("/live/chat/bans/:userId", append(mod, communityHandler.ModUnban)...)
 		api.GET("/community/messages", communityHandler.List)
 		api.GET("/community/live/stream", communityHandler.LiveStream)
+		api.POST("/community/messages/:id/report", auth.RequireAuth(authService), communityHandler.Report)
 		api.POST("/community/messages", auth.RequireAuth(authService), communityHandler.Create)
 		api.GET("/testimonies", testimonyHandler.List)
 		api.GET("/testimonies/mine", auth.RequireAuth(authService), testimonyHandler.ListMine)
@@ -201,9 +246,10 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		booksHandler := books.NewHandler(db, perms)
 		api.GET("/library", auth.OptionalAuth(authService), booksHandler.List)
 		api.GET("/library/:id/file", auth.OptionalAuth(authService), booksHandler.File)
-		api.POST("/library", auth.RequireAuth(authService), perms.Require(permissions.BooksPublish), booksHandler.Publish)
-		api.PATCH("/library/:id", auth.RequireAuth(authService), perms.Require(permissions.BooksPublish), booksHandler.Update)
+		api.POST("/library", auth.RequireAuth(authService), perms.Require(permissions.BooksPublish), perms.Audit(), booksHandler.Publish)
+		api.PATCH("/library/:id", auth.RequireAuth(authService), perms.Require(permissions.BooksPublish), perms.Audit(), booksHandler.Update)
 		api.GET("/library/:id", libraryHandler.Detail)
+		api.GET("/settings/ministry", settingsHandler.Ministry)
 		api.GET("/settings/serve", settingsHandler.GetServe)
 		api.GET("/serve/teams", auth.OptionalAuth(authService), serveTeams.List)
 		api.POST("/serve/requests", auth.RequireAuth(authService), serveTeams.Request)
@@ -245,9 +291,20 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		}
 
 		adminGroup := api.Group("/admin")
-		adminGroup.Use(auth.RequireRole(authService, "admin", "super_admin"))
+		adminGroup.Use(auth.RequireAuth(authService), perms.StaffRoute(), perms.Audit())
 		{
 			adminGroup.GET("/healthz", adminHandler.Healthz)
+			adminGroup.GET("/settings/integrations", settingsHandler.Integrations)
+			adminGroup.PUT("/settings/integrations/:provider", settingsHandler.UpdateIntegration)
+			adminGroup.POST("/settings/integrations/:provider/check", settingsHandler.CheckIntegration)
+			adminGroup.GET("/settings/readiness", settingsHandler.Readiness)
+			adminGroup.GET("/settings/smtp", settingsHandler.SMTP)
+			adminGroup.PUT("/settings/smtp", settingsHandler.UpdateSMTP)
+			adminGroup.POST("/settings/smtp/check", settingsHandler.CheckSMTP)
+			adminGroup.GET("/settings/production", settingsHandler.Production)
+			adminGroup.PUT("/settings/production", settingsHandler.UpdateProduction)
+			adminGroup.GET("/settings/ministry", settingsHandler.Ministry)
+			adminGroup.PUT("/settings/ministry", settingsHandler.UpdateMinistry)
 			adminGroup.GET("/settings/serve", settingsHandler.AdminGetServe)
 			adminGroup.PATCH("/settings/serve", settingsHandler.AdminUpdateServe)
 
@@ -316,10 +373,12 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.DELETE("/serve/teams/:id", serveTeams.AdminDeleteTeam)
 			adminGroup.PATCH("/serve/requests/:id", serveTeams.AdminUpdateRequest)
 			adminGroup.PUT("/serve/contact", serveTeams.AdminSetContact)
+			adminGroup.GET("/events/:id/registration", eventReg.Get)
 			adminGroup.PUT("/events/:id/registration", eventReg.AdminSetup)
 			adminGroup.GET("/events/:id/registrations", eventReg.AdminList)
 			adminGroup.GET("/events/:id/registrations.csv", eventReg.AdminCSV)
 			adminGroup.GET("/overview", overview.Handle(db))
+			adminGroup.GET("/giving/analytics", overview.AnalyticsHandler(db))
 			adminGroup.GET("/giving/transactions", givingHandler.ListTransactions)
 			adminGroup.GET("/giving/details", givingHandler.Details)
 			adminGroup.PUT("/giving/details", givingHandler.AdminUpdateDetails)
@@ -328,6 +387,8 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.GET("/giving/transactions/:id/invoice.pdf", givingHandler.DownloadInvoice)
 			adminGroup.GET("/notifications/messages", notificationHandler.ListMessages)
 			adminGroup.POST("/notifications/broadcast", notificationHandler.Broadcast)
+			adminGroup.GET("/community/reports", communityHandler.Reports)
+			adminGroup.PATCH("/community/reports/:id", communityHandler.ResolveReport)
 			adminGroup.GET("/community/messages", communityHandler.AdminList)
 			adminGroup.PATCH("/community/messages/:id", communityHandler.AdminUpdate)
 			adminGroup.DELETE("/community/messages/:id", communityHandler.Delete)
@@ -335,6 +396,77 @@ func New(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 			adminGroup.PATCH("/testimonies/:id", testimonyHandler.AdminUpdate)
 			adminGroup.GET("/checkins/recent", checkinHandler.Recent)
 			adminGroup.POST("/checkins/verify", checkinHandler.Verify)
+			// ─── Super Admin only routes ───────────────────────────────────
+			saGroup := adminGroup.Group("")
+			saGroup.Use(func(c *gin.Context) {
+				userID, ok := auth.UserIDFromContext(c)
+				if !ok {
+					c.AbortWithStatusJSON(401, gin.H{"message": "Unauthorized"})
+					return
+				}
+				var role string
+				_ = db.QueryRow(c.Request.Context(), `SELECT role FROM users WHERE id = $1`, userID).Scan(&role)
+				if role != "super_admin" {
+					c.AbortWithStatusJSON(403, gin.H{"message": "Super admin access required"})
+					return
+				}
+				c.Next()
+			})
+			saHandler := superadmin.New(db)
+			// Domain 1 – Identity
+			saGroup.POST("/sa/users", saHandler.CreateUser)
+			saGroup.GET("/sa/users/:id", saHandler.GetUserProfile)
+			saGroup.PATCH("/sa/users/:id", saHandler.UpdateUser)
+			saGroup.POST("/sa/users/:id/suspend", saHandler.ToggleUserSuspend)
+			saGroup.DELETE("/sa/users/:id", saHandler.DeleteUser)
+			// Domain 2 – Members
+			saGroup.POST("/sa/members/:id/merge", saHandler.MergeMemberProfiles)
+			saGroup.GET("/sa/members/:id/pastoral-notes", saHandler.ListPastoralNotes)
+			saGroup.POST("/sa/members/:id/pastoral-notes", saHandler.CreatePastoralNote)
+			saGroup.DELETE("/sa/members/:id/pastoral-notes/:noteId", saHandler.DeletePastoralNote)
+			saGroup.DELETE("/sa/members/:id/purge-gdpr", saHandler.PurgeMemberDataGDPR)
+			// Domain 3 – Finance
+			saGroup.GET("/sa/finance/funds", saHandler.ListFunds)
+			saGroup.PUT("/sa/finance/funds", saHandler.SaveFund)
+			saGroup.POST("/sa/finance/transactions", saHandler.RecordManualTransaction)
+			saGroup.POST("/sa/finance/transactions/:id/refund", saHandler.ProcessRefund)
+			saGroup.DELETE("/sa/finance/transactions/:id", saHandler.HardDeleteFinancialEntry)
+			saGroup.GET("/sa/members/:memberId/donation-statement", saHandler.GenerateDonorStatement)
+			saGroup.GET("/sa/kiosks", saHandler.ListKiosks)
+			saGroup.POST("/sa/kiosks", saHandler.PairKiosk)
+			saGroup.PATCH("/sa/kiosks/:id/lock", saHandler.ToggleKioskLock)
+			saGroup.DELETE("/sa/kiosks/:id", saHandler.UnbindKiosk)
+			// Domain 4 – Groups
+			saGroup.GET("/sa/groups", saHandler.ListGroups)
+			saGroup.PUT("/sa/groups", saHandler.SaveGroup)
+			saGroup.DELETE("/sa/groups/:id", saHandler.DeleteGroup)
+			saGroup.GET("/sa/groups/:id/roster", saHandler.ListGroupRoster)
+			saGroup.POST("/sa/groups/:id/roster", saHandler.AssignGroupMember)
+			saGroup.DELETE("/sa/groups/:id/roster/:userId", saHandler.RemoveGroupMember)
+			// Domain 5 – Attendance
+			saGroup.GET("/sa/attendance/sessions", saHandler.ListAttendanceSessions)
+			saGroup.POST("/sa/attendance/sessions", saHandler.CreateAttendanceSession)
+			saGroup.PATCH("/sa/attendance/sessions/:id", saHandler.UpdateAttendanceSession)
+			saGroup.DELETE("/sa/attendance/sessions/:id", saHandler.DeleteAttendanceSession)
+			// Domain 7 – Comms Templates
+			saGroup.GET("/sa/comm/templates", saHandler.ListTemplates)
+			saGroup.PUT("/sa/comm/templates", saHandler.SaveTemplate)
+			saGroup.DELETE("/sa/comm/templates/:id", saHandler.DeleteTemplate)
+			// Domain 8 – API Keys & Webhooks
+			saGroup.GET("/sa/api-keys", saHandler.ListApiKeys)
+			saGroup.POST("/sa/api-keys", saHandler.CreateApiKey)
+			saGroup.DELETE("/sa/api-keys/:id", saHandler.RevokeApiKey)
+			saGroup.GET("/sa/webhooks", saHandler.ListWebhooks)
+			saGroup.PUT("/sa/webhooks", saHandler.SaveWebhook)
+			saGroup.POST("/sa/webhooks/:id/test", saHandler.TestWebhook)
+			saGroup.DELETE("/sa/webhooks/:id", saHandler.DeleteWebhook)
+			// Domain 9 – Governance
+			saGroup.GET("/sa/audit-trail", saHandler.GetAuditTrail)
+			saGroup.DELETE("/sa/audit-trail", saHandler.PurgeAuditTrail)
+			saGroup.GET("/sa/system/modules", saHandler.GetSystemModules)
+			saGroup.PUT("/sa/system/modules", saHandler.UpdateSystemModules)
+			saGroup.POST("/sa/system/backup", saHandler.TriggerDatabaseBackup)
+
 		}
 	}
 

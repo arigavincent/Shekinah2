@@ -121,6 +121,10 @@ fun ChatScreen(session: Session, onSignIn: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val messages = remember { mutableStateListOf<ChatMessage>() }
+    var hasMore by remember { mutableStateOf(true) }
+    var historyBusy by remember { mutableStateOf(false) }
+    var report by remember { mutableStateOf<ChatMessage?>(null) }
+    var reportReason by remember { mutableStateOf("") }
     var loaded by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
     var replying by remember { mutableStateOf<ChatMessage?>(null) }
@@ -128,27 +132,25 @@ fun ChatScreen(session: Session, onSignIn: () -> Unit, onBack: () -> Unit) {
     val list = rememberLazyListState()
     val me = session.member
 
-    suspend fun fetch(since: String?) {
-        val path = if (since == null) "/community/messages?channel=global&order=desc" else "/community/messages?channel=global&order=asc&since=$since"
-        val res = Api.get(path)
-        val fresh = Api.decode<List<ChatMessage>>(res["messages"]).let { if (since == null) it.reversed() else it }
-        val known = messages.map { it.id }.toSet()
-        val add = fresh.filter { it.id !in known }
-        if (add.isNotEmpty()) {
-            // A message we sent comes back from the server: replace the local copy.
-            messages.removeAll { m -> m.sending && add.any { it.userId == me?.id && it.message == m.message } }
-            messages.addAll(add)
-            messages.sortBy { it.instant() }
+    suspend fun fetch(after: String?, older: Boolean=false) {
+        val known=messages.filter{!it.sending}.takeLast(500).joinToString(","){it.id}
+        val path="/community/messages?channel=global&order="+(if(after!=null&&!older)"asc" else "desc")+(if(after!=null)"&${if(older)"before" else "after"}=$after" else "")+"&known=$known"
+        val res=Api.get(path)
+        val removed=(res["removed"] as? kotlinx.serialization.json.JsonArray)?.map{(it as kotlinx.serialization.json.JsonPrimitive).content}.orEmpty()
+        messages.removeAll{it.id in removed}
+        val fresh=Api.decode<List<ChatMessage>>(res["messages"])
+        if(older || after==null) hasMore=fresh.size==80
+        fresh.forEach{m->
+            messages.removeAll{it.sending&&it.userId==m.userId&&it.message==m.message}
+            val index=messages.indexOfFirst{it.id==m.id};if(index>=0)messages[index]=m else messages.add(m)
         }
+        messages.sortWith(compareBy<ChatMessage>{it.createdAt}.thenBy{it.id})
+        error=null
     }
-
-    LaunchedEffect(Unit) {
-        runCatching { fetch(null) }.onFailure { error = it.message }
-        loaded = true
-        while (true) {
-            delay(3_000)
-            runCatching { fetch(messages.lastOrNull { !it.sending }?.createdAt) }
-        }
+    LaunchedEffect(session.member?.id) {
+        messages.clear()
+        runCatching{fetch(null)}.onFailure{error=it.message};loaded=true
+        while(true){delay(3_000);runCatching{fetch(messages.lastOrNull{!it.sending}?.id)}.onFailure{error=it.message}}
     }
     // Keep the newest message in view as they arrive.
     LaunchedEffect(messages.size) { if (messages.isNotEmpty()) list.animateScrollToItem(0) }
@@ -170,6 +172,8 @@ fun ChatScreen(session: Session, onSignIn: () -> Unit, onBack: () -> Unit) {
                 .onFailure { messages.remove(local); draft = text; error = it.message }
         }
     }
+
+    if(report!=null) androidx.compose.material3.AlertDialog(onDismissRequest={report=null},title={Text("Report message")},text={com.shekinahsons.globalapp.ui.components.Field("REASON",reportReason,{reportReason=it.take(500)},singleLine=false)},confirmButton={androidx.compose.material3.TextButton(enabled=reportReason.trim().length>=3,onClick={val id=report!!.id;scope.launch{runCatching{Api.post("/community/messages/$id/report",mapOf("reason" to reportReason.trim()))}.onSuccess{report=null;reportReason="";error="Report sent to the ministry team."}.onFailure{error=it.message}}}){Text("Send report")}},dismissButton={androidx.compose.material3.TextButton(onClick={report=null}){Text("Cancel")}})
 
     // Newest first in a reversed list, with a date chip where the day changes.
     val rows = remember(messages.toList()) {
@@ -220,9 +224,12 @@ fun ChatScreen(session: Session, onSignIn: () -> Unit, onBack: () -> Unit) {
                             val index = messages.indexOfFirst { it.id == row.id }
                             val prev = messages.getOrNull(index - 1)
                             val firstOfRun = prev == null || prev.userId != row.userId || prev.instant().atZone(zone).toLocalDate() != row.instant().atZone(zone).toLocalDate()
-                            Bubble(row, mine = row.userId == me?.id, firstOfRun = firstOfRun, onReply = { replying = row }, onCopy = { copy(context, row.message) })
+                            Bubble(row, mine = row.userId == me?.id, firstOfRun = firstOfRun, onReply = { replying = row }, onCopy = { copy(context, row.message) }, onReport = if(me!=null && row.userId!=me.id) ({report=row}) else null)
                         }
                     }
+                }
+                if(loaded && hasMore && messages.isNotEmpty()) item {
+                    Text(if(historyBusy)"Loading…" else "Load earlier messages",color=Brand.Gold,modifier=Modifier.fillMaxWidth().clickable(enabled=!historyBusy){scope.launch{historyBusy=true;runCatching{fetch(messages.firstOrNull{!it.sending}?.id,true)}.onFailure{error=it.message};historyBusy=false}}.padding(18.dp))
                 }
                 if (loaded && messages.isEmpty()) item {
                     Text("Say hello to the family 👋", style = Type.Body, color = Brand.Muted, modifier = Modifier.fillMaxWidth().padding(40.dp))
@@ -275,7 +282,7 @@ private fun copy(context: Context, text: String) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Bubble(m: ChatMessage, mine: Boolean, firstOfRun: Boolean, onReply: () -> Unit, onCopy: () -> Unit) {
+private fun Bubble(m: ChatMessage, mine: Boolean, firstOfRun: Boolean, onReply: () -> Unit, onCopy: () -> Unit, onReport: (() -> Unit)? = null) {
     var menu by remember { mutableStateOf(false) }
     val time = m.instant().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm"))
     val shape = RoundedCornerShape(
@@ -319,6 +326,7 @@ private fun Bubble(m: ChatMessage, mine: Boolean, firstOfRun: Boolean, onReply: 
             }
             DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Brand.Surface2) {
                 DropdownMenuItem(text = { Text("Reply", color = Brand.White) }, leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Reply, null, tint = Brand.Gold) }, onClick = { menu = false; onReply() })
+                onReport?.let { action -> DropdownMenuItem(text={Text("Report",color=Brand.White)},onClick={menu=false;action()}) }
                 DropdownMenuItem(text = { Text("Copy", color = Brand.White) }, leadingIcon = { Icon(Icons.Rounded.ContentCopy, null, tint = Brand.Gold) }, onClick = { menu = false; onCopy() })
             }
         }

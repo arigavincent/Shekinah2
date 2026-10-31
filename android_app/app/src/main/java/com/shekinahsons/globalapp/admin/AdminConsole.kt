@@ -1,5 +1,7 @@
 package com.shekinahsons.globalapp.admin
 
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -88,6 +90,15 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.time.Duration
 import java.time.OffsetDateTime
+import androidx.compose.material.icons.rounded.AdminPanelSettings
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.AccountBalance
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Webhook
+import androidx.compose.material.icons.rounded.ManageAccounts
+import androidx.compose.material.icons.rounded.EventNote
+import androidx.compose.material.icons.rounded.Sms
+import androidx.compose.ui.window.Dialog
 
 @Serializable
 data class AdminOverview(
@@ -104,7 +115,7 @@ data class Txn(
 )
 
 @Serializable
-data class TeamMember(val id: String = "", val name: String = "", val email: String = "", val role: String = "", val permissions: List<String> = emptyList())
+data class TeamMember(val id: String = "", val name: String = "", val email: String = "", val role: String = "", val permissions: List<String> = emptyList(), val isActive:Boolean=true)
 
 @Serializable
 data class PermissionChange(val member: String = "", val email: String = "", val permission: String = "", val action: String = "", val changedBy: String = "", val at: String = "")
@@ -115,15 +126,21 @@ data class AdminPrayer(val id: String = "", val name: String = "", val text: Str
 private enum class Section(val label: String, val icon: ImageVector) {
     Overview("Overview", Icons.Rounded.Dashboard),
     Payments("Payments", Icons.Rounded.Payments),
-    Team("Team", Icons.Rounded.Groups),
+    Team("Users", Icons.Rounded.Groups),
     Books("Books", Icons.AutoMirrored.Rounded.MenuBook),
     More("More", Icons.Rounded.MoreHoriz),
+    SuperAdmin("SA Tools", Icons.Rounded.AdminPanelSettings),
 }
 
 private val permissionInfo = listOf(
     Triple("live:broadcast", "Go live", "Stream services from the Live tab"),
     Triple("live:moderate", "Moderate live chat", "Pin, remove and block comments"),
     Triple("books:publish", "Publish books", "Add books and set free or a price"),
+    Triple("sermons:manage", "Manage sermons", "Upload and schedule audio or video"),
+    Triple("events:manage", "Manage events", "Create events and registration forms"),
+    Triple("content:manage", "Manage ministry content", "Devotions, updates and reading plans"),
+    Triple("community:moderate", "Moderate community", "Review reports and testimonies"),
+    Triple("finance:manage", "Finance", "Review and verify payments"),
     Triple("checkin:scan", "Gate check-in", "Scan members' codes and see attendance"),
 )
 private fun permissionName(p: String) = permissionInfo.firstOrNull { it.first == p }?.second ?: p
@@ -147,6 +164,7 @@ private fun ago(iso: String): String = runCatching {
 @Composable
 fun AdminConsole(session: Session, openApp: () -> Unit, openLive: () -> Unit) {
     var section by rememberSaveable { mutableStateOf(Section.Overview) }
+    var bookFullScreen by remember { mutableStateOf(false) }
     var goLive by remember { mutableStateOf(false) }
     var gate by remember { mutableStateOf(false) }
     BackHandler(enabled = section != Section.Overview && !goLive && !gate) { section = Section.Overview }
@@ -169,12 +187,13 @@ fun AdminConsole(session: Session, openApp: () -> Unit, openLive: () -> Unit) {
                     Section.Overview -> OverviewPage(session, go = { section = it }, goLive = { goLive = true }, openLive = openLive, openGate = { gate = true })
                     Section.Payments -> PaymentsPage()
                     Section.Team -> TeamPage()
-                    Section.Books -> LibraryScreen(session, openProfile = {}, onBack = { section = Section.Overview }, bottomInset = 76.dp)
+                    Section.Books -> LibraryScreen(session, openProfile = {}, onBack = { section = Section.Overview }, bottomInset = 76.dp,onFullScreen={bookFullScreen=it})
                     Section.More -> MorePage()
+                    Section.SuperAdmin -> SuperAdminPage()
                 }
             }
         }
-        SectionBar(section, Modifier.align(Alignment.BottomCenter)) { section = it }
+        if(!bookFullScreen) SectionBar(section, Modifier.align(Alignment.BottomCenter)) { section = it }
     }
 }
 
@@ -220,10 +239,10 @@ private fun SectionBar(current: Section, modifier: Modifier, select: (Section) -
     }
 }
 
-private val pagePadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 130.dp)
+internal val pagePadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 130.dp)
 
 @Composable
-private fun PageTitle(title: String, subtitle: String) {
+internal fun PageTitle(title: String, subtitle: String) {
     Column(Modifier.padding(bottom = 14.dp)) {
         Text(title, style = Type.Display, color = Brand.White)
         Text(subtitle, style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.Text2)
@@ -271,6 +290,7 @@ private fun OverviewPage(session: Session, go: (Section) -> Unit, goLive: () -> 
                     item { Quick("Gate check-in", Icons.Rounded.QrCodeScanner, onClick = openGate) }
                     item { Quick("Events & registrations", Icons.Rounded.Groups) { go(Section.More) } }
                     item { Quick("Send notification", Icons.Rounded.Campaign) { go(Section.More) } }
+                    item { Quick("SA Governance", Icons.Rounded.AdminPanelSettings) { go(Section.SuperAdmin) } }
                     item { Quick("Publish a book", Icons.AutoMirrored.Rounded.MenuBook) { go(Section.Books) } }
                     item { Quick("Give permissions", Icons.Rounded.Groups) { go(Section.Team) } }
                 }
@@ -330,7 +350,7 @@ private fun Quick(label: String, icon: ImageVector, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Chips(options: List<Pair<String, String>>, current: String, select: (String) -> Unit) {
+internal fun Chips(options: List<Pair<String, String>>, current: String, select: (String) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 6.dp)) {
         items(options) { (key, label) ->
             val on = key == current
@@ -338,6 +358,13 @@ private fun Chips(options: List<Pair<String, String>>, current: String, select: 
                 modifier = (if (on) Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient) else Modifier.glass()).clickable { select(key) }.padding(horizontal = 14.dp, vertical = 8.dp))
         }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable internal fun ToolChoices(options:List<Pair<String,String>>,current:String,select:(String)->Unit){
+ FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){
+  options.forEach{(key,label)->val on=key==current;Text(label,color=if(on)Brand.Black else Brand.White,fontFamily=Inter,fontWeight=FontWeight.SemiBold,fontSize=13.sp,modifier=(if(on)Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient) else Modifier.glass()).clickable{select(key)}.padding(horizontal=14.dp,vertical=12.dp))}
+ }
 }
 
 // ---------------------------------------------------------------- Payments
@@ -378,6 +405,10 @@ private fun PaymentsPage() {
 
 @Composable
 private fun PaymentCard(t: Txn, busy: Boolean, confirm: () -> Unit, reject: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val receiptScope = rememberCoroutineScope()
+    var receiptBusy by remember(t.id) { mutableStateOf(false) }
+    var receiptError by remember(t.id) { mutableStateOf<String?>(null) }
     val book = t.category == "Book"
     val (methodName, methodColor) = when {
         "mpesa" in t.method -> "M-Pesa" to Color(0xFF2EAD4B)
@@ -425,11 +456,29 @@ private fun PaymentCard(t: Txn, busy: Boolean, confirm: () -> Unit, reject: () -
             "failed" -> Text("Marked not found", color = Brand.Red, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             else -> Text(t.status, style = Type.Meta, color = Brand.Text2)
         }
+        if (t.status == "success") {
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                listOf("Open receipt" to false, "Print receipt" to true).forEach { (label, print) ->
+                    androidx.compose.material3.OutlinedButton(enabled = !receiptBusy, onClick = {
+                        receiptScope.launch {
+                            receiptBusy = true; receiptError = null
+                            runCatching {
+                                if (print) com.shekinahsons.globalapp.data.Documents.printReceipt(context, t.id)
+                                else com.shekinahsons.globalapp.data.Documents.openReceipt(context, t.id)
+                            }.onFailure { receiptError = it.message }
+                            receiptBusy = false
+                        }
+                    }) { Text(label) }
+                }
+            }
+            receiptError?.let { ErrorNote(it) }
+        }
     }
 }
 
 @Composable
-private fun Empty(text: String) {
+internal fun Empty(text: String) {
     Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(56.dp).clip(CircleShape).background(Color(0x1FD4AF37)), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.Check, null, tint = Brand.Gold, modifier = Modifier.size(28.dp))
@@ -469,7 +518,7 @@ private fun TeamPage() {
         saving = ""
     }
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { PageTitle("Team & permissions", "Who may go live, moderate the chat and publish books") }
+        item { PageTitle("Manage Users", "Member profiles and staff permissions for the app and web") }
         item { Chips(listOf("people" to "People", "log" to "Change log"), view) { view = it } }
         error?.let { item { ErrorNote(it) } }
         if (view == "people") {
@@ -500,6 +549,7 @@ private fun TeamPage() {
                         modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).clickable(enabled = resetNote == null) {
                             scope.launch { runCatching { Api.post("/admin/members/${m.id}/reset-password") }.onSuccess { resetNote = "Reset code emailed to ${m.email}" }.onFailure { error = it.message } }
                         }.padding(vertical = 4.dp))
+                    if (!m.isActive) Text("Inactive account",style=Type.Meta,color=Brand.Red)
                     if (admin) Text("Admins can do everything.", style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 10.dp))
                     else permissionInfo.forEach { (key, label, detail) ->
                         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -508,7 +558,7 @@ private fun TeamPage() {
                                 Text(detail, style = Type.Meta, color = Brand.Text2)
                             }
                             Switch(
-                                checked = key in m.permissions, enabled = saving != m.id + key, onCheckedChange = { toggle(m, key) },
+                                checked = key in m.permissions, enabled = saving.isBlank() && m.isActive, onCheckedChange = { toggle(m, key) },
                                 colors = SwitchDefaults.colors(checkedThumbColor = Brand.Black, checkedTrackColor = Brand.Gold, uncheckedTrackColor = Color(0x22FFFFFF), uncheckedBorderColor = Color(0x44FFFFFF)),
                             )
                         }
@@ -536,14 +586,39 @@ private fun TeamPage() {
 @Composable
 private fun MorePage() {
     var view by rememberSaveable { mutableStateOf("events") }
+    val tools = listOf(
+        "events" to "Events", "serve" to "Serve", "branches" to "Branches",
+        "notify" to "Send notification", "prayers" to "Prayer requests",
+        "sermons" to "Sermons", "devotions" to "Devotions", "updates" to "Updates",
+        "plans" to "Reading plans", "testimonies" to "Testimonies", "community" to "Community",
+        "monetization" to "Monetization", "settings" to "Ministry settings",
+        "members" to "Members", "groups" to "Groups", "attendance" to "Attendance",
+        "kiosks" to "Kiosks", "templates" to "Templates", "apikeys" to "API Keys",
+        "webhooks" to "Webhooks", "audit" to "Audit Trail", "modules" to "Modules",
+        "backup" to "Backup & GDPR"
+    )
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { PageTitle("More", "Events, serve teams, branches, notifications and prayer") }
-        item { Chips(listOf("events" to "Events", "serve" to "Serve", "branches" to "Branches", "notify" to "Send notification", "prayers" to "Prayer requests"), view) { view = it } }
+        item { PageTitle("More", "Content, ministry settings and community care") }
+        item { ToolChoices(tools, view) { view = it } }
         when (view) {
             "events" -> item { AdminEventsPane() }
             "serve" -> item { AdminServePane() }
             "branches" -> item { AdminBranchesPane() }
             "notify" -> item { NotifyForm() }
+            "sermons", "devotions", "updates", "plans" -> item { androidx.compose.runtime.key(view) { AdminContentPane(view) } }
+            "testimonies", "community" -> item { androidx.compose.runtime.key(view) { AdminModerationPane(view=="testimonies") } }
+            "monetization" -> item { AdminMonetizationPane() }
+            "settings" -> item { AdminMinistrySettings() }
+            "members" -> item { SaMembersPane() }
+            "groups" -> item { SaGroupsPane() }
+            "attendance" -> item { SaAttendancePane() }
+            "kiosks" -> item { SaKiosksPane() }
+            "templates" -> item { SaTemplatesPane() }
+            "apikeys" -> item { SaApiKeysPane() }
+            "webhooks" -> item { SaWebhooksPane() }
+            "audit" -> item { SaAuditPane() }
+            "modules" -> item { SaModulesPane() }
+            "backup" -> item { SaBackupPane() }
             else -> prayers(this)
         }
     }
@@ -622,4 +697,30 @@ private fun PrayerList() {
             }
         }
     }
+}
+
+@Composable
+fun StaffConsole(session:Session,openApp:()->Unit,openLive:()->Unit) {
+ if(session.isAdmin){AdminConsole(session,openApp,openLive);return}
+ val tools=buildList {
+  if("sermons:manage" in session.permissions)add("sermons" to "Sermons")
+  if("events:manage" in session.permissions)add("events" to "Events")
+  if(session.canPublish)add("books" to "Books")
+  if("content:manage" in session.permissions){add("devotions" to "Devotions");add("updates" to "Updates");add("plans" to "Reading plans")}
+  if("community:moderate" in session.permissions){add("community" to "Community");add("testimonies" to "Testimonies")}
+  if("finance:manage" in session.permissions){add("finance" to "Payments");add("monetization" to "Monetization")}
+ }
+ var selected by rememberSaveable{mutableStateOf(tools.firstOrNull()?.first.orEmpty())}
+ BackHandler(onBack=openApp)
+ Column(Modifier.fillMaxSize().statusBarsPadding()) {
+  com.shekinahsons.globalapp.ui.components.TopBar(title="Ministry tools",onBack=openApp)
+  Chips(tools,selected){selected=it}
+  when(selected){
+   "finance" -> PaymentsPage()
+   "books" -> LibraryScreen(session,openApp,openApp)
+   else -> LazyColumn(contentPadding=PaddingValues(18.dp,12.dp,18.dp,120.dp)) {item {androidx.compose.runtime.key(selected){
+    when(selected){"monetization"->AdminMonetizationPane();"events"->AdminEventsPane();"community","testimonies"->AdminModerationPane(selected=="testimonies");else->AdminContentPane(selected)}
+   }}}
+  }
+ }
 }

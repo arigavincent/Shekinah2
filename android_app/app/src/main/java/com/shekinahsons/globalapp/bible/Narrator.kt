@@ -11,6 +11,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.util.Locale
+import kotlinx.coroutines.*
+import kotlinx.serialization.Serializable
+import androidx.media3.common.Player
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import com.shekinahsons.globalapp.data.Api
 
 // Reads Scripture aloud like a person would: the best natural voice the
 // phone has for the version's language, a short breath between verses,
@@ -18,6 +24,33 @@ import java.util.Locale
 // Compose screens watch `verse` to highlight and follow along.
 class Narrator(private val context: Context) {
     private val prefs = context.getSharedPreferences("narrator", Context.MODE_PRIVATE)
+    private var recordedPlayer: ExoPlayer?=null
+    private val scope=CoroutineScope(SupervisorJob()+Dispatchers.Main)
+    private var follow: Job?=null
+    var recorded by mutableStateOf(false);private set
+    var attribution by mutableStateOf("");private set
+    private var timings:List<NarrationTime> = emptyList()
+    val verseSeeking get() = !recorded || timings.isNotEmpty()
+    @Serializable data class NarrationTime(val verse:Int=0,val positionMs:Long=0)
+    @Serializable data class Recording(val available:Boolean=false,val url:String="",val attribution:String="",val timings:List<NarrationTime> = emptyList())
+    suspend fun readChapter(version:String,book:String,chapter:Int,language:String,heading:String,verses:List<Verse>,from:Int,onEnd:()->Unit) {
+        stop()
+        val recording=runCatching { Api.decode<Recording>(Api.get("/bible/audio/$version/$book/$chapter")) }.getOrNull()
+        currentCoroutineContext().ensureActive()
+        if(recording?.available!=true || recording.url.isBlank()) {read(language,heading,verses,from,onEnd);return}
+        this.language=language;this.heading=heading;this.verses=verses;onChapterEnd=onEnd
+        recorded=true;active=true;attribution=recording.attribution;timings=recording.timings.sortedBy{it.positionMs};verse=from
+        recordedPlayer=ExoPlayer.Builder(context).build().apply {
+            addListener(object:Player.Listener {
+                override fun onPlaybackStateChanged(state:Int){if(state==Player.STATE_ENDED){playing=false;onChapterEnd?.invoke()}}
+                override fun onIsPlayingChanged(isPlaying:Boolean){playing=isPlaying}
+                override fun onPlayerError(error:androidx.media3.common.PlaybackException){playing=false}
+            })
+            setMediaItem(MediaItem.fromUri(recording.url),timings.lastOrNull{it.verse<=from}?.positionMs ?: 0L)
+            setPlaybackSpeed(rate);prepare();play()
+        }
+        follow=scope.launch {while(isActive){val position=recordedPlayer?.currentPosition ?: break;timings.lastOrNull{it.positionMs<=position}?.let{verse=it.verse};delay(150)}}
+    }
     private var tts: TextToSpeech? = null
     private var ready = false
     private var pending: (() -> Unit)? = null
@@ -83,6 +116,7 @@ class Narrator(private val context: Context) {
     private fun clean(text: String) = text.replace(Regex("[\\[\\]¶]"), "").replace(Regex("\\s+"), " ").trim()
 
     fun read(language: String, heading: String, verses: List<Verse>, from: Int, onChapterEnd: () -> Unit) {
+        follow?.cancel();recordedPlayer?.release();recordedPlayer=null;recorded=false;attribution="Device voice"
         this.language = language; this.heading = heading; this.verses = verses; this.onChapterEnd = onChapterEnd
         active = true
         val start = {
@@ -117,6 +151,7 @@ class Narrator(private val context: Context) {
 
     // One verse only (tap a verse, then Listen).
     fun readOne(language: String, v: Verse) {
+        stop()
         this.language = language
         active = true
         onChapterEnd = { stop() }
@@ -133,16 +168,16 @@ class Narrator(private val context: Context) {
         if (ready) run() else { pending = run; engine() }
     }
 
-    fun pause() { tts?.stop(); playing = false }
-    fun resume() { if (verses.isNotEmpty()) speakFrom(verse.coerceAtLeast(1)) }
+    fun pause() { if(recorded)recordedPlayer?.pause() else tts?.stop(); playing = false }
+    fun resume() { if(recorded)recordedPlayer?.play() else if (verses.isNotEmpty()) speakFrom(verse.coerceAtLeast(1)) }
     fun toggle() = if (playing) pause() else resume()
-    fun next() { if (verses.isNotEmpty()) speakFrom((verse + 1).coerceAtMost(verses.last().number)) }
-    fun previous() { if (verses.isNotEmpty()) speakFrom((verse - 1).coerceAtLeast(1)) }
+    fun next() { if(recorded){timings.firstOrNull{it.verse>verse}?.let{recordedPlayer?.seekTo(it.positionMs)}} else if (verses.isNotEmpty()) speakFrom((verse + 1).coerceAtMost(verses.last().number)) }
+    fun previous() { if(recorded){timings.lastOrNull{it.verse<verse}?.let{recordedPlayer?.seekTo(it.positionMs)}} else if (verses.isNotEmpty()) speakFrom((verse - 1).coerceAtLeast(1)) }
 
     fun changeRate(value: Float) {
         rate = value
         prefs.edit().putFloat("rate", value).apply()
-        if (playing) speakFrom(verse.coerceAtLeast(1))
+        if(recorded) recordedPlayer?.setPlaybackSpeed(value) else if (playing) speakFrom(verse.coerceAtLeast(1))
     }
 
     fun chooseVoice(v: Voice) {
@@ -152,11 +187,13 @@ class Narrator(private val context: Context) {
     }
 
     fun stop() {
-        tts?.stop()
+        follow?.cancel();recordedPlayer?.release();recordedPlayer=null;recorded=false;attribution=""
+        tts?.stop();pending=null
         playing = false; active = false; verse = 0
     }
 
-    fun shutdown() { tts?.shutdown(); tts = null; ready = false }
+    fun shutdown() {
+        stop();scope.cancel(); tts?.shutdown(); tts = null; ready = false }
 
     // Friendly names for voice ids like "en-us-x-iom-local".
     fun label(v: Voice, index: Int): String {

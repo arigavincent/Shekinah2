@@ -81,7 +81,7 @@ object Push {
 }
 
 @Serializable
-private data class FeedItem(val id: String = "", val title: String = "", val body: String = "", val category: String = "general", val createdAt: String = "")
+private data class FeedItem(val id: String = "", val title: String = "", val body: String = "", val category: String = "general", val createdAt: String = "", val data: Map<String,kotlinx.serialization.json.JsonElement> = emptyMap())
 
 class FeedWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -93,7 +93,7 @@ class FeedWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             // First run: just remember where we are, don't replay old news.
             // With Firebase on, pushes already showed these.
             if (since != null && !Push.usingFirebase()) {
-                items.sortedBy { it.createdAt }.forEach { Notify.show(applicationContext, it.id.hashCode(), it.title, it.body, it.category) }
+                items.sortedBy { it.createdAt }.forEach { Notify.show(applicationContext, it.id.hashCode(), it.title, it.body, it.category, (it.data["open"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: it.category, (it.data["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()) }
             }
             val newest = items.maxOfOrNull { it.createdAt } ?: since ?: Instant.now().toString()
             prefs.edit().putString("since", newest).apply()
@@ -108,6 +108,6 @@ class PushService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val title = message.notification?.title ?: message.data["title"] ?: return
         val body = message.notification?.body ?: message.data["body"].orEmpty()
-        Notify.show(applicationContext, (message.messageId ?: title).hashCode(), title, body, message.data["category"] ?: "general")
+        Notify.show(applicationContext, (message.messageId ?: title).hashCode(), title, body, message.data["category"] ?: "general", message.data["open"] ?: message.data["category"] ?: "notifications", message.data["id"].orEmpty())
     }
 }

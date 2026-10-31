@@ -20,7 +20,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +55,7 @@ fun Field(
     minHeight: Dp = 52.dp,
     singleLine: Boolean = true,
 ) {
+    var visible by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth()) {
         Text(label, style = Type.Label.copy(fontSize = 10.5.sp), color = Brand.GoldLight, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
         Box(Modifier.fillMaxWidth().heightIn(min = minHeight).glass(RoundedCornerShape(16.dp), 0.8f).padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -63,10 +65,11 @@ fun Field(
                 singleLine = singleLine,
                 textStyle = Type.Body.copy(color = Brand.White),
                 cursorBrush = SolidColor(Brand.Gold),
-                visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+                visualTransformation = if (password && !visible) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboard),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(end=if(password)52.dp else 0.dp).semantics { contentDescription=label },
             )
+            if(password) Text(if(visible)"Hide" else "Show",color=Brand.Gold,modifier=Modifier.align(Alignment.CenterEnd).clickable { visible=!visible }.padding(8.dp).semantics { contentDescription=if(visible)"Hide password" else "Show password" })
         }
     }
 }

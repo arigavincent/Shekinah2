@@ -24,4 +24,4 @@ backend/tmp/
 *.log
 
 # uploaded media
-uploads/
+/uploads/

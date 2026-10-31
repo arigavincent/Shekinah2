@@ -1,7 +1,10 @@
+import {Link} from "react-router-dom";
+import {getUser} from "../auth/session";
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Check, FileText, Receipt, RefreshCw } from "lucide-react";
+import { Copy, Check, FileText, Receipt, RefreshCw, Printer } from "lucide-react";
 
 import { API_BASE_URL } from "../api/client";
+import { getToken } from "../auth/session";
 import { InlineAlert } from "../components/InlineAlert";
 import { PaginationBar } from "../components/PaginationBar";
 import { usePaginatedItems } from "../hooks/usePaginatedItems";
@@ -175,6 +178,7 @@ export function GivingPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
+  const [currency,setCurrency]=useState("KES");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "amount_high" | "amount_low">("newest");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -203,7 +207,7 @@ export function GivingPage() {
         .join(" ")
         .toLowerCase();
 
-      return matchesStatus && matchesCategory && (!q || searchable.includes(q));
+      return (transaction.currency||"KES")===currency && matchesStatus && matchesCategory && (!q || searchable.includes(q));
     });
 
     return next.sort((a, b) => {
@@ -212,7 +216,7 @@ export function GivingPage() {
       if (sortBy === "amount_low") return Number(a.amount || 0) - Number(b.amount || 0);
       return b.createdAt.localeCompare(a.createdAt);
     });
-  }, [transactions, query, status, category, sortBy]);
+  }, [transactions, query, status, category, sortBy,currency]);
 
   const { page, setPage, totalPages, pagedItems } = usePaginatedItems(
     filtered,
@@ -226,7 +230,7 @@ export function GivingPage() {
   );
 
   const totals = useMemo(() => {
-    return transactions.reduce(
+    return filtered.reduce(
       (acc, transaction) => {
         acc.count += 1;
         if (transaction.status === "success") {
@@ -244,7 +248,7 @@ export function GivingPage() {
       },
       { count: 0, successCount: 0, successAmount: 0, pendingCount: 0, pendingAmount: 0, failedCount: 0 }
     );
-  }, [transactions]);
+  }, [filtered]);
 
   async function load() {
     setLoading(true);
@@ -273,8 +277,27 @@ export function GivingPage() {
     }
   }
 
-  function openDocument(transactionId: string, kind: "receipt" | "invoice") {
-    window.open(`${API_BASE_URL}/api/v1/giving/transactions/${transactionId}/${kind}.pdf`, "_blank");
+  async function openDocument(transactionId: string, kind: "receipt" | "invoice") {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/giving/transactions/${transactionId}/${kind}.pdf`, {headers:{Authorization:`Bearer ${getToken()}`}});
+      if(!response.ok) throw new Error(`Could not download ${kind} (${response.status})`);
+      const url=URL.createObjectURL(await response.blob());
+      const link=document.createElement("a");link.href=url;link.download=`${kind}-${transactionId}.pdf`;link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    } catch(error) {setError(error instanceof Error?error.message:"Could not download document");}
+  }
+
+  async function printReceipt(transactionId: string) {
+    const popup = window.open("", "_blank");
+    if (!popup) { setError("Allow the receipt window to open, then choose Print again."); return; }
+    popup.opener = null;
+    popup.document.body.textContent = "Preparing receipt…";
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/giving/transactions/${transactionId}/receipt.pdf`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!response.ok) throw new Error(`Could not print receipt (${response.status})`);
+      const { printReceiptPDF } = await import("../lib/printReceipt");
+      await printReceiptPDF(popup, await response.arrayBuffer());
+    } catch (error) { popup.close(); setError(error instanceof Error ? error.message : "Could not print receipt"); }
   }
 
   return (
@@ -282,7 +305,7 @@ export function GivingPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">Finance</p>
-          <h1>Giving</h1>
+          <h1>Payments</h1>
           <p className="muted">
             Set the paybill and bank details members see, and confirm the gifts they report.
           </p>
@@ -295,8 +318,10 @@ export function GivingPage() {
 
       {error ? <InlineAlert title="Giving data could not be loaded" message={error} /> : null}
 
-      <PaymentDetailsCard />
+      {["admin","super_admin"].includes(getUser()?.role||"")&&<PaymentDetailsCard />}
 
+      <label>Currency<select value={currency} onChange={e=>setCurrency(e.target.value)}>{Array.from(new Set(["KES",...transactions.map(t=>t.currency||"KES")])).map(c=><option key={c}>{c}</option>)}</select></label>
+      <p className="muted">These totals cover the matching transactions in the latest 200 payments, including donations and purchases. <Link className="text-link" to="/monetization">View income by source and item →</Link></p>
       <section className="stats-grid">
         <article className="stat-card">
           <p>Total Transactions</p>
@@ -458,6 +483,7 @@ export function GivingPage() {
                             Receipt
                           </button>
                         )}
+                        {transaction.status === "success" && <button type="button" className="ghost-action" onClick={() => printReceipt(transaction.id)} title="Print confirmed payment receipt"><Printer size={14} aria-hidden="true" /> Print receipt</button>}
                         <button
                           type="button"
                           className="ghost-action"

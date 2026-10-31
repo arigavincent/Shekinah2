@@ -130,6 +130,10 @@ private fun clockOf(ms: Long): String {
 // sermon counting down when one ends.
 @Composable
 fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onOpen: (Sermon) -> Unit, onBack: () -> Unit) {
+    if (sermon.replayId.isNotBlank()) {
+        com.shekinahsons.globalapp.live.ReplaySermon(sermon, library, onBack)
+        return
+    }
     val context = LocalContext.current
     val activity = context as Activity
     val scope = rememberCoroutineScope()
@@ -138,9 +142,8 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
     var controls by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
     var unlockHint by remember { mutableStateOf(false) }
-    // Full screen fills the display; SmartFill eases back whenever a verse
-    // banner is on screen so it is never cut. Pinch or the button for the whole picture.
-    var fill by remember { mutableStateOf(true) }
+    // Default to false (original fit) so lower-third Bible verses and pastor titles are NEVER cut off.
+    var fill by remember { mutableStateOf(false) }
     var speed by remember { mutableFloatStateOf(1f) }
     var speedMenu by remember { mutableStateOf(false) }
     var flash by remember { mutableStateOf<String?>(null) }
@@ -166,6 +169,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
     fun save() = library.savePosition(sermon.id, player.currentPosition, player.duration)
 
     LaunchedEffect(sermon.id) {
+        library.remember(sermon)
         firstFrame = false; ended = false; error = null; retries = 0
         val resume = library.position(sermon.id)
         player.setMediaItem(MediaItem.fromUri(library.playableUri(sermon)), resume)
@@ -374,7 +378,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
                         }
                         OverlayIcon(Icons.Rounded.Speed, "Speed") { speedMenu = true }
                         OverlayIcon(Icons.Rounded.Lock, "Lock") { locked = true; unlockHint = true; view?.hideController() }
-                        OverlayIcon(if (fill) Icons.Rounded.FitScreen else Icons.Rounded.ZoomOutMap, if (fill) "Show whole picture" else "Fill screen") { fill = !fill; flash = if (fill) "Filling the screen" else "Whole picture" }
+                        OverlayIcon(if (fill) Icons.Rounded.FitScreen else Icons.Rounded.ZoomOutMap, if (fill) "Fit whole picture" else "Fill screen") { fill = !fill; flash = if (fill) "Zoomed to fill" else "Original fit (verses fully visible)" }
                         OverlayIcon(Icons.Rounded.PictureInPictureAlt, "Mini player") { enterPip(activity) }
                     }
                 }

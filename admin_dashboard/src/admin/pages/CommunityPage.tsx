@@ -1,3 +1,4 @@
+import {CommunityReports} from "../components/CommunityReports";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -135,6 +136,7 @@ export function CommunityPage() {
 
       {error ? <InlineAlert title="Chat moderation could not be updated" message={error} /> : null}
 
+      <CommunityReports/>
       <section className="list-card" style={{ marginBottom: 18 }}>
         <div className="list-controls">
           <input

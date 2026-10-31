@@ -156,7 +156,6 @@ function normalizeMediaResponse(
         url: extracted,
         name: file.name,
         size: file.size || 0,
-      provider: inferProviderFromUrl(extracted),
         provider: inferProviderFromUrl(extracted)
       };
     }

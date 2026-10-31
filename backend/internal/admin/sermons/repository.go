@@ -41,7 +41,7 @@ func (r Repository) List(ctx context.Context) ([]Sermon, error) {
 			s.stream_uid,
 			s.status,
 			s.created_at,
-			s.updated_at
+			s.updated_at, s.is_published, s.notify_on_publish
 		FROM sermons s
 		LEFT JOIN sermon_categories c ON c.id = s.category_id
 		ORDER BY s.sermon_date DESC, s.created_at DESC
@@ -93,7 +93,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (Sermon, error) {
 			s.stream_uid,
 			s.status,
 			s.created_at,
-			s.updated_at
+			s.updated_at, s.is_published, s.notify_on_publish
 		FROM sermons s
 		LEFT JOIN sermon_categories c ON c.id = s.category_id
 		WHERE s.id = $1
@@ -133,9 +133,9 @@ func (r Repository) Create(ctx context.Context, command Command) (Sermon, error)
 			code,
 			source,
 			stream_uid,
-			status
+			status, is_published, notify_on_publish
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10, $11, $12, $13, $14, $15, $16, $17)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		RETURNING
 			id,
 			external_id,
@@ -156,7 +156,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Sermon, error)
 			stream_uid,
 			status,
 			created_at,
-			updated_at
+			updated_at, is_published, notify_on_publish
 	`
 
 	row := r.db.QueryRow(
@@ -178,7 +178,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Sermon, error)
 		command.Code,
 		command.Source,
 		command.StreamUID,
-		command.Status,
+		command.Status, command.IsPublished, command.NotifyOnPublish,
 	)
 
 	item, err := scanSermon(row)
@@ -208,7 +208,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Sermon, error)
 			code = $14,
 			source = $15,
 			stream_uid = $16,
-			status = $17,
+			status = $17, is_published=$18, notify_on_publish=$19,
 			updated_at = now()
 		WHERE id = $1
 		RETURNING
@@ -231,7 +231,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Sermon, error)
 			stream_uid,
 			status,
 			created_at,
-			updated_at
+			updated_at, is_published, notify_on_publish
 	`
 
 	row := r.db.QueryRow(
@@ -253,7 +253,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Sermon, error)
 		command.Code,
 		command.Source,
 		command.StreamUID,
-		command.Status,
+		command.Status, command.IsPublished, command.NotifyOnPublish,
 	)
 
 	item, err := scanSermon(row)
@@ -290,7 +290,7 @@ func (r Repository) FindByExternalID(ctx context.Context, externalID string) (Se
 			s.stream_uid,
 			s.status,
 			s.created_at,
-			s.updated_at
+			s.updated_at, s.is_published, s.notify_on_publish
 		FROM sermons s
 		LEFT JOIN sermon_categories c ON c.id = s.category_id
 		WHERE s.external_id = $1
@@ -330,7 +330,7 @@ func (r Repository) FindByStreamUID(ctx context.Context, streamUID string) (Serm
 			s.stream_uid,
 			s.status,
 			s.created_at,
-			s.updated_at
+			s.updated_at, s.is_published, s.notify_on_publish
 		FROM sermons s
 		LEFT JOIN sermon_categories c ON c.id = s.category_id
 		WHERE s.stream_uid = $1
@@ -370,7 +370,7 @@ func (r Repository) ListByStatus(ctx context.Context, status string) ([]Sermon, 
 			s.stream_uid,
 			s.status,
 			s.created_at,
-			s.updated_at
+			s.updated_at, s.is_published, s.notify_on_publish
 		FROM sermons s
 		LEFT JOIN sermon_categories c ON c.id = s.category_id
 		WHERE s.status = $1
@@ -444,7 +444,7 @@ func scanSermon(row sermonScanner) (Sermon, error) {
 		&item.StreamUID,
 		&item.Status,
 		&item.CreatedAt,
-		&item.UpdatedAt,
+		&item.UpdatedAt, &item.IsPublished, &item.NotifyOnPublish,
 	); err != nil {
 		return Sermon{}, fmt.Errorf("scan sermon: %w", err)
 	}

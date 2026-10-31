@@ -29,7 +29,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Runtime uploads
-uploads/
+/uploads/
 backend/uploads/
 
 # OS/editor
@@ -39,3 +39,13 @@ backend/uploads/
 
 # local design references (client-supplied screenshots)
 design/
+
+# Local private live recordings/cache
+.local/
+
+# Ministry release signing material belongs outside the repository
+*.jks
+*.p12
+*.pfx
+signing.env
+release/artifacts/

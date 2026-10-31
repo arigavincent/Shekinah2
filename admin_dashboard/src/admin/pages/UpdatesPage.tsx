@@ -1,3 +1,4 @@
+import {DateField,TimeField} from "../components/DateTimeFields";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -234,14 +235,7 @@ export function UpdatesPage() {
             />
           </label>
 
-          <label>
-            Date
-            <input
-              value={form.updateDate}
-              onChange={event => updateField("updateDate", event.target.value)}
-              placeholder="YYYY-MM-DD"
-            />
-          </label>
+          <DateField label="Date" value={form.updateDate} onChange={value=>updateField("updateDate",value)}/>
 
           <label>
             Image URL

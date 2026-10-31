@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"errors"
+	"github.com/ariga/shekinah-backend/internal/eventreg"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,14 @@ func (s Service) List(ctx context.Context) ([]Event, error) {
 }
 
 func (s Service) Create(ctx context.Context, req CreateRequest) (Event, error) {
+	if req.ID != "" {
+		if existing, e := s.repository.FindByID(ctx, req.ID); e == nil {
+			if existing.Title != strings.TrimSpace(req.Title) {
+				return Event{}, ErrInvalidInput
+			}
+			return existing, nil
+		}
+	}
 	command, err := createCommandFromRequest(req)
 	if err != nil {
 		return Event{}, err
@@ -48,6 +57,7 @@ func (s Service) Update(ctx context.Context, id string, req UpdateRequest) (Even
 	}
 
 	command := Command{
+		PublishedAt: current.PublishedAt, IsPublished: current.IsPublished, NotifyOnPublish: current.NotifyOnPublish,
 		ID:          current.ID,
 		Title:       current.Title,
 		EventDate:   currentDate,
@@ -57,6 +67,19 @@ func (s Service) Update(ctx context.Context, id string, req UpdateRequest) (Even
 		Description: current.Description,
 	}
 
+	if req.PublishedAt != nil {
+		v, e := parsePublication(*req.PublishedAt)
+		if e != nil {
+			return Event{}, ErrInvalidInput
+		}
+		command.PublishedAt = v
+	}
+	if req.IsPublished != nil {
+		command.IsPublished = *req.IsPublished
+	}
+	if req.NotifyOnPublish != nil {
+		command.NotifyOnPublish = *req.NotifyOnPublish
+	}
 	if req.Title != nil {
 		command.Title = strings.TrimSpace(*req.Title)
 	}
@@ -110,6 +133,7 @@ func createCommandFromRequest(req CreateRequest) (Command, error) {
 
 	command := Command{
 		ID:          generateID("evt"),
+		PublishedAt: time.Now().UTC(), IsPublished: req.IsPublished == nil || *req.IsPublished, NotifyOnPublish: req.NotifyOnPublish == nil || *req.NotifyOnPublish,
 		Title:       strings.TrimSpace(req.Title),
 		EventDate:   eventDate,
 		EventTime:   strings.TrimSpace(req.EventTime),
@@ -118,6 +142,25 @@ func createCommandFromRequest(req CreateRequest) (Command, error) {
 		Description: strings.TrimSpace(req.Description),
 	}
 
+	if req.RegistrationSetup != nil {
+		normalized, e := eventreg.NormalizeSetup(*req.RegistrationSetup)
+		if e != nil {
+			return Command{}, ErrInvalidInput
+		}
+		command.Setup = normalized
+	} else {
+		command.Setup = eventreg.Setup{Mode: "none", Fields: []eventreg.Field{}}
+	}
+	if req.ID != "" {
+		command.ID = req.ID
+	}
+	if req.PublishedAt != "" {
+		v, e := parsePublication(req.PublishedAt)
+		if e != nil {
+			return Command{}, ErrInvalidInput
+		}
+		command.PublishedAt = v
+	}
 	if err := validateCommand(command); err != nil {
 		return Command{}, err
 	}
@@ -143,4 +186,13 @@ func parseDate(value string) (time.Time, error) {
 
 func generateID(prefix string) string {
 	return prefix + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
+func parsePublication(value string) (time.Time, error) {
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04Z07:00", "2006-01-02T15:04", "2006-01-02 15:04"} {
+		if v, e := time.ParseInLocation(layout, strings.TrimSpace(value), time.FixedZone("Africa/Nairobi", 10800)); e == nil {
+			return v.UTC(), nil
+		}
+	}
+	return time.Time{}, ErrInvalidInput
 }

@@ -7,9 +7,11 @@ package live
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -40,6 +42,7 @@ type Handler struct {
 	// Where phones publish and where viewers watch, as phones reach them.
 	rtmpBase string
 	hlsBase  string
+	whipBase string
 	apiBase  string
 
 	mu      sync.Mutex
@@ -73,6 +76,7 @@ func NewHandler(db *pgxpool.Pool, notifier Notifier, chat ChatCloser) *Handler {
 		client:   &http.Client{Timeout: 5 * time.Second},
 		rtmpBase: env("LIVE_RTMP_URL", "rtmp://127.0.0.1:1935"),
 		hlsBase:  env("LIVE_HLS_URL", "http://127.0.0.1:8888"),
+		whipBase: env("LIVE_WHIP_URL", "http://127.0.0.1:8889"),
 		apiBase:  env("LIVE_MEDIAMTX_API", "http://127.0.0.1:9997"),
 		viewers:  map[string]time.Time{},
 	}
@@ -109,6 +113,11 @@ func (h *Handler) current(ctx context.Context) (*Session, string, string, error)
 		return nil, "", "", err
 	}
 	s.PlaybackURL = h.playbackURL()
+	var transport string
+	_ = h.db.QueryRow(ctx, `SELECT transport FROM live_sessions WHERE id=$1`, s.ID).Scan(&transport)
+	if transport == "r2" {
+		s.PlaybackURL = directPrefix + s.ID + "/index.m3u8"
+	}
 	s.Viewers = h.viewerCount()
 	return &s, key, broadcasterID, nil
 }
@@ -123,10 +132,25 @@ func randomKey() string {
 func (h *Handler) Start(c *gin.Context) {
 	userID, _ := auth.UserIDFromContext(c)
 	var req struct {
-		Title string `json:"title"`
-		Price int    `json:"price"`
+		Title     string `json:"title"`
+		Price     int    `json:"price"`
+		Transport string `json:"transport"`
+		Format    string `json:"format"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if c.ShouldBindJSON(&req) != nil {
+		c.JSON(400, gin.H{"message": "Check the broadcast title and price"})
+		return
+	}
+	if req.Transport == "" {
+		req.Transport = env("LIVE_TRANSPORT", "mediamtx")
+	}
+	if req.Format == "" {
+		req.Format = "mpegts"
+	}
+	if (req.Transport != "mediamtx" && req.Transport != "r2") || (req.Format != "mpegts" && req.Format != "fmp4") {
+		c.JSON(400, gin.H{"message": "Unsupported broadcast format"})
+		return
+	}
 	if req.Price < 0 || req.Price > 1_000_000 {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Check the price"})
 		return
@@ -135,10 +159,21 @@ func (h *Handler) Start(c *gin.Context) {
 	if title == "" {
 		title = "Live Service"
 	}
-	if len(title) > 120 {
-		title = title[:120]
+	if chars := []rune(title); len(chars) > 120 {
+		title = string(chars[:120])
 	}
 	ctx := c.Request.Context()
+	conn, lockErr := h.db.Acquire(ctx)
+	if lockErr != nil {
+		c.JSON(503, gin.H{"message": "Broadcast service unavailable"})
+		return
+	}
+	defer conn.Release()
+	if _, lockErr = conn.Exec(ctx, `SELECT pg_advisory_lock(73915001)`); lockErr != nil {
+		c.JSON(503, gin.H{"message": "Could not reserve broadcast"})
+		return
+	}
+	defer func() { _, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock(73915001)`) }()
 	existing, _, broadcasterID, err := h.current(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not start the live"})
@@ -148,26 +183,85 @@ func (h *Handler) Start(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"message": existing.Broadcaster + " is already live. Only one broadcast at a time."})
 		return
 	}
-	// Starting again (e.g. after the app was closed) replaces your own session.
-	_, _ = h.db.Exec(ctx, `UPDATE live_sessions SET status = 'ended', ended_at = NOW() WHERE status IN ('starting','live') AND broadcaster_id = $1`, userID)
+	// Finish the old recording before replacing the broadcaster's session.
+	if existing != nil {
+		h.end(ctx)
+	}
 
 	key := randomKey()
 	id := "live-" + randomKey()[:12]
+	var recordingErr error
+	if req.Transport == "r2" {
+		_, recordingErr = newArchiveStore(ctx)
+	} else {
+		recordingErr = h.prepareRecording(ctx, id)
+	}
+	if err := recordingErr; err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": fmt.Sprintf("Recording server is unavailable: %v", err)})
+		return
+	}
 	// Each new live starts with chat on.
 	_, _ = h.db.Exec(ctx, `UPDATE app_settings SET value = (value::jsonb || '{"chatOff": false}'::jsonb)::text WHERE key = 'live_chat'`)
-	if _, err := h.db.Exec(ctx, `INSERT INTO live_sessions (id, title, broadcaster_id, stream_key, price) VALUES ($1, $2, $3, $4, $5)`, id, title, userID, key, req.Price); err != nil {
+	if _, err := h.db.Exec(ctx, `INSERT INTO live_sessions (id, title, broadcaster_id, stream_key, price, recording_expected,transport,segment_format) VALUES ($1, $2, $3, $4, $5, TRUE,$6,$7)`, id, title, userID, key, req.Price, req.Transport, req.Format); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not start the live"})
 		return
 	}
+	c.Set("audit_item_id", id)
 	session, _, _, _ := h.current(ctx)
+	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusCreated, gin.H{
-		"session":    session,
-		"publishUrl": h.rtmpBase + "/" + path + "?key=" + key,
+		"transport":     req.Transport,
+		"segmentFormat": req.Format,
+		"encryptionKey": base64.StdEncoding.EncodeToString(directKey(id)),
+		"directBase":    directPrefix + id,
+		"session":       session,
+		"publishUrl":    h.rtmpBase + "/" + path + "?key=" + key,
+		"whipUrl":       h.whipBase + "/" + path + "/whip?key=" + key,
 	})
 }
 
 // POST /live/stop: the broadcaster (or an admin with the permission) ends it.
 func (h *Handler) Stop(c *gin.Context) {
+	var req struct {
+		SessionID string `json:"sessionId"`
+	}
+	if c.Request.ContentLength > 0 && c.ShouldBindJSON(&req) != nil {
+		c.JSON(400, gin.H{"message": "Check the broadcast session"})
+		return
+	}
+	ctx := c.Request.Context()
+	conn, e := h.db.Acquire(ctx)
+	if e != nil {
+		c.JSON(503, gin.H{"message": "Broadcast service unavailable"})
+		return
+	}
+	defer conn.Release()
+	if _, e = conn.Exec(ctx, `SELECT pg_advisory_lock(73915001)`); e != nil {
+		c.JSON(503, gin.H{"message": "Broadcast service unavailable"})
+		return
+	}
+	defer func() { _, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock(73915001)`) }()
+	user, _ := auth.UserIDFromContext(c)
+	session, _, owner, err := h.current(c.Request.Context())
+	if err != nil {
+		c.JSON(503, gin.H{"message": "Could not load broadcast"})
+		return
+	}
+	if req.SessionID != "" && (session == nil || session.ID != req.SessionID) {
+		c.JSON(409, gin.H{"message": "This broadcast has already ended or changed"})
+		return
+	}
+	if owner != "" && owner != user {
+		var admin bool
+		_ = h.db.QueryRow(c.Request.Context(), `SELECT role IN ('admin','super_admin') FROM users WHERE id=$1`, user).Scan(&admin)
+		if !admin {
+			c.JSON(403, gin.H{"message": "Only this broadcaster or an admin may end the service"})
+			return
+		}
+	}
+	if session != nil {
+		c.Set("audit_item_id", session.ID)
+	}
 	h.end(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -181,22 +275,28 @@ func (h *Handler) end(ctx context.Context) {
 	if h.chat != nil {
 		h.chat.CloseLive()
 	}
-	// Let the server drop the publisher too.
-	if req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.apiBase+"/v3/rtmpconns/list", nil); err == nil {
-		if resp, err := h.client.Do(req); err == nil {
-			var list struct {
-				Items []struct {
-					ID    string `json:"id"`
-					State string `json:"state"`
-				} `json:"items"`
-			}
-			_ = json.NewDecoder(resp.Body).Decode(&list)
-			resp.Body.Close()
-			for _, item := range list.Items {
-				if item.State == "publish" {
-					kick, _ := http.NewRequestWithContext(ctx, http.MethodPost, h.apiBase+"/v3/rtmpconns/kick/"+item.ID, nil)
-					if r, err := h.client.Do(kick); err == nil {
-						r.Body.Close()
+	_, _ = h.db.Exec(ctx, `INSERT INTO live_archives(session_id,status,object_key,size_bytes) SELECT l.id,'ready','r2-hls/'||l.id,COALESCE(SUM(s.size_bytes),0) FROM live_sessions l JOIN live_segments s ON s.session_id=l.id AND s.ready WHERE l.transport='r2' AND l.status='ended' AND EXISTS(SELECT 1 FROM live_segments WHERE session_id=l.id AND sequence=0 AND ready) GROUP BY l.id ON CONFLICT(session_id) DO NOTHING`)
+	if env("LIVE_TRANSPORT", "mediamtx") == "r2" {
+		return
+	}
+	// Drop both native RTMP and browser WebRTC publishers so recordings can finalize.
+	for _, endpoint := range []string{"/v3/rtmp/conns", "/v3/webrtc/sessions"} {
+		if req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.apiBase+endpoint+"/list", nil); err == nil {
+			if resp, err := h.client.Do(req); err == nil {
+				var list struct {
+					Items []struct {
+						ID    string `json:"id"`
+						State string `json:"state"`
+					} `json:"items"`
+				}
+				_ = json.NewDecoder(resp.Body).Decode(&list)
+				resp.Body.Close()
+				for _, item := range list.Items {
+					if item.State == "publish" {
+						kick, _ := http.NewRequestWithContext(ctx, http.MethodPost, h.apiBase+endpoint+"/kick/"+item.ID, nil)
+						if r, err := h.client.Do(kick); err == nil {
+							r.Body.Close()
+						}
 					}
 				}
 			}
@@ -305,7 +405,10 @@ func (h *Handler) MediaMTXAuth(c *gin.Context) {
 
 func (h *Handler) readAllowed(ctx context.Context, token, query string) bool {
 	session, _, _, err := h.current(ctx)
-	if err != nil || session == nil || session.Price <= 0 {
+	if err != nil || session == nil {
+		return false
+	}
+	if session.Price <= 0 {
 		return true
 	}
 	if token == "" {
@@ -318,7 +421,11 @@ func (h *Handler) readAllowed(ctx context.Context, token, query string) bool {
 	if token == "" || h.tokens == nil {
 		return false
 	}
-	// Segments are requested every second or two; remember answers briefly.
+	userID, parseErr := h.tokens.ParseToken(token)
+	if parseErr != nil {
+		return false
+	}
+	// Segments are requested every second or two; remember entitlements briefly.
 	cacheKey := token + "|" + session.ID
 	h.allowMu.Lock()
 	if h.allowed == nil {
@@ -329,8 +436,7 @@ func (h *Handler) readAllowed(ctx context.Context, token, query string) bool {
 	if ok && time.Now().Before(until) {
 		return true
 	}
-	userID, err := h.tokens.ParseToken(token)
-	if err != nil || !h.canWatch(ctx, session, userID) {
+	if !h.canWatch(ctx, session, userID) {
 		return false
 	}
 	h.allowMu.Lock()
@@ -358,6 +464,23 @@ func (h *Handler) Watch(ctx context.Context) {
 		session, _, _, err := h.current(ctx)
 		if err != nil || session == nil {
 			lostSince = time.Time{}
+			continue
+		}
+		var transport string
+		var last *time.Time
+		_ = h.db.QueryRow(ctx, `SELECT transport,last_segment_at FROM live_sessions WHERE id=$1`, session.ID).Scan(&transport, &last)
+		if transport == "r2" {
+			stale := time.Since(session.CreatedAt) > 3*time.Minute
+			if last != nil {
+				stale = time.Since(*last) > 3*time.Minute
+			}
+			if stale {
+				h.end(ctx)
+			} else {
+				n := h.viewerCount()
+				_, _ = h.db.Exec(ctx, `UPDATE live_sessions SET peak_viewers=GREATEST(peak_viewers,$2) WHERE id=$1`, session.ID, n)
+				_, _ = h.db.Exec(ctx, `UPDATE live_stream_config SET viewers=$1 WHERE id='main'`, itoa(n))
+			}
 			continue
 		}
 		ready := h.pathReady(ctx)

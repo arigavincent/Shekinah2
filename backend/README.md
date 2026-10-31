@@ -64,3 +64,15 @@ Optional service integrations:
 ```bash
 GOCACHE=/tmp/shekinah-go-cache GOMODCACHE=/tmp/shekinah-go-mod go test ./...
 ```
+
+Run the database integration checks against the local Docker Postgres instance:
+
+```bash
+make test-integration
+```
+
+These create and remove disposable databases. They cover authentication, attendance
+permissions and duplicate scans, attendance PDF reports, Serve requests, reading-plan
+progress and private notes, branch management, and password reset for members and
+admins. A temporary SMTP inbox on loopback checks email delivery without sending
+messages outside the machine.

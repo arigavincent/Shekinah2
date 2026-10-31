@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+let source=fs.readFileSync(new URL('../src/admin/live/DirectPublisher.ts',import.meta.url),'utf8');
+source=source.slice(source.indexOf('type Box ='),source.indexOf('export class DirectPublisher')).replace('export class','class');
+const Timing=Function(ts.transpileModule(source+'\nreturn MP4Timing;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText)();
+const u32=(...ns)=>{const b=Buffer.alloc(ns.length*4);ns.forEach((n,i)=>b.writeUInt32BE(n,i*4));return b};
+const box=(kind,...bs)=>{const b=Buffer.concat(bs);return Buffer.concat([u32(b.length+8),Buffer.from(kind),b])};
+const track=(id,count,duration)=>box('traf',box('tfhd',u32(8,id,duration)),box('tfdt',u32(0,0)),box('trun',u32(0,count)));
+const timing=new Timing();timing.tracks=new Map([[1,90000],[2,48000]]);timing.video=1;
+assert.equal(timing.duration(box('moof',track(2,100,960))),2,'audio-only fragment must keep live capture going');
+assert.equal(timing.duration(box('moof',track(1,0,3000),track(2,100,960))),2,'empty video track must use audio timing');
+assert.equal(timing.duration(box('moof',track(1,60,3000),track(2,101,960))),2,'normal video timing must be preserved');
+assert.equal(timing.duration(box('moof',track(1,0,3000))),0,'empty heartbeat must not reserve a sequence');
+console.log('MP4 live timing: audio-only, empty video, normal video and empty heartbeat passed');

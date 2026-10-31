@@ -1,3 +1,5 @@
+import { MonetizationPage } from "./pages/MonetizationPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 
@@ -23,6 +25,15 @@ import { ReadingPlansPage } from "./pages/ReadingPlansPage";
 import { AppearancePage } from "./pages/AppearancePage";
 import { ServeSettingsPage } from "./pages/ServeSettingsPage";
 import { TeamPage } from "./pages/TeamPage";
+// Super Admin pages
+import { MembersPage } from "./pages/MembersPage";
+import { FinancePage } from "./pages/FinancePage";
+import { GroupsPage } from "./pages/GroupsPage";
+import { AttendancePage } from "./pages/AttendancePage";
+import { CommTemplatesPage } from "./pages/CommTemplatesPage";
+import { ApiKeysPage } from "./pages/ApiKeysPage";
+import { WebhooksPage } from "./pages/WebhooksPage";
+import { SystemPage } from "./pages/SystemPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const token = getToken();
@@ -38,6 +49,12 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   return children;
+}
+
+function SuperAdminRoute({ children }: { children: ReactNode }) {
+  const user = getUser();
+  if (user?.role !== "super_admin") return <Navigate to="/" replace />;
+  return <ProtectedRoute>{children}</ProtectedRoute>;
 }
 
 export default function App() {
@@ -79,9 +96,22 @@ export default function App() {
         <Route path="checkins" element={<CheckInPage />} />
         <Route path="giving" element={<GivingPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="serve-settings" element={<ServeSettingsPage />} />
-        <Route path="team" element={<TeamPage />} />
+        <Route path="users" element={<TeamPage />} />
+        <Route path="team" element={<Navigate to="/users" replace />} />
+        <Route path="monetization" element={<MonetizationPage />} />
         <Route path="appearance" element={<AppearancePage />} />
+
+        {/* Super Admin routes */}
+        <Route path="sa/members" element={<SuperAdminRoute><MembersPage /></SuperAdminRoute>} />
+        <Route path="sa/finance" element={<SuperAdminRoute><FinancePage /></SuperAdminRoute>} />
+        <Route path="sa/groups" element={<SuperAdminRoute><GroupsPage /></SuperAdminRoute>} />
+        <Route path="sa/attendance" element={<SuperAdminRoute><AttendancePage /></SuperAdminRoute>} />
+        <Route path="sa/comm-templates" element={<SuperAdminRoute><CommTemplatesPage /></SuperAdminRoute>} />
+        <Route path="sa/api-keys" element={<SuperAdminRoute><ApiKeysPage /></SuperAdminRoute>} />
+        <Route path="sa/webhooks" element={<SuperAdminRoute><WebhooksPage /></SuperAdminRoute>} />
+        <Route path="sa/system" element={<SuperAdminRoute><SystemPage /></SuperAdminRoute>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

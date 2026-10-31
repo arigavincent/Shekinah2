@@ -155,7 +155,7 @@ func cleanOrder(value string) string {
 }
 
 func formatTimestamp(value time.Time) string {
-	return value.UTC().Format(time.RFC3339)
+	return value.UTC().Format(time.RFC3339Nano)
 }
 
 func generateID(prefix string) string {
@@ -289,16 +289,24 @@ func (h Handler) List(c *gin.Context) {
 		  AND m.status = 'approved'
 	`
 	args := []any{channel}
+	if before := c.Query("before"); before != "" {
+		query += ` AND (m.created_at,m.id)<(SELECT created_at,id FROM community_messages WHERE id=$2 AND channel=$1)`
+		args = append(args, before)
+	}
+	if after := c.Query("after"); after != "" {
+		args = append(args, after)
+		query += ` AND (m.created_at,m.id)>(SELECT created_at,id FROM community_messages WHERE id=$` + strconv.Itoa(len(args)) + ` AND channel=$1)`
+	}
 	if sinceRaw != "" {
-		since, err := time.Parse(time.RFC3339, sinceRaw)
+		since, err := time.Parse(time.RFC3339Nano, sinceRaw)
 		if err != nil {
-			httpx.Error(c, http.StatusBadRequest, "invalid_input", "invalid since timestamp")
+			httpx.Error(c, 400, "invalid_input", "invalid since timestamp")
 			return
 		}
-		query += ` AND m.created_at > $2`
 		args = append(args, since.UTC())
+		query += ` AND m.created_at >= $` + strconv.Itoa(len(args))
 	}
-	query += ` ORDER BY m.created_at ` + order
+	query += ` ORDER BY m.created_at ` + order + `, m.id ` + order
 	query += ` LIMIT $` + strconv.Itoa(len(args)+1)
 	args = append(args, limit)
 
@@ -328,10 +336,37 @@ func (h Handler) List(c *gin.Context) {
 		return
 	}
 
+	removed := []string{}
+	if raw := c.Query("known"); raw != "" {
+		ids := strings.Split(raw, ",")
+		if len(ids) > 500 {
+			httpx.Error(c, 400, "invalid_input", "too many known messages")
+			return
+		}
+		found := map[string]bool{}
+		visible, e := h.db.Query(c.Request.Context(), `SELECT id FROM community_messages WHERE channel=$1 AND status='approved' AND id=ANY($2)`, channel, ids)
+		if e != nil {
+			httpx.Error(c, 500, "community_list_failed", "could not refresh moderation")
+			return
+		}
+		for visible.Next() {
+			var id string
+			_ = visible.Scan(&id)
+			found[id] = true
+		}
+		visible.Close()
+		for _, id := range ids {
+			if !found[id] {
+				removed = append(removed, id)
+			}
+		}
+	}
+
 	httpx.OK(c, gin.H{
 		"channel":  channel,
 		"active":   active,
 		"messages": items,
+		"removed":  removed, "hasMore": len(items) == limit,
 	})
 }
 
@@ -586,6 +621,9 @@ func (h Handler) AdminList(c *gin.Context) {
 			httpx.Error(c, http.StatusInternalServerError, "community_admin_list_failed", "failed to load admin chat queue")
 			return
 		}
+		if strings.Contains(c.FullPath(), "/live/chat/messages") {
+			item.UserEmail = ""
+		}
 		items = append(items, item)
 	}
 
@@ -683,7 +721,7 @@ func (h Handler) Delete(c *gin.Context) {
 
 	result, err := h.db.Exec(
 		c.Request.Context(),
-		`DELETE FROM community_messages WHERE id = $1`,
+		`UPDATE community_messages SET status='hidden',hidden_reason='Removed by moderator',updated_at=NOW() WHERE id=$1`,
 		id,
 	)
 	if err != nil {
@@ -755,7 +793,7 @@ func (h Handler) UpdateLiveChatSettings(c *gin.Context) {
 
 // POST /live/chat/messages/:id/hide (moderators): removes a comment for everyone.
 func (h Handler) ModHide(c *gin.Context) {
-	tag, err := h.db.Exec(c.Request.Context(), `UPDATE community_messages SET status = 'hidden', pinned = FALSE, hidden_reason = 'Removed by a moderator', updated_at = NOW() WHERE id = $1`, c.Param("id"))
+	tag, err := h.db.Exec(c.Request.Context(), `UPDATE community_messages SET status = 'hidden', pinned = FALSE, hidden_reason = 'Removed by a moderator', updated_at = NOW() WHERE id = $1 AND channel='live'`, c.Param("id"))
 	if err != nil || tag.RowsAffected() == 0 {
 		httpx.Error(c, http.StatusNotFound, "not_found", "message not found")
 		return
@@ -769,29 +807,49 @@ func (h Handler) ModPin(c *gin.Context) {
 	var req struct {
 		Pinned bool `json:"pinned"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if c.ShouldBindJSON(&req) != nil {
+		c.JSON(400, gin.H{"message": "Check pin settings"})
+		return
+	}
 	ctx := c.Request.Context()
-	if _, err := h.db.Exec(ctx, `UPDATE community_messages SET pinned = FALSE WHERE channel = 'live' AND pinned = TRUE`); err != nil {
-		httpx.Error(c, http.StatusInternalServerError, "pin_failed", "failed to pin")
+	tx, err := h.db.Begin(ctx)
+	if err != nil {
+		c.JSON(503, gin.H{"message": "Could not pin message"})
+		return
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(73915003)`); err != nil {
+		c.JSON(503, gin.H{"message": "Could not pin message"})
+		return
+	}
+	var exists bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM community_messages WHERE id=$1 AND channel='live' AND status='approved')`, c.Param("id")).Scan(&exists); err != nil || !exists {
+		c.JSON(404, gin.H{"message": "Live message not found"})
+		return
+	}
+	if req.Pinned {
+		if _, err = tx.Exec(ctx, `UPDATE community_messages SET pinned=FALSE WHERE channel='live' AND pinned`); err != nil {
+			c.JSON(500, gin.H{"message": "Could not update pin"})
+			return
+		}
+	}
+	item, err := scanMessage(tx.QueryRow(ctx, `UPDATE community_messages m SET pinned=$2,updated_at=NOW() FROM users u WHERE m.id=$1 AND m.channel='live' AND m.status='approved' AND u.id=m.user_id RETURNING m.id,m.channel,m.display_name,m.message,m.status,m.hidden_reason,m.created_at,u.id::text,''::text,m.pinned,m.badge,NULL::text,NULL::text,NULL::text`, c.Param("id"), req.Pinned))
+	if err != nil {
+		c.JSON(404, gin.H{"message": "Live message not found"})
+		return
+	}
+	if err = tx.Commit(ctx); err != nil {
+		c.JSON(500, gin.H{"message": "Could not save pin"})
 		return
 	}
 	if !req.Pinned {
 		h.liveHub.broadcast(liveEvent{Type: "unpin", Active: true, ID: c.Param("id")})
-		c.JSON(http.StatusOK, gin.H{"ok": true})
-		return
-	}
-	item, err := scanMessage(h.db.QueryRow(ctx, `
-		UPDATE community_messages m SET pinned = TRUE, updated_at = NOW()
-		FROM users u WHERE m.id = $1 AND u.id = m.user_id AND m.status = 'approved'
-		RETURNING m.id, m.channel, m.display_name, m.message, m.status, m.hidden_reason, m.created_at,
-		          u.id::text, ''::text, m.pinned, m.badge, NULL::text, NULL::text, NULL::text`, c.Param("id")))
-	if err != nil {
-		httpx.Error(c, http.StatusNotFound, "not_found", "message not found")
+		c.JSON(200, gin.H{"ok": true})
 		return
 	}
 	item.HiddenReason = ""
 	h.liveHub.broadcast(liveEvent{Type: "pin", Active: true, Message: &item})
-	c.JSON(http.StatusOK, gin.H{"message": item})
+	c.JSON(200, gin.H{"message": item})
 }
 
 // POST /live/chat/bans {"userId": "...", "reason": "..."} (moderators): stop a member chatting
@@ -856,4 +914,12 @@ func (h Handler) ModBans(c *gin.Context) {
 // CloseLive tells connected viewers the live chat has ended.
 func (h Handler) CloseLive() {
 	h.liveHub.broadcast(liveEvent{Type: "inactive", Active: false})
+}
+
+// A live moderator sees the live channel only, regardless of supplied query parameters.
+func (h Handler) ModMessages(c *gin.Context) {
+	q := c.Request.URL.Query()
+	q.Set("channel", "live")
+	c.Request.URL.RawQuery = q.Encode()
+	h.AdminList(c)
 }

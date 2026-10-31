@@ -81,7 +81,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 
 @Serializable
-data class AdminEvent(val id: String = "", val title: String = "", val eventDate: String = "", val eventTime: String = "", val location: String = "", val imageUrl: String = "", val description: String = "")
+data class AdminEvent(val publishedAt:String="",val isPublished:Boolean=true,val notifyOnPublish:Boolean=false,val id: String = "", val title: String = "", val eventDate: String = "", val eventTime: String = "", val location: String = "", val imageUrl: String = "", val description: String = "")
 
 @Serializable
 data class Registrant(val name: String = "", val email: String = "", val answers: Map<String, String> = emptyMap(), val ticket: String = "", val payment: String = "none", val registered: String = "")
@@ -105,6 +105,7 @@ fun AdminEventsPane() {
         creating -> NewEvent(onBack = { creating = false }) { creating = false; reload++ }
         e != null -> EventManager(e) { editing = null; reload++ }
         else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        BatchPublishingPane("event")
             GoldButton("New event") { creating = true }
             ErrorNote(error)
             events.forEach { ev ->
@@ -156,8 +157,8 @@ private fun NewEvent(onBack: () -> Unit, done: () -> Unit) {
         }
         Field("TITLE", title, { title = it.take(120) })
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Field("DATE (YYYY-MM-DD)", date, { date = it.take(10) }, Modifier.weight(1f))
-            Field("TIME", time, { time = it.take(20) }, Modifier.weight(1f))
+            CalendarField("DATE", date, { date = it }, Modifier.weight(1f))
+            ClockField("TIME", time, { time = it }, Modifier.weight(1f))
         }
         Field("PLACE", location, { location = it.take(120) })
         Field("DESCRIPTION", description, { description = it.take(3000) }, minHeight = 110.dp, singleLine = false)
@@ -193,6 +194,7 @@ private fun EventManager(e: AdminEvent, onBack: () -> Unit) {
     var tab by remember { mutableStateOf("setup") }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BackLine(e.title, onBack)
+        PublicationEditor("/admin/events/${e.id}",e.publishedAt,e.isPublished,e.notifyOnPublish)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("setup" to "Registration setup", "people" to "Registrations").forEach { (k, label) ->
                 val on = tab == k
@@ -245,7 +247,7 @@ private fun SetupEditor(e: AdminEvent) {
             }
         }
         if (mode == "link") Field("FORM LINK", formUrl, { formUrl = it.trim(); saved = false }, hint = "https://forms.gle/...", keyboard = KeyboardType.Uri)
-        if (mode != "link") {
+        run {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Paid event", color = Brand.White, fontWeight = FontWeight.SemiBold)
@@ -275,7 +277,7 @@ private fun SetupEditor(e: AdminEvent) {
                 error = null
                 runCatching {
                     Api.put("/admin/events/${e.id}/registration", mapOf(
-                        "mode" to mode, "formUrl" to formUrl, "price" to (if (paid && mode != "link") price.toIntOrNull() ?: 0 else 0),
+                        "mode" to mode, "formUrl" to formUrl, "price" to (if (paid) price.toIntOrNull() ?: 0 else 0),
                         "capacity" to (capacity.toIntOrNull() ?: 0),
                         "fields" to fields.map { mapOf("id" to it.id, "label" to it.label, "type" to it.type, "required" to it.required, "options" to it.options) },
                     ))
