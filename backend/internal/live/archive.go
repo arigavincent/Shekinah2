@@ -89,6 +89,9 @@ func (h *Handler) ArchiveWatch(ctx context.Context) {
 		if err := h.archiveNext(ctx); err != nil {
 			fmt.Printf("live archive: %v\n", err)
 		}
+		if err := h.thumbnailNext(ctx); err != nil {
+			fmt.Printf("replay thumbnail: %v\n", err)
+		}
 	}
 }
 func (h *Handler) archiveNext(ctx context.Context) error {
