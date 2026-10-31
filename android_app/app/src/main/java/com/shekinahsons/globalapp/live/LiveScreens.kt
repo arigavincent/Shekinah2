@@ -375,7 +375,7 @@ private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -
                 Text("You'll get a notification the moment we go live.", style = Type.Meta.copy(fontSize = 13.sp), color = Brand.Text2, textAlign = TextAlign.Center)
             }
         }
-        item { Box(Modifier.padding(horizontal=20.dp,vertical=12.dp)) { GoldButton("Watch service replays",onClick=replays) } }
+        Box(Modifier.padding(horizontal=20.dp,vertical=12.dp)) { GoldButton("Watch service replays",onClick=replays) }
         if (session.canBroadcast) {
             Spacer(Modifier.height(24.dp))
             Box(Modifier.padding(horizontal = 20.dp)) {
