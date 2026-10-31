@@ -5,12 +5,15 @@ import { getToken } from "../auth/session";
 import { releaseISO } from "../publishing/queue";
 import { localRelease } from "./PublishingQueue";
 import { AccessPrice } from "./AccessPrice";
+import { MemberSelect } from "./MemberSelect";
 import {
   RegistrationFields,
   emptyRegistration,
   type RegistrationSetup,
 } from "./RegistrationFields";
 type Registrant = {
+  id: string;
+  voided?: boolean;
   name: string;
   email: string;
   phone: string;
@@ -24,11 +27,25 @@ export function EventAccessEditor({
   id,
   publishedAt,
   isPublished,
+  cancelledAt = "",
+  closesAt = "",
 }: {
   id: string;
   publishedAt: string;
   isPublished: boolean;
+  cancelledAt?: string;
+  closesAt?: string;
 }) {
+  const [cancelled, setCancelled] = useState(!!cancelledAt),
+    [deadline, setDeadline] = useState(closesAt ? toLocalInput(closesAt) : ""),
+    [issueTo, setIssueTo] = useState("");
+  async function act(path: string, method: string, body?: unknown, done?: (r: { message?: string; ticket?: string }) => void) {
+    setError(""); setNotice("");
+    try {
+      const r = await apiRequest<{ message?: string; ticket?: string }>(`/api/v1/admin/events/${id}${path}`, { method, token: getToken(), body });
+      setNotice(r.message || "Saved."); done?.(r);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  }
   const [setup, setSetup] = useState<RegistrationSetup>({ ...emptyRegistration }),
     [release, setRelease] = useState(publishedAt),
     [published, setPublished] = useState(isPublished),
@@ -139,6 +156,17 @@ export function EventAccessEditor({
           <button disabled={busy} onClick={() => void save()}>
             {busy ? "Saving…" : "Save registration & access"}
           </button>
+          <div className="filters-row" style={{ alignItems: "end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            <label>
+              Registration closes (blank = open until the event)
+              <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            </label>
+            <button className="secondary compact" onClick={() => void act("/deadline", "PUT", { closesAt: deadline ? new Date(deadline).toISOString() : "" })}>Save deadline</button>
+            {cancelled
+              ? <button className="secondary compact" onClick={() => void act("/restore", "POST", undefined, () => setCancelled(false))}>Restore event</button>
+              : <button className="danger compact" onClick={() => void act("/cancel", "POST", { reason: "" }, () => setCancelled(true))}>Cancel event</button>}
+            {cancelled && <span className="status-chip danger">Cancelled · hidden in the app</span>}
+          </div>
           <details
             className="queue-item"
             onToggle={(e) => {
@@ -146,6 +174,13 @@ export function EventAccessEditor({
             }}
           >
             <summary>Registrations & tickets</summary>
+            <div className="filters-row" style={{ alignItems: "end", gap: 8, flexWrap: "wrap" }}>
+              <label style={{ minWidth: 240, flex: 1 }}>
+                Issue a ticket (registered in person)
+                <MemberSelect token={getToken()} value={issueTo} onChange={setIssueTo} />
+              </label>
+              <button className="secondary compact" disabled={!issueTo} onClick={() => void act("/registrations", "POST", { userId: issueTo }, () => { setIssueTo(""); void registrations(); })}>Issue ticket</button>
+            </div>
             <button className="secondary compact" onClick={() => void csv()}>
               Export registrations CSV
             </button>
@@ -160,8 +195,9 @@ export function EventAccessEditor({
                       {r.email} · {r.phone}
                     </p>
                     <p className="small-muted">
-                      {r.payment || r.status} · {r.ticket || "Ticket pending payment"}
+                      {r.voided ? "Voided · " : ""}{r.payment || r.status} · {r.ticket || "Ticket pending payment"}
                     </p>
+                    {!r.voided && r.id && <button className="secondary compact" onClick={() => void act(`/registrations/${r.id}`, "DELETE", undefined, () => void registrations())}>Void registration</button>}
                     {Object.entries(r.answers || {}).map(([key, value]) => (
                       <p key={key}>
                         {setup.fields.find((q) => q.id === key)?.label || key}: {value}
@@ -176,4 +212,10 @@ export function EventAccessEditor({
       )}
     </section>
   );
+}
+
+function toLocalInput(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

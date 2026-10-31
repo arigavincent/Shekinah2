@@ -1,3 +1,5 @@
+import { FamiliesPage } from "./pages/FamiliesPage";
+import { MessagesPage } from "./pages/MessagesPage";
 import { RolesPage } from "./pages/RolesPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { MonetizationPage } from "./pages/MonetizationPage";
@@ -109,6 +111,8 @@ export default function App() {
         {/* Super Admin routes */}
         <Route path="sa/members" element={<SuperAdminRoute><MembersPage /></SuperAdminRoute>} />
         <Route path="sa/roles" element={<SuperAdminRoute><RolesPage /></SuperAdminRoute>} />
+        <Route path="sa/families" element={<SuperAdminRoute><FamiliesPage /></SuperAdminRoute>} />
+        <Route path="sa/messages" element={<SuperAdminRoute><MessagesPage /></SuperAdminRoute>} />
         <Route path="sa/finance" element={<SuperAdminRoute><FinancePage /></SuperAdminRoute>} />
         <Route path="sa/groups" element={<SuperAdminRoute><GroupsPage /></SuperAdminRoute>} />
         <Route path="sa/attendance" element={<SuperAdminRoute><AttendancePage /></SuperAdminRoute>} />

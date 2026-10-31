@@ -26,6 +26,11 @@ export function ApiKeysPage() {
       setRawKey(r.key || ""); setShowForm(false); setFName(""); setFPerms([]); void load();
     } catch (e: any) { setError(e.message); }
   }
+  async function rotate(k: ApiKey) {
+    const ok = await confirm({ title: `Rotate "${k.name}"?`, message: "A new secret is created with the same permissions, and the current one stops working immediately. Update your integration with the new key.", confirmLabel: "Rotate", tone: "danger" });
+    if (!ok) return;
+    try { const r = await apiRequest<{ key: string }>(`/api/v1/admin/sa/api-keys/${k.id}/rotate`, { method: "POST", token }); setRawKey(r.key || ""); void load(); } catch (e: any) { setError(e.message); }
+  }
   async function revoke(k: ApiKey) {
     const ok = await confirm({ title: `Revoke key "${k.name}"?`, message: "Any integrations using this key will stop working.", confirmLabel: "Revoke", tone: "danger" });
     if (!ok) return;
@@ -64,7 +69,7 @@ export function ApiKeysPage() {
           <td>{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}</td>
           <td>{k.expiresAt ? new Date(k.expiresAt).toLocaleDateString() : "∞"}</td>
           <td>{k.revoked ? <span className="badge danger">Revoked</span> : <span className="badge success">Active</span>}</td>
-          <td>{!k.revoked && <button className="btn compact danger" onClick={() => revoke(k)}>Revoke</button>}</td>
+          <td style={{ whiteSpace: "nowrap" }}>{!k.revoked && <><button className="btn compact" onClick={() => rotate(k)}>Rotate</button> <button className="btn compact danger" onClick={() => revoke(k)}>Revoke</button></>}</td>
         </tr>)}
       </tbody></table></div>
     )}

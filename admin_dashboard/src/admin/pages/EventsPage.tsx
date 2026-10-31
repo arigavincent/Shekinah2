@@ -223,7 +223,7 @@ export function EventsPage() {
       <PublishingQueue section="event" onCompleted={load}/>
       {error ? <InlineAlert title="Events could not be updated" message={error} /> : null}
 
-      {editingId&&events.find(e=>e.id===editingId)&&<EventAccessEditor key={editingId} id={editingId} publishedAt={events.find(e=>e.id===editingId)!.publishedAt} isPublished={events.find(e=>e.id===editingId)!.isPublished}/>}
+      {editingId&&events.find(e=>e.id===editingId)&&<EventAccessEditor key={editingId} id={editingId} publishedAt={events.find(e=>e.id===editingId)!.publishedAt} isPublished={events.find(e=>e.id===editingId)!.isPublished} cancelledAt={events.find(e=>e.id===editingId)!.cancelledAt||""} closesAt={events.find(e=>e.id===editingId)!.registrationClosesAt||""}/>}
       <section className="catalogue-stack">
         {editingId && <form className="editor-card" onSubmit={submit}>
           <div className="section-title-row">

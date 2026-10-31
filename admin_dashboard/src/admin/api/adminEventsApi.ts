@@ -2,7 +2,7 @@ import { apiRequest } from "./client";
 import { getToken } from "../auth/session";
 
 export type EventItem = {
- publishedAt:string; isPublished:boolean; notifyOnPublish:boolean;
+ publishedAt:string; isPublished:boolean; notifyOnPublish:boolean; cancelledAt?:string|null; cancelReason?:string; registrationClosesAt?:string|null;
   id: string;
   title: string;
   eventDate: string;

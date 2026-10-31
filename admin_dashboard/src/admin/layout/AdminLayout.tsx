@@ -32,7 +32,7 @@ import {
   KeyRound,
   Webhook,
   ShieldAlert,
-  type LucideIcon, BadgeCheck } from "lucide-react";
+  type LucideIcon, BadgeCheck, Home, Send } from "lucide-react";
 
 import { clearSession, getUser, getToken } from "../auth/session";
 import {apiRequest} from "../api/client";
@@ -90,6 +90,8 @@ const superAdminNavSection: NavSection = {
   items: [
     { label: "Members", to: "/sa/members", icon: Users },
     { label: "Roles", to: "/sa/roles", icon: BadgeCheck },
+    { label: "Families", to: "/sa/families", icon: Home },
+    { label: "Messages", to: "/sa/messages", icon: Send },
     { label: "Finance & Funds", to: "/sa/finance", icon: DollarSign },
     { label: "Groups", to: "/sa/groups", icon: UsersRound },
     { label: "Attendance", to: "/sa/attendance", icon: CalendarCheck },
