@@ -387,8 +387,10 @@ func (h *Handler) DirectPlaylist(c *gin.Context) {
 		c.Status(503)
 		return
 	}
-	if s.Status != "ended" && len(all) > 6 {
-		all = all[len(all)-6:]
+	// About 30 seconds of live window lets a viewer on a slow network fall
+	// behind briefly and catch up without being thrown back to the edge.
+	if s.Status != "ended" && len(all) > 15 {
+		all = all[len(all)-15:]
 	}
 	presign := s3.NewPresignClient(store.client)
 	sign := func(key string) (string, error) {
@@ -407,9 +409,9 @@ func (h *Handler) DirectPlaylist(c *gin.Context) {
 	if s.Status == "ended" {
 		b.WriteString("#EXT-X-PLAYLIST-TYPE:VOD\n")
 	} else {
-		// Start near the latest complete segment instead of the HLS default
-		// of three target durations behind. Replays always start at the beginning.
-		b.WriteString("#EXT-X-START:TIME-OFFSET=-1.500,PRECISE=YES\n")
+		// Start about three segments behind the newest so playback has a buffer
+		// to absorb late uploads. Replays always start at the beginning.
+		b.WriteString("#EXT-X-START:TIME-OFFSET=-6.000,PRECISE=YES\n")
 	}
 	if init != "" {
 		fmt.Fprintf(&b, "#EXT-X-KEY:METHOD=AES-128,URI=\"key\",IV=0x%032x\n", directIV(-1))
