@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/ariga/shekinah-backend/internal/auth"
+	mailer "github.com/ariga/shekinah-backend/internal/mail"
 	"github.com/ariga/shekinah-backend/internal/permissions"
 	"github.com/ariga/shekinah-backend/internal/webhooks"
 	"github.com/gin-gonic/gin"
@@ -30,7 +31,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type Handler struct{ db *pgxpool.Pool }
+type Handler struct {
+	db     *pgxpool.Pool
+	notify Notifier
+	mail   mailer.Store
+}
 
 func New(db *pgxpool.Pool) *Handler { return &Handler{db: db} }
 
@@ -1020,9 +1025,7 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 			return
 		}
 	}
-	b := make([]byte, 24)
-	_, _ = rand.Read(b)
-	key := "sk_live_" + hex.EncodeToString(b)
+	key := newAPIKey()
 	creator, _ := auth.UserIDFromContext(c)
 	var expires *time.Time
 	if req.ExpiresInDays > 0 {
@@ -1297,4 +1300,10 @@ func (h *Handler) TriggerDatabaseBackup(c *gin.Context) {
 	}
 	_ = tw.Close()
 	_ = gz.Close()
+}
+
+func newAPIKey() string {
+	b := make([]byte, 24)
+	_, _ = rand.Read(b)
+	return "sk_live_" + hex.EncodeToString(b)
 }

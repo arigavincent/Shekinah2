@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/ariga/shekinah-backend/internal/auth"
 	"github.com/ariga/shekinah-backend/internal/integrations"
 	"net/http"
 	"os"
@@ -46,6 +47,11 @@ type BroadcastRequest struct {
 	Body     string                 `json:"body"`
 	Category string                 `json:"category"`
 	Data     map[string]interface{} `json:"data"`
+	// Set by staff messaging: only these members (nil = everyone).
+	UserIDs       []string `json:"-"`
+	AudienceLabel string   `json:"-"`
+	SentBy        string   `json:"-"`
+	Channels      []string `json:"-"`
 }
 
 type expoPushMessage struct {
@@ -158,13 +164,15 @@ func (h Handler) RegisterDevice(c *gin.Context) {
 				preferences,
 				enabled,
 				provider,
+				user_id,
 				created_at,
 				updated_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6::jsonb, TRUE, $7, NOW(), NOW())
+			VALUES ($1, $2, $3, $4, $5, $6::jsonb, TRUE, $7, NULLIF($8, '')::uuid, NOW(), NOW())
 			ON CONFLICT (expo_push_token)
 			DO UPDATE SET
 				provider = EXCLUDED.provider,
+				user_id = EXCLUDED.user_id,
 				platform = EXCLUDED.platform,
 				device_name = EXCLUDED.device_name,
 				app_version = EXCLUDED.app_version,
@@ -180,6 +188,7 @@ func (h Handler) RegisterDevice(c *gin.Context) {
 		strings.TrimSpace(req.AppVersion),
 		string(preferences),
 		provider,
+		signedIn(c),
 	).Scan(&id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to register notification device"})
@@ -281,7 +290,7 @@ func (h Handler) Notify(ctx context.Context, req BroadcastRequest) (gin.H, error
 	if req.Category == "" {
 		req.Category = "general"
 	}
-	tokens, fcmTokens, err := h.tokensForCategory(ctx, req.Category)
+	tokens, fcmTokens, err := h.tokensForCategory(ctx, req.Category, req.UserIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -313,10 +322,10 @@ func (h Handler) Notify(ctx context.Context, req BroadcastRequest) (gin.H, error
 	_, saveErr := h.db.Exec(
 		ctx,
 		`
-			INSERT INTO notification_messages (id, title, body, category, data, target_count, success_count, failure_count)
-			VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+			INSERT INTO notification_messages (id, title, body, category, data, target_count, success_count, failure_count, audience, audience_label, sent_by, channels)
+			VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::uuid[], COALESCE(NULLIF($10, ''), 'Everyone'), NULLIF($11, '')::uuid, COALESCE($12::text[], '{push}'))
 		`,
-		messageID, req.Title, req.Body, req.Category, string(dataBytes), target, success, failure,
+		messageID, req.Title, req.Body, req.Category, string(dataBytes), target, success, failure, audience(req.UserIDs), req.AudienceLabel, req.SentBy, nilIfEmpty(req.Channels),
 	)
 
 	if saveErr != nil {
@@ -385,7 +394,7 @@ func (h Handler) ListMessages(c *gin.Context) {
 }
 
 // Returns Expo tokens and FCM tokens of devices that want this category.
-func (h Handler) tokensForCategory(ctx context.Context, category string) ([]string, []string, error) {
+func (h Handler) tokensForCategory(ctx context.Context, category string, userIDs []string) ([]string, []string, error) {
 	rows, err := h.db.Query(
 		ctx,
 		`
@@ -396,8 +405,9 @@ func (h Handler) tokensForCategory(ctx context.Context, category string) ([]stri
 			    preferences = '{}'::jsonb
 			    OR COALESCE((preferences ->> $1)::boolean, TRUE) = TRUE
 			  )
+			  AND ($2::text[] IS NULL OR user_id::text = ANY($2))
 		`,
-		category,
+		category, audience(userIDs),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -434,8 +444,9 @@ func (h Handler) Feed(c *gin.Context) {
 	}
 	rows, err := h.db.Query(c.Request.Context(), `
 		SELECT id, title, body, category, data, created_at FROM notification_messages
-		WHERE created_at > $1 ORDER BY created_at DESC LIMIT 20
-	`, since)
+		WHERE created_at > $1 AND (audience IS NULL OR NULLIF($2, '')::uuid = ANY(audience))
+		ORDER BY created_at DESC LIMIT 20
+	`, since, signedIn(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load notifications"})
 		return
@@ -517,4 +528,24 @@ func (h Handler) sendExpoPush(tokens []string, req BroadcastRequest) (int, int) 
 	}
 
 	return success, failure
+}
+
+// audience is nil for everyone, or the chosen members (an empty group reaches nobody).
+func audience(ids []string) []string {
+	if ids == nil {
+		return nil
+	}
+	return append([]string{}, ids...)
+}
+
+func nilIfEmpty(v []string) []string {
+	if len(v) == 0 {
+		return nil
+	}
+	return v
+}
+
+func signedIn(c *gin.Context) string {
+	id, _ := auth.UserIDFromContext(c)
+	return id
 }

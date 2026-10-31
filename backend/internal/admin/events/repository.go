@@ -31,7 +31,7 @@ func (r Repository) List(ctx context.Context) ([]Event, error) {
 			image_url,
 			description,
 			created_at,
-			updated_at, published_at, is_published, notify_on_publish
+			updated_at, published_at, is_published, notify_on_publish, cancelled_at, cancel_reason, registration_closes_at
 		FROM events
 		ORDER BY event_date ASC, created_at DESC
 	`
@@ -71,7 +71,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (Event, error) {
 			image_url,
 			description,
 			created_at,
-			updated_at, published_at, is_published, notify_on_publish
+			updated_at, published_at, is_published, notify_on_publish, cancelled_at, cancel_reason, registration_closes_at
 		FROM events
 		WHERE id = $1
 		LIMIT 1
@@ -111,7 +111,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Event, error) 
 			image_url,
 			description,
 			created_at,
-			updated_at, published_at, is_published, notify_on_publish
+			updated_at, published_at, is_published, notify_on_publish, cancelled_at, cancel_reason, registration_closes_at
 	`
 
 	item, err := scanEvent(
@@ -155,7 +155,7 @@ func (r Repository) Update(ctx context.Context, command Command) (Event, error) 
 			image_url,
 			description,
 			created_at,
-			updated_at, published_at, is_published, notify_on_publish
+			updated_at, published_at, is_published, notify_on_publish, cancelled_at, cancel_reason, registration_closes_at
 	`
 
 	item, err := scanEvent(
@@ -217,6 +217,7 @@ func scanEvent(row eventScanner) (Event, error) {
 		&item.Description,
 		&item.CreatedAt,
 		&item.UpdatedAt, &item.PublishedAt, &item.IsPublished, &item.NotifyOnPublish,
+		&item.CancelledAt, &item.CancelReason, &item.RegistrationClosesAt,
 	); err != nil {
 		return Event{}, err
 	}

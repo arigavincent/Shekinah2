@@ -18,6 +18,10 @@ type Event struct {
 	Description     string    `json:"description"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
+	// Cancelled events stay for the records but leave the app.
+	CancelledAt          *time.Time `json:"cancelledAt"`
+	CancelReason         string     `json:"cancelReason"`
+	RegistrationClosesAt *time.Time `json:"registrationClosesAt"`
 }
 
 type CreateRequest struct {

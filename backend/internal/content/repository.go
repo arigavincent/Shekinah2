@@ -262,7 +262,7 @@ func (r Repository) Events(ctx context.Context) ([]Event, error) {
 			price,
 			to_char(event_date, 'YYYY-MM-DD')
 		FROM events
-        WHERE is_published AND published_at<=NOW()
+        WHERE is_published AND published_at<=NOW() AND cancelled_at IS NULL
 		ORDER BY event_date ASC
 	`
 

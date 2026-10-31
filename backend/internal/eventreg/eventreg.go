@@ -172,6 +172,16 @@ func (h Handler) Register(c *gin.Context) {
 	}
 	raw, _ := json.Marshal(answers)
 	ctx := c.Request.Context()
+	var closes, cancelled *time.Time
+	_ = h.db.QueryRow(ctx, `SELECT registration_closes_at, cancelled_at FROM events WHERE id = $1`, eventID).Scan(&closes, &cancelled)
+	if cancelled != nil {
+		c.JSON(http.StatusConflict, gin.H{"message": "This event was cancelled."})
+		return
+	}
+	if closes != nil && time.Now().After(*closes) {
+		c.JSON(http.StatusConflict, gin.H{"message": "Registration for this event has closed."})
+		return
+	}
 	tx, err := h.db.Begin(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not register"})
@@ -184,18 +194,20 @@ func (h Handler) Register(c *gin.Context) {
 		return
 	}
 	var exists bool
-	_ = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM event_registrations WHERE event_id = $1 AND user_id::text = $2)`, eventID, userID).Scan(&exists)
+	_ = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM event_registrations WHERE event_id = $1 AND user_id::text = $2 AND voided_at IS NULL)`, eventID, userID).Scan(&exists)
 	if exists {
 		_, err = tx.Exec(ctx, `UPDATE event_registrations SET answers = $3, updated_at = NOW() WHERE event_id = $1 AND user_id::text = $2`, eventID, userID, raw)
 	} else {
 		var taken int
-		_ = tx.QueryRow(ctx, `SELECT COUNT(*) FROM event_registrations WHERE event_id = $1`, eventID).Scan(&taken)
+		_ = tx.QueryRow(ctx, `SELECT COUNT(*) FROM event_registrations WHERE event_id = $1 AND voided_at IS NULL`, eventID).Scan(&taken)
 		if s.Capacity > 0 && taken >= s.Capacity {
 			c.JSON(http.StatusConflict, gin.H{"message": "Sorry, this event is full."})
 			return
 		}
 		ticket := strings.ToUpper(randomHex(4))
-		_, err = tx.Exec(ctx, `INSERT INTO event_registrations (id, event_id, user_id, answers, ticket) VALUES ($1, $2, $3, $4, $5)`,
+		// A voided registration is brought back with a fresh ticket.
+		_, err = tx.Exec(ctx, `INSERT INTO event_registrations (id, event_id, user_id, answers, ticket) VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (event_id, user_id) DO UPDATE SET answers = EXCLUDED.answers, ticket = EXCLUDED.ticket, voided_at = NULL, updated_at = NOW()`,
 			"reg-"+randomHex(6), eventID, userID, raw, ticket)
 	}
 	if err != nil || tx.Commit(ctx) != nil {
@@ -249,6 +261,8 @@ func (h Handler) AdminSetup(c *gin.Context) {
 }
 
 type Row struct {
+	ID         string            `json:"id"`
+	Voided     bool              `json:"voided"`
 	Name       string            `json:"name"`
 	Email      string            `json:"email"`
 	Answers    map[string]string `json:"answers"`
@@ -259,10 +273,10 @@ type Row struct {
 
 func (h Handler) rows(c *gin.Context, eventID string) ([]Row, error) {
 	rows, err := h.db.Query(c.Request.Context(), `
-		SELECT u.name, u.email, r.answers, r.ticket, r.created_at,
+		SELECT r.id, r.voided_at IS NOT NULL, u.name, u.email, r.answers, r.ticket, r.created_at,
 			COALESCE((SELECT g.status FROM giving_transactions g WHERE g.item_id = r.event_id AND g.user_id = r.user_id AND g.status IN ('success','awaiting_verification') ORDER BY g.status = 'success' DESC LIMIT 1), '')
 		FROM event_registrations r JOIN users u ON u.id = r.user_id
-		WHERE r.event_id = $1 ORDER BY r.created_at`, eventID)
+		WHERE r.event_id = $1 ORDER BY r.voided_at IS NOT NULL, r.created_at`, eventID)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +286,7 @@ func (h Handler) rows(c *gin.Context, eventID string) ([]Row, error) {
 		var r Row
 		var raw []byte
 		var pay string
-		if err := rows.Scan(&r.Name, &r.Email, &raw, &r.Ticket, &r.Registered, &pay); err != nil {
+		if err := rows.Scan(&r.ID, &r.Voided, &r.Name, &r.Email, &raw, &r.Ticket, &r.Registered, &pay); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(raw, &r.Answers)
@@ -383,4 +397,86 @@ func NormalizeSetup(s Setup) (Setup, error) {
 	}
 	s.Fields = clean
 	return s, nil
+}
+
+// PUT /admin/events/:id/deadline {"closesAt": RFC3339 or ""}: when sign-ups close.
+func (h Handler) AdminDeadline(c *gin.Context) {
+	var req struct {
+		ClosesAt string `json:"closesAt"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	var closes *time.Time
+	if req.ClosesAt != "" {
+		t, err := time.Parse(time.RFC3339, req.ClosesAt)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Use a date and time for the deadline"})
+			return
+		}
+		closes = &t
+	}
+	tag, err := h.db.Exec(c.Request.Context(), `UPDATE events SET registration_closes_at = $2, updated_at = NOW() WHERE id = $1`, c.Param("id"), closes)
+	if err != nil || tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Event not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Registration deadline saved"})
+}
+
+// POST /admin/events/:id/cancel {"reason"} and /restore: a cancelled event leaves
+// the app and stops taking sign-ups; its registrations and payments are kept.
+func (h Handler) AdminCancel(c *gin.Context) {
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	tag, err := h.db.Exec(c.Request.Context(), `UPDATE events SET cancelled_at = NOW(), cancel_reason = $2, updated_at = NOW() WHERE id = $1 AND cancelled_at IS NULL`, c.Param("id"), strings.TrimSpace(req.Reason))
+	if err != nil || tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Event not found or already cancelled"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Event cancelled; it no longer shows in the app"})
+}
+
+func (h Handler) AdminRestore(c *gin.Context) {
+	tag, err := h.db.Exec(c.Request.Context(), `UPDATE events SET cancelled_at = NULL, cancel_reason = '', updated_at = NOW() WHERE id = $1 AND cancelled_at IS NOT NULL`, c.Param("id"))
+	if err != nil || tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Event not found or not cancelled"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Event restored"})
+}
+
+// DELETE /admin/events/:id/registrations/:regId: void a registration (frees the
+// place; the record and any payment are kept).
+func (h Handler) AdminVoid(c *gin.Context) {
+	tag, err := h.db.Exec(c.Request.Context(), `UPDATE event_registrations SET voided_at = NOW(), updated_at = NOW() WHERE id = $1 AND event_id = $2 AND voided_at IS NULL`, c.Param("regId"), c.Param("id"))
+	if err != nil || tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Registration not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Registration voided"})
+}
+
+// POST /admin/events/:id/registrations {"userId"}: issue a ticket for someone
+// who registered in person. Staff may go past the capacity.
+func (h Handler) AdminIssue(c *gin.Context) {
+	var req struct {
+		UserID string `json:"userId"`
+	}
+	if c.ShouldBindJSON(&req) != nil || req.UserID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Choose a member"})
+		return
+	}
+	staff, _ := auth.UserIDFromContext(c)
+	ticket := strings.ToUpper(randomHex(4))
+	var issued string
+	err := h.db.QueryRow(c.Request.Context(), `INSERT INTO event_registrations (id, event_id, user_id, answers, ticket, issued_by)
+		SELECT $1, e.id, u.id, '{}'::jsonb, $4, NULLIF($5, '')::uuid FROM events e, users u WHERE e.id = $2 AND u.id::text = $3
+		ON CONFLICT (event_id, user_id) DO UPDATE SET voided_at = NULL, ticket = CASE WHEN event_registrations.voided_at IS NULL THEN event_registrations.ticket ELSE EXCLUDED.ticket END, updated_at = NOW()
+		RETURNING ticket`, "reg-"+randomHex(6), c.Param("id"), req.UserID, ticket, staff).Scan(&issued)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Event or member not found"})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"ticket": issued, "message": "Ticket " + issued + " issued"})
 }
