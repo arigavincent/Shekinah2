@@ -37,7 +37,7 @@ func New(db *pgxpool.Pool) Checker { return Checker{db: db} }
 func (c Checker) Of(ctx context.Context, userID string) ([]string, error) {
 	var role string
 	var granted []string
-	err := c.db.QueryRow(ctx, `SELECT role, permissions FROM users WHERE id = $1 AND is_active = TRUE AND NOT password_reset_required`, userID).Scan(&role, &granted)
+	err := c.db.QueryRow(ctx, `SELECT u.role, u.permissions || COALESCE(r.permissions, '{}'::text[]) FROM users u LEFT JOIN staff_roles r ON r.id = u.staff_role_id WHERE u.id = $1 AND u.is_active = TRUE AND NOT u.password_reset_required`, userID).Scan(&role, &granted)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (c Checker) Of(ctx context.Context, userID string) ([]string, error) {
 	out := make([]string, 0, len(granted))
 	scoped, viaKey := auth.APIKeyPermissions(ctx)
 	for _, p := range granted {
-		if slices.Contains(All, p) && (!viaKey || slices.Contains(scoped, p)) {
+		if slices.Contains(All, p) && !slices.Contains(out, p) && (!viaKey || slices.Contains(scoped, p)) {
 			out = append(out, p)
 		}
 	}
@@ -102,6 +102,8 @@ type memberRow struct {
 	Archived    bool      `json:"archived"`
 	Status      string    `json:"membershipStatus"`
 	Phone       string    `json:"phone"`
+	StaffRoleID string    `json:"staffRoleId"`
+	StaffRole   string    `json:"staffRole"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
@@ -109,9 +111,11 @@ type memberRow struct {
 func (c Checker) AdminListMembers(ctx *gin.Context) {
 	q := "%" + strings.ToLower(strings.TrimSpace(ctx.Query("query"))) + "%"
 	rows, err := c.db.Query(ctx.Request.Context(), `
-		SELECT id::text, name, email, role, permissions, is_active, deleted_at IS NOT NULL, membership_status, phone, created_at FROM users
-		WHERE (LOWER(name) LIKE $1 OR LOWER(email) LIKE $1)
-		ORDER BY deleted_at IS NOT NULL, (array_length(permissions, 1) IS NULL), role <> 'member' DESC, name LIMIT 100
+		SELECT u.id::text, u.name, u.email, u.role, u.permissions, u.is_active, u.deleted_at IS NOT NULL, u.membership_status, u.phone,
+			COALESCE(u.staff_role_id, ''), COALESCE(r.name, ''), u.created_at
+		FROM users u LEFT JOIN staff_roles r ON r.id = u.staff_role_id
+		WHERE (LOWER(u.name) LIKE $1 OR LOWER(u.email) LIKE $1)
+		ORDER BY u.deleted_at IS NOT NULL, (array_length(u.permissions, 1) IS NULL AND u.staff_role_id IS NULL), u.role <> 'member' DESC, u.name LIMIT 100
 	`, q)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load members"})
@@ -121,7 +125,7 @@ func (c Checker) AdminListMembers(ctx *gin.Context) {
 	items := make([]memberRow, 0)
 	for rows.Next() {
 		var m memberRow
-		if err := rows.Scan(&m.ID, &m.Name, &m.Email, &m.Role, &m.Permissions, &m.IsActive, &m.Archived, &m.Status, &m.Phone, &m.CreatedAt); err == nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Email, &m.Role, &m.Permissions, &m.IsActive, &m.Archived, &m.Status, &m.Phone, &m.StaffRoleID, &m.StaffRole, &m.CreatedAt); err == nil {
 			items = append(items, m)
 		}
 	}

@@ -33,7 +33,7 @@ func (h Handler) authorizeTransaction(c *gin.Context, id string) bool {
 	user, signedIn := auth.UserIDFromContext(c)
 	if signedIn {
 		var active, staff bool
-		_ = h.db.QueryRow(c.Request.Context(), `SELECT is_active, (role IN ('admin','super_admin') OR 'finance:manage'=ANY(permissions)) AND NOT password_reset_required FROM users WHERE id=$1`, user).Scan(&active, &staff)
+		_ = h.db.QueryRow(c.Request.Context(), `SELECT is_active, (role IN ('admin','super_admin') OR 'finance:manage'=ANY(permissions || COALESCE((SELECT r.permissions FROM staff_roles r WHERE r.id=users.staff_role_id),'{}'::text[]))) AND NOT password_reset_required FROM users WHERE id=$1`, user).Scan(&active, &staff)
 		if active && (owner == user || staff) {
 			return true
 		}

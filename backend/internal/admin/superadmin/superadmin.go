@@ -1204,27 +1204,51 @@ func (h *Handler) UpdateSystemModules(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"modules": modules, "message": "Feature switches saved"})
 }
 
+type securityPolicies struct {
+	MinPasswordLength   int  `json:"minPasswordLength"`
+	MFARequiredForStaff bool `json:"mfaRequiredForStaff"`
+	IdleMinutes         int  `json:"idleMinutes"`
+}
+
 func (h *Handler) GetSecurityPolicies(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"policies": gin.H{"minPasswordLength": MinPasswordLength(c.Request.Context(), h.db)}})
+	p := auth.LoadPolicy(c.Request.Context(), h.db)
+	c.JSON(http.StatusOK, gin.H{"policies": securityPolicies{MinPasswordLength(c.Request.Context(), h.db), p.MFAForStaff, p.IdleMinutes}})
 }
 
 func (h *Handler) UpdateSecurityPolicies(c *gin.Context) {
 	var req struct {
-		Policies struct {
-			MinPasswordLength int `json:"minPasswordLength"`
-		} `json:"policies"`
+		Policies securityPolicies `json:"policies"`
 	}
-	if c.ShouldBindJSON(&req) != nil || req.Policies.MinPasswordLength < 8 || req.Policies.MinPasswordLength > 64 {
+	if c.ShouldBindJSON(&req) != nil {
+		fail(c, http.StatusBadRequest, "Invalid settings")
+		return
+	}
+	p := req.Policies
+	if p.MinPasswordLength < 8 || p.MinPasswordLength > 64 {
 		fail(c, http.StatusBadRequest, "Minimum password length must be between 8 and 64")
 		return
 	}
-	raw, _ := json.Marshal(gin.H{"minPasswordLength": req.Policies.MinPasswordLength})
+	if p.IdleMinutes != 0 && (p.IdleMinutes < 5 || p.IdleMinutes > 720) {
+		fail(c, http.StatusBadRequest, "Idle sign-out must be off (0) or between 5 and 720 minutes")
+		return
+	}
+	if p.MFARequiredForStaff {
+		// Never lock out the person turning it on.
+		me, _ := auth.UserIDFromContext(c)
+		var mine bool
+		_ = h.db.QueryRow(c.Request.Context(), `SELECT mfa_enabled AND mfa_secret<>'' FROM users WHERE id=$1`, me).Scan(&mine)
+		if !mine {
+			fail(c, http.StatusBadRequest, "Turn on two-step sign-in for your own account first, then require it for staff")
+			return
+		}
+	}
+	raw, _ := json.Marshal(p)
 	if _, err := h.db.Exec(c.Request.Context(), `INSERT INTO app_settings(key,value,updated_at) VALUES('security_policies',$1,NOW()) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()`, string(raw)); err != nil {
 		fail(c, http.StatusInternalServerError, "Could not save the policy")
 		return
 	}
-	h.audit(c, "SECURITY_POLICY", "Minimum password length "+fmt.Sprint(req.Policies.MinPasswordLength), "")
-	c.JSON(http.StatusOK, gin.H{"message": "Security policy saved"})
+	h.audit(c, "SECURITY_POLICY", "Security: "+string(raw), "")
+	c.JSON(http.StatusOK, gin.H{"message": "Security settings saved"})
 }
 
 // TriggerDatabaseBackup streams a compressed copy of every table (one CSV per

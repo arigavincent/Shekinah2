@@ -64,6 +64,10 @@ type PasswordResetConfirmRequest struct {
 type AuthResponse struct {
 	Token string     `json:"token"`
 	User  PublicUser `json:"user"`
+	// With two-step sign-in on, Login returns only these; /auth/mfa/verify
+	// exchanges the ticket and a code for the session.
+	MFARequired bool   `json:"mfaRequired,omitempty"`
+	MFAToken    string `json:"mfaToken,omitempty"`
 }
 
 func ToPublicUser(user User) PublicUser {

@@ -97,11 +97,26 @@ func (s Service) Login(ctx context.Context, req LoginRequest) (AuthResponse, err
 		return AuthResponse{}, ErrInvalidCredentials
 	}
 
+	var mfa bool
+	_ = s.repository.db.QueryRow(ctx, `SELECT mfa_enabled AND mfa_secret<>'' FROM users WHERE id=$1`, user.ID).Scan(&mfa)
+	if mfa {
+		ticket, err := s.mfaTicket(user.ID)
+		if err != nil {
+			return AuthResponse{}, err
+		}
+		return AuthResponse{MFARequired: true, MFAToken: ticket}, nil
+	}
+	return s.complete(ctx, user)
+}
+
+// complete issues the session once every sign-in step has passed, and starts
+// the staff idle clock afresh.
+func (s Service) complete(ctx context.Context, user User) (AuthResponse, error) {
 	token, err := s.issueToken(user)
 	if err != nil {
 		return AuthResponse{}, err
 	}
-
+	_, _ = s.repository.db.Exec(ctx, `UPDATE users SET staff_active_at=NOW() WHERE id=$1`, user.ID)
 	return AuthResponse{
 		Token: token,
 		User:  ToPublicUser(user),
@@ -313,7 +328,8 @@ func (s Service) ParseToken(tokenString string) (string, error) {
 	}
 
 	sub, ok := claims["sub"].(string)
-	if !ok || sub == "" {
+	if !ok || sub == "" || claims["purpose"] != nil {
+		// A two-step sign-in ticket is never a session.
 		return "", ErrInvalidCredentials
 	}
 
