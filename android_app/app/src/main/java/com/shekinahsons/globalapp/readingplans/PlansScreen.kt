@@ -356,7 +356,7 @@ private fun PlanPage(id: String, session: Session, openProfile: () -> Unit, open
                             Api.post("/reading-plans/$id/days/${d.dayNumber}/complete")
                             if (d.dayNumber < p.durationDays) day = d.dayNumber + 1
                         }
-                    } else Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(50), 0.85f).padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    } else Row(Modifier.fillMaxWidth().glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.85f).padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Check, null, tint = Color(0xFF4ADE80))
                         Text("  Day ${d.dayNumber} read", color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         Text("Undo", color = Brand.Text2, modifier = Modifier.clickable { act { Api.delete("/reading-plans/$id/days/${d.dayNumber}/complete") } }.padding(4.dp))

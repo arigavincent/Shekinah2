@@ -194,7 +194,7 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
         }
         Spacer(Modifier.height(24.dp))
         if (mode == Mode.SignIn || mode == Mode.Register) {
-            Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(50), 0.8f).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.8f).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf(Mode.SignIn to "Sign in", Mode.Register to "Create account").forEach { (m, label) ->
                     val on = mode == m
                     Box(

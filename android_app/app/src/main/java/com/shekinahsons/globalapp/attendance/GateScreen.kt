@@ -119,7 +119,7 @@ fun GateScreen(content: HomeContent?, onBack: (() -> Unit)?) {
     var tab by remember { mutableStateOf("scan") }
     Column(Modifier.fillMaxSize().background(Brand.Black)) {
         if (onBack != null) TopBar(title = "Gate check-in", onBack = onBack)
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().glass(RoundedCornerShape(50), 0.85f).padding(4.dp)) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.85f).padding(4.dp)) {
             listOf("scan" to "Scan", "records" to "Attendance").forEach { (k, label) ->
                 val on = tab == k
                 Box(Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(50)).background(if (on) Brand.GoldGradient else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))).clickable { tab = k }, contentAlignment = Alignment.Center) {

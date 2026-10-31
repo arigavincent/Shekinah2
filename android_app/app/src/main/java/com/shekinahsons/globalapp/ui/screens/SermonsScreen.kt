@@ -225,7 +225,7 @@ private fun SearchBox(query: String, hint: String, sort: Sort, onSort: (Sort) ->
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.padding(horizontal = 16.dp, vertical = 14.dp).fillMaxWidth().height(52.dp)
-            .glass(RoundedCornerShape(50), 0.8f).padding(start = 18.dp, end = 6.dp),
+            .glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.8f).padding(start = 18.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Rounded.Search, null, tint = Brand.Text2, modifier = Modifier.size(22.dp))

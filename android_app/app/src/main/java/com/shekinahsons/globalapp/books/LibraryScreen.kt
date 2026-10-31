@@ -238,7 +238,7 @@ private fun Shelf(books: List<Book>, loading: Boolean, error: String?, canPublis
                     Text("Books & Library", style = Type.Display, color = Brand.White)
                     Text(if (Books.offline) "Offline shelf · saved books are ready to read" else "Ministry books, journals and study guides", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.GoldLight)
                     Spacer(Modifier.height(14.dp))
-                    Row(Modifier.fillMaxWidth().height(50.dp).glass(RoundedCornerShape(50), 0.8f).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().height(50.dp).glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.8f).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Search, null, tint = Brand.Text2, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(10.dp))
                         Box(Modifier.weight(1f)) {
@@ -525,7 +525,7 @@ private fun Publish(onBack: () -> Unit, done: () -> Unit) {
             Field("DESCRIPTION", description, { description = it.take(1500) }, minHeight = 110.dp, singleLine = false)
             Spacer(Modifier.height(16.dp))
             Text("ACCESS", style = Type.Label.copy(fontSize = 10.5.sp), color = Brand.GoldLight, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-            Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(50), 0.8f).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.8f).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf(false to "Free for everyone", true to "Paid").forEach { (v, label) ->
                     Box(Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(50)).background(if (paid == v) Brand.GoldGradient else SolidColor(Color.Transparent)).clickable { paid = v }, contentAlignment = Alignment.Center) {
                         Text(label, color = if (paid == v) Brand.Black else Brand.Text2, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)

@@ -102,7 +102,7 @@ private fun Chips(options: List<String>, selected: String, onSelect: (String) ->
 
 @Composable
 private fun Segments(options: List<String>, selected: String, onSelect: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(50), 0.8f).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(Modifier.fillMaxWidth().glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.8f).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         options.forEach { o ->
             val on = o == selected
             Box(

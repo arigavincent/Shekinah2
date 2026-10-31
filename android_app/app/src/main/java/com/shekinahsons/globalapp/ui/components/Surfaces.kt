@@ -40,7 +40,14 @@ import com.shekinahsons.globalapp.ui.theme.Inter
 
 // Frosted glass: a faint white wash lit from the top, with a rim of light
 // that fades down the edge. Reads as a pane over whatever sits behind it.
-fun Modifier.glass(shape: Shape = RoundedCornerShape(50), strength: Float = 1f): Modifier = this
+// A pill on chips and buttons, a rounded card on anything taller: corners stop
+// at 22dp so tall panels never become ovals that clip their contents.
+val GlassShape: Shape = RoundedCornerShape(object : androidx.compose.foundation.shape.CornerSize {
+    override fun toPx(shapeSize: androidx.compose.ui.geometry.Size, density: androidx.compose.ui.unit.Density) =
+        minOf(shapeSize.minDimension / 2f, with(density) { 22.dp.toPx() })
+})
+
+fun Modifier.glass(shape: Shape = GlassShape, strength: Float = 1f): Modifier = this
     .clip(shape)
     .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.13f * strength), Color.White.copy(alpha = 0.05f * strength))))
     .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.28f * strength), Color.White.copy(alpha = 0.04f * strength))), shape)

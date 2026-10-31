@@ -523,7 +523,7 @@ private fun TeamPage() {
         error?.let { item { ErrorNote(it) } }
         if (view == "people") {
             item {
-                Row(Modifier.fillMaxWidth().height(50.dp).glass(RoundedCornerShape(50), 0.8f).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().height(50.dp).glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.8f).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Search, null, tint = Brand.Text2, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
                     Box(Modifier.weight(1f)) {

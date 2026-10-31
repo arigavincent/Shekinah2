@@ -219,7 +219,7 @@ private fun BooksView(bible: BibleDb, store: BibleStore, open: (View) -> Unit) {
                 }
             } }
             item(span = { GridItemSpan(2) }) {
-                Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(50), 0.8f).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(Modifier.fillMaxWidth().glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.8f).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("All" to "All Books", "Old" to "Old Testament", "New" to "New Testament").forEach { (key, label) ->
                         val on = tab == key
                         Box(Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(50)).background(if (on) Brand.GoldGradient else SolidColor(Color.Transparent)).clickable { tab = key }, contentAlignment = Alignment.Center) {
@@ -670,7 +670,7 @@ private fun LibraryView(bible: BibleDb, store: BibleStore, onBack: () -> Unit, o
                 Text("Search by language or name: Kikuyu, Luo, French, KJV…", style = Type.Meta, color = Brand.Text2)
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f).glass(RoundedCornerShape(50), 0.8f).padding(horizontal = 18.dp, vertical = 14.dp)) {
+                    Box(Modifier.weight(1f).glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.8f).padding(horizontal = 18.dp, vertical = 14.dp)) {
                         if (query.isEmpty()) Text("Language or version", style = Type.Body, color = Brand.Muted)
                         BasicTextField(query, { query = it }, singleLine = true, textStyle = Type.Body.copy(color = Brand.White), cursorBrush = SolidColor(Brand.Gold), modifier = Modifier.fillMaxWidth())
                     }
@@ -732,7 +732,7 @@ private fun SearchView(bible: BibleDb, onBack: () -> Unit, open: (View) -> Unit)
     }
     Column(Modifier.fillMaxSize().imePadding()) {
         TopBar(title = "Search the Bible", onBack = onBack)
-        Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().glass(RoundedCornerShape(50), 0.8f).padding(horizontal = 18.dp, vertical = 14.dp)) {
+        Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().glass(com.shekinahsons.globalapp.ui.components.GlassShape, 0.8f).padding(horizontal = 18.dp, vertical = 14.dp)) {
             if (query.isEmpty()) Text("Words or a phrase (English or Kiswahili)", style = Type.Body, color = Brand.Muted)
             BasicTextField(query, { query = it }, singleLine = true, textStyle = Type.Body.copy(color = Brand.White), cursorBrush = SolidColor(Brand.Gold), modifier = Modifier.fillMaxWidth())
         }
