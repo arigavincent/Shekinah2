@@ -7,7 +7,7 @@ import { Search, UserX, UserCheck, Trash2, Merge, StickyNote, Download } from "l
 
 type Member = {
   id: string; name: string; email: string; role: string;
-  membershipStatus?: string; phone?: string; isActive?: boolean;
+  membershipStatus?: string; phone?: string; isActive?: boolean; staffRoleId?: string; staffRole?: string;
   permissions?: string[];
 };
 type PastoralNote = { id: string; note: string; authorEmail: string; createdAt: string };
@@ -194,13 +194,20 @@ function AddAccount({ token, onCreated }: { token: string | null; onCreated: () 
 function EditMember({ token, member, onSaved }: { token: string | null; member: Member; onSaved: () => void }) {
   const [form, setForm] = useState({ name: member.name, email: member.email, phone: member.phone || "", role: member.role, membershipStatus: member.membershipStatus || "member" });
   const [busy, setBusy] = useState(""); const [message, setMessage] = useState(""); const [error, setError] = useState(""); const [temporary, setTemporary] = useState("");
+  const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
+  const [staffRole, setStaffRole] = useState(member.staffRoleId || "");
+  useEffect(() => { apiRequest<{ roles: { id: string; name: string }[] }>("/api/v1/admin/sa/roles", { token }).then((r) => setRoles(r.roles || [])).catch(() => {}); }, [token]);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
   async function run(kind: string, action: () => Promise<void>) {
     setBusy(kind); setError(""); setMessage(""); setTemporary("");
     try { await action(); } catch (e: any) { setError(e.message); }
     setBusy("");
   }
-  const save = () => run("save", async () => { await apiRequest(`/api/v1/admin/sa/users/${member.id}`, { method: "PATCH", token, body: form }); setMessage("Details saved."); onSaved(); });
+  const save = () => run("save", async () => {
+    await apiRequest(`/api/v1/admin/sa/users/${member.id}`, { method: "PATCH", token, body: form });
+    if (staffRole !== (member.staffRoleId || "")) await apiRequest(`/api/v1/admin/sa/users/${member.id}/role`, { method: "PUT", token, body: { roleId: staffRole } });
+    setMessage("Details saved."); onSaved();
+  });
   const emailCode = () => run("email", async () => { const r = await apiRequest<{ message: string }>(`/api/v1/admin/members/${member.id}/reset-password`, { method: "POST", token }); setMessage(r.message); });
   const tempPassword = () => run("temp", async () => { const r = await apiRequest<{ temporaryPassword: string }>(`/api/v1/admin/sa/users/${member.id}/temporary-password`, { method: "POST", token }); setTemporary(r.temporaryPassword); });
   return (<div style={{ display: "grid", gap: 10, margin: "8px 0 16px" }}>
@@ -211,6 +218,7 @@ function EditMember({ token, member, onSaved }: { token: string | null; member: 
       <label>Phone<input className="input" value={form.phone} onChange={set("phone")} /></label>
       <label>Role<select className="input" value={form.role} onChange={set("role")}>{ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
       <label>Membership<select className="input" value={form.membershipStatus} onChange={set("membershipStatus")}>{STATUSES.map((v) => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}</select></label>
+      <label>Staff role<select className="input" value={staffRole} onChange={(e) => setStaffRole(e.target.value)}><option value="">No role</option>{roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
     </div>
     {error && <div className="alert alert-error">{error}</div>}
     {message && <div className="alert alert-success">{message}</div>}

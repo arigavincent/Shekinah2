@@ -32,8 +32,7 @@ import {
   KeyRound,
   Webhook,
   ShieldAlert,
-  type LucideIcon
-} from "lucide-react";
+  type LucideIcon, BadgeCheck } from "lucide-react";
 
 import { clearSession, getUser, getToken } from "../auth/session";
 import {apiRequest} from "../api/client";
@@ -80,7 +79,8 @@ const navSections: NavSection[] = [
   {
     label: "Profile",
     items: [
-      { label: "Appearance", to: "/appearance", icon: Palette }
+      { label: "Appearance", to: "/appearance", icon: Palette },
+      { label: "Account security", to: "/account-security", icon: ShieldCheck }
     ]
   }
 ];
@@ -89,6 +89,7 @@ const superAdminNavSection: NavSection = {
   label: "Super Admin",
   items: [
     { label: "Members", to: "/sa/members", icon: Users },
+    { label: "Roles", to: "/sa/roles", icon: BadgeCheck },
     { label: "Finance & Funds", to: "/sa/finance", icon: DollarSign },
     { label: "Groups", to: "/sa/groups", icon: UsersRound },
     { label: "Attendance", to: "/sa/attendance", icon: CalendarCheck },

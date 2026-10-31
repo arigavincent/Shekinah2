@@ -24,6 +24,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
+	"rsc.io/qr"
 )
 
 var b32 = base32.StdEncoding.WithPadding(base32.NoPadding)
@@ -150,7 +151,12 @@ func (h Handler) MFASetup(c *gin.Context) {
 	}
 	label := url.PathEscape("Shekinah Sons Global:" + email)
 	uri := fmt.Sprintf("otpauth://totp/%s?secret=%s&issuer=%s&digits=6&period=30", label, secret, url.QueryEscape("Shekinah Sons Global"))
-	c.JSON(http.StatusOK, gin.H{"secret": secret, "otpauthUrl": uri})
+	out := gin.H{"secret": secret, "otpauthUrl": uri}
+	if code, err := qr.Encode(uri, qr.M); err == nil {
+		code.Scale = 6
+		out["qrPng"] = "data:image/png;base64," + base64.StdEncoding.EncodeToString(code.PNG())
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 // POST /auth/mfa/enable {"code"}: confirms the app is set up and turns it on.

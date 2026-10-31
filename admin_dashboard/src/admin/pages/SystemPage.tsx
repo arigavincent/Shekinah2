@@ -14,6 +14,8 @@ const MODULE_LABELS: Record<string, string> = {
 };
 const SECURITY_FIELDS: { key: string; label: string; type: "toggle" | "number" }[] = [
   { key: "minPasswordLength", label: "Minimum password length (8–64)", type: "number" },
+  { key: "mfaRequiredForStaff", label: "Require two-step sign-in for staff (turn it on for your own account first)", type: "toggle" },
+  { key: "idleMinutes", label: "Sign staff out after this many idle minutes (0 = never, 5–720)", type: "number" },
 ];
 
 export function SystemPage() {
@@ -104,7 +106,7 @@ function SecurityTab({ token }: { token: string | null }) {
         <label key={f.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "var(--surface-hover)", borderRadius: 8 }}>
           <span>{f.label}</span>
           {f.type === "toggle" ? <input type="checkbox" checked={!!settings[f.key]} onChange={e => setSettings(prev => ({ ...prev, [f.key]: e.target.checked }))} style={{ width: 20, height: 20 }} />
-           : <input className="input" type="number" value={settings[f.key] as number || ""} onChange={e => setSettings(prev => ({ ...prev, [f.key]: parseInt(e.target.value) || 0 }))} style={{ width: 80 }} />}
+           : <input className="input" type="number" value={(settings[f.key] as number) ?? 0} onChange={e => setSettings(prev => ({ ...prev, [f.key]: parseInt(e.target.value) || 0 }))} style={{ width: 80 }} />}
         </label>
       ))}
     </div>

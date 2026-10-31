@@ -1,3 +1,5 @@
+import { RolesPage } from "./pages/RolesPage";
+import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { MonetizationPage } from "./pages/MonetizationPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -102,9 +104,11 @@ export default function App() {
         <Route path="team" element={<Navigate to="/users" replace />} />
         <Route path="monetization" element={<MonetizationPage />} />
         <Route path="appearance" element={<AppearancePage />} />
+        <Route path="account-security" element={<AccountSecurityPage />} />
 
         {/* Super Admin routes */}
         <Route path="sa/members" element={<SuperAdminRoute><MembersPage /></SuperAdminRoute>} />
+        <Route path="sa/roles" element={<SuperAdminRoute><RolesPage /></SuperAdminRoute>} />
         <Route path="sa/finance" element={<SuperAdminRoute><FinancePage /></SuperAdminRoute>} />
         <Route path="sa/groups" element={<SuperAdminRoute><GroupsPage /></SuperAdminRoute>} />
         <Route path="sa/attendance" element={<SuperAdminRoute><AttendancePage /></SuperAdminRoute>} />

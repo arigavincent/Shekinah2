@@ -2,7 +2,7 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { login } from "../api/authApi";
+import { login, verifyCode } from "../api/authApi";
 import { apiRequest } from "../api/client";
 import { saveSession } from "../auth/session";
 import { InlineAlert } from "../components/InlineAlert";
@@ -17,7 +17,8 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   // Forgot password: ask for a code by email, then choose a new password.
-  const [step, setStep] = useState<"login" | "request" | "reset">("login");
+  const [step, setStep] = useState<"login" | "request" | "reset" | "code">("login");
+  const [mfaToken, setMfaToken] = useState("");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [info, setInfo] = useState("");
@@ -43,14 +44,49 @@ export function LoginPage() {
     setError("");
     try {
       await apiRequest("/api/v1/auth/password-reset/confirm", { method: "POST", body: { email: email.trim(), code: code.trim(), newPassword } });
-      const { token, user } = await login(email.trim(), newPassword);
-      saveSession(token, user);
+      const signedIn = await login(email.trim(), newPassword);
+      if (signedIn.mfaRequired) { setMfaToken(signedIn.mfaToken || ""); setCode(""); setStep("code"); return; }
+      saveSession(signedIn.token, signedIn.user);
       navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reset the password");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function submitCode(event: FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const { token, user } = await verifyCode(mfaToken, code.trim());
+      saveSession(token, user);
+      navigate(user.passwordResetRequired ? "/reset-password" : "/", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That code is not right");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (step === "code") {
+    return (
+      <main className="auth-page">
+        <form className="auth-card" onSubmit={submitCode}>
+          <p className="eyebrow">Shekinah Admin</p>
+          <h1>Enter your code</h1>
+          <p className="muted">Open your authenticator app and type the 6-digit code for Shekinah Sons Global.</p>
+          <label>
+            Code
+            <input value={code} onChange={event => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" autoFocus />
+          </label>
+          {error ? <InlineAlert title="Sign-in failed" message={error} /> : null}
+          <button disabled={loading || code.length !== 6}>{loading ? "Checking..." : "Sign In"}</button>
+          <button type="button" className="secondary" onClick={() => { setStep("login"); setError(""); setCode(""); }}>Back</button>
+        </form>
+      </main>
+    );
   }
 
   if (step !== "login") {
@@ -97,9 +133,10 @@ export function LoginPage() {
     setError("");
 
     try {
-      const { token, user } = await login(email.trim(), password);
-      saveSession(token, user);
-      navigate(user.passwordResetRequired ? "/reset-password" : "/", { replace: true });
+      const signedIn = await login(email.trim(), password);
+      if (signedIn.mfaRequired) { setMfaToken(signedIn.mfaToken || ""); setCode(""); setStep("code"); return; }
+      saveSession(signedIn.token, signedIn.user);
+      navigate(signedIn.user.passwordResetRequired ? "/reset-password" : "/", { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to sign in";
       setError(message);
@@ -119,6 +156,9 @@ export function LoginPage() {
         <p className="muted">
           Sign in with an admin account to manage sermons, devotions, events, and updates.
         </p>
+        {typeof window !== "undefined" && new URLSearchParams(window.location.search).has("idle") ? (
+          <InlineAlert title="Signed out" message="You were signed out after a period without activity. Please sign in again." />
+        ) : null}
 
         <label>
           Email

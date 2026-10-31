@@ -38,6 +38,14 @@ export async function apiRequest<T>(
   const payload = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
+    // Staff idle limit reached, or two-step sign-in required: go where it can be fixed.
+    if (typeof window !== "undefined" && payload?.code === "idle_timeout") {
+      localStorage.removeItem("shekinah.admin.token");
+      localStorage.removeItem("shekinah.admin.user");
+      window.location.assign("/login?idle=1");
+    } else if (typeof window !== "undefined" && payload?.code === "mfa_setup_required" && !window.location.pathname.startsWith("/account-security")) {
+      window.location.assign("/account-security");
+    }
     throw new ApiError(
       payload?.message || "Request failed",
       response.status,
