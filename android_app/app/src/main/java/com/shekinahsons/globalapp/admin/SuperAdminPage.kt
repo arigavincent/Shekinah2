@@ -652,6 +652,14 @@ internal fun SaApiKeysPane() {
                     Text("${k.prefix}••••••••", color = Brand.Text2, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 12.sp)
                     if (k.revoked) Text("REVOKED", style = Type.Label, color = Color(0xFFFF6B6B))
                 }
+                if (!k.revoked) Text("Rotate", color = Brand.Gold, fontSize = 12.sp,
+                    modifier = Modifier.padding(end = 14.dp).clickable {
+                        scope.launch {
+                            runCatching { Api.post("/admin/sa/api-keys/${k.id}/rotate", emptyMap<String, String>())["key"]?.jsonPrimitive?.content }
+                                .onSuccess { fresh -> rawKey = fresh; list.clear(); list.addAll(Api.decode<List<SaApiKey>>(Api.get("/admin/sa/api-keys")["keys"])) }
+                                .onFailure { error = it.message }
+                        }
+                    })
                 if (!k.revoked) Text("Revoke", color = Color(0xFFFF6B6B), fontSize = 12.sp,
                     modifier = Modifier.clickable {
                         scope.launch {

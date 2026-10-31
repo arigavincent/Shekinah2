@@ -60,6 +60,7 @@ import androidx.core.content.FileProvider
 import coil3.compose.AsyncImage
 import com.shekinahsons.globalapp.BuildConfig
 import com.shekinahsons.globalapp.data.Api
+import kotlinx.serialization.json.jsonPrimitive
 import com.shekinahsons.globalapp.events.FormField
 import com.shekinahsons.globalapp.events.RegSetup
 import com.shekinahsons.globalapp.ui.components.ErrorNote
@@ -81,10 +82,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 
 @Serializable
-data class AdminEvent(val publishedAt:String="",val isPublished:Boolean=true,val notifyOnPublish:Boolean=false,val id: String = "", val title: String = "", val eventDate: String = "", val eventTime: String = "", val location: String = "", val imageUrl: String = "", val description: String = "")
+data class AdminEvent(val cancelledAt:String?=null,val publishedAt:String="",val isPublished:Boolean=true,val notifyOnPublish:Boolean=false,val id: String = "", val title: String = "", val eventDate: String = "", val eventTime: String = "", val location: String = "", val imageUrl: String = "", val description: String = "")
 
 @Serializable
-data class Registrant(val name: String = "", val email: String = "", val answers: Map<String, String> = emptyMap(), val ticket: String = "", val payment: String = "none", val registered: String = "")
+data class Registrant(val id: String = "", val voided: Boolean = false, val name: String = "", val email: String = "", val answers: Map<String, String> = emptyMap(), val ticket: String = "", val payment: String = "none", val registered: String = "")
 
 private val fieldTypes = listOf("text" to "Short answer", "longtext" to "Paragraph", "phone" to "Phone", "email" to "Email", "number" to "Number", "choice" to "Choice")
 
@@ -318,16 +319,25 @@ private fun Registrants(e: AdminEvent) {
     val fields = remember { mutableStateListOf<FormField>() }
     var price by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(e.id) {
+    var reload by remember { mutableIntStateOf(0) }
+    var cancelled by remember(e.id) { mutableStateOf(!e.cancelledAt.isNullOrBlank()) }
+    var issueTo by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(e.id, reload) {
         runCatching { Api.get("/admin/events/${e.id}/registrations") }.onSuccess { res ->
             list.clear(); list.addAll(Api.decode<List<Registrant>>(res["registrations"]))
             val s = Api.decode<RegSetup>(res["setup"]); fields.clear(); fields.addAll(s.fields); price = s.price
         }.onFailure { error = it.message }
     }
+    fun act(method: String, path: String, body: Map<String, Any?> = emptyMap(), done: () -> Unit = {}) = scope.launch {
+        error = null; note = null
+        runCatching { if (method == "DELETE") Api.delete("/admin/events/${e.id}$path") else Api.post("/admin/events/${e.id}$path", body) }
+            .onSuccess { note = it["message"]?.jsonPrimitive?.content; done(); reload++ }.onFailure { error = it.message }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "${list.size} registered" + if (price > 0) " · ${list.count { it.payment == "paid" }} paid" else "",
+                "${list.count { !it.voided }} registered" + if (price > 0) " · ${list.count { !it.voided && it.payment == "paid" }} paid" else "",
                 style = Type.CardTitle, color = Brand.White, modifier = Modifier.weight(1f),
             )
             if (list.isNotEmpty()) Row(Modifier.glass().clickable {
@@ -351,6 +361,12 @@ private fun Registrants(e: AdminEvent) {
             }
         }
         ErrorNote(error)
+        note?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp) }
+        Text("ISSUE A TICKET (REGISTERED IN PERSON)", style = Type.Label, color = Brand.Gold)
+        SaMemberPicker(issueTo) { issueTo = it }
+        if (issueTo.isNotBlank()) GoldButton("Issue ticket") { act("POST", "/registrations", mapOf("userId" to issueTo)) { issueTo = "" } }
+        if (cancelled) com.shekinahsons.globalapp.ui.components.GhostButton("Restore event (show it in the app again)", Modifier.fillMaxWidth()) { act("POST", "/restore") { cancelled = false } }
+        else com.shekinahsons.globalapp.ui.components.GhostButton("Cancel event (hide it; records are kept)", Modifier.fillMaxWidth()) { act("POST", "/cancel", mapOf("reason" to "")) { cancelled = true } }
         if (list.isEmpty()) Text("No one has registered yet.", style = Type.Meta, color = Brand.Text2)
         list.forEach { r ->
             Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.85f).padding(14.dp)) {
@@ -365,7 +381,9 @@ private fun Registrants(e: AdminEvent) {
                     }
                 }
                 fields.forEach { f -> r.answers[f.id]?.takeIf { it.isNotBlank() }?.let { Text("${f.label}: $it", style = Type.Meta.copy(fontSize = 13.sp), color = Color(0xFFDADADF), modifier = Modifier.padding(top = 4.dp)) } }
-                if (r.ticket.isNotBlank() && (price == 0 || r.payment == "paid")) Text("Ticket ${r.ticket}", style = Type.Label, color = Brand.Gold, modifier = Modifier.padding(top = 6.dp))
+                if (r.voided) Text("VOIDED", style = Type.Label, color = Brand.Red, modifier = Modifier.padding(top = 6.dp))
+                else if (r.ticket.isNotBlank() && (price == 0 || r.payment == "paid")) Text("Ticket ${r.ticket}", style = Type.Label, color = Brand.Gold, modifier = Modifier.padding(top = 6.dp))
+                if (!r.voided && r.id.isNotBlank()) Text("Void registration", color = Brand.Red, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp).clickable { act("DELETE", "/registrations/${r.id}") })
             }
         }
     }

@@ -58,6 +58,12 @@ object Push {
         return listOf("live", "sermons", "devotion", "events").associateWith { p.getBoolean(it, true) }
     }
 
+    // Links this phone to whoever is signed in (or no one), so messages sent to
+    // a group reach the right phones.
+    fun relink(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("token", null)?.let { register(context, it) }
+    }
+
     fun register(context: Context, token: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("token", token).apply()
         CoroutineScope(Dispatchers.IO).launch {

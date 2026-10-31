@@ -74,6 +74,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shekinahsons.globalapp.books.LibraryScreen
 import com.shekinahsons.globalapp.data.Api
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import com.shekinahsons.globalapp.data.Session
 import com.shekinahsons.globalapp.live.GoLiveScreen
 import com.shekinahsons.globalapp.ui.components.Avatar
@@ -612,6 +615,18 @@ private fun MorePage() {
 
 @Composable
 private fun NotifyForm() {
+    var audience by remember { mutableStateOf("all") }
+    var target by remember { mutableStateOf("") }
+    var groups by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
+    var roles by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
+    LaunchedEffect(Unit) {
+        // Only super admins can load these; for everyone else the choice stays hidden.
+        runCatching {
+            val g = Api.get("/admin/sa/groups")["groups"]?.jsonArray.orEmpty().map { it.jsonObject["id"]!!.jsonPrimitive.content to it.jsonObject["name"]!!.jsonPrimitive.content }
+            val r = Api.get("/admin/sa/roles")["roles"]?.jsonArray.orEmpty().map { it.jsonObject["id"]!!.jsonPrimitive.content to it.jsonObject["name"]!!.jsonPrimitive.content }
+            roles = r; groups = g
+        }
+    }
     val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
@@ -627,14 +642,29 @@ private fun NotifyForm() {
         Field("TITLE", title, { title = it.take(80) }, hint = "e.g. Sunday service at 9 AM")
         Spacer(Modifier.height(10.dp))
         Field("MESSAGE", body, { body = it.take(240) }, minHeight = 100.dp, singleLine = false)
+        // Super admins can also choose who receives it.
+        if (groups != null) {
+            Spacer(Modifier.height(10.dp))
+            Text("SEND TO", style = Type.Label, color = Brand.Gold)
+            Chips(listOf("all" to "Everyone", "group" to "A group", "role" to "A staff role", "status" to "Membership", "staff" to "All staff"), audience) { audience = it; target = "" }
+            val targets = when (audience) {
+                "group" -> groups.orEmpty()
+                "role" -> roles.orEmpty()
+                "status" -> listOf("member", "visitor", "leader", "pastor", "staff", "transferred").map { it to it.replaceFirstChar(Char::uppercase) + "s" }
+                else -> emptyList()
+            }
+            if (targets.isNotEmpty()) Chips(targets, target) { target = it }
+        }
         ErrorNote(error)
         result?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
         Spacer(Modifier.height(14.dp))
-        GoldButton("Send now", busy = busy, enabled = title.isNotBlank() && body.isNotBlank()) {
+        GoldButton("Send now", busy = busy, enabled = title.isNotBlank() && body.isNotBlank() && (audience !in listOf("group", "role", "status") || target.isNotBlank())) {
             scope.launch {
                 busy = true; error = null; result = null
-                runCatching { Api.post("/admin/notifications/broadcast", mapOf("title" to title.trim(), "body" to body.trim(), "category" to category)) }
-                    .onSuccess { result = "Sent. It's on its way to members' phones."; title = ""; body = "" }.onFailure { error = it.message }
+                runCatching {
+                    if (audience == "all") Api.post("/admin/notifications/broadcast", mapOf("title" to title.trim(), "body" to body.trim(), "category" to category))["id"]?.let { "Sent. It's on its way to members' phones." }
+                    else Api.post("/admin/sa/messages", mapOf("title" to title.trim(), "body" to body.trim(), "audience" to audience, "targetId" to target, "channels" to listOf("push")))["message"]?.jsonPrimitive?.content
+                }.onSuccess { result = it ?: "Sent."; title = ""; body = "" }.onFailure { error = it.message }
                 busy = false
             }
         }

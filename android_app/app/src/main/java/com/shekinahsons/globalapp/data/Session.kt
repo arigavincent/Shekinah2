@@ -55,6 +55,7 @@ class Session(private val context: Context) {
         member = user
         Accounts.activate(context,user.id)
         prefs.edit().putString("token", Vault.seal(token)).putString("member", Api.json.encodeToString(Member.serializer(), user)).apply()
+        com.shekinahsons.globalapp.notify.Push.relink(context)
     }
 
     // Two-step sign-in: the ticket between the password and the code steps.
@@ -124,5 +125,6 @@ class Session(private val context: Context) {
         Accounts.activate(context,"")
         permissions = emptyList()
         prefs.edit().clear().apply()
+        com.shekinahsons.globalapp.notify.Push.relink(context)
     }
 }
