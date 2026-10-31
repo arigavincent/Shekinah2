@@ -211,6 +211,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                             openReference = openReference,
                             openProfile = { nav.push(Route.Page("Profile")) },
                             seeHistory = { nav.push(Route.Page("History")) },
+                            openNotifications = { nav.push(Route.Page("Notifications")) },
                         ),
                         session = session,
                     )

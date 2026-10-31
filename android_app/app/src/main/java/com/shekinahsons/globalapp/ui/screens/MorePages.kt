@@ -175,6 +175,7 @@ fun NotificationsPage(content: HomeContent) {
     var announcements by remember{mutableStateOf(emptyList<Announcement>())}
     var feedError by remember{mutableStateOf<String?>(null)}
     LaunchedEffect(Unit){runCatching{Api.decode<List<Announcement>>(Api.get("/notifications/feed")["messages"])}.onSuccess{announcements=it}.onFailure{feedError=it.message}}
+    LaunchedEffect(Unit){com.shekinahsons.globalapp.notify.Unread.markSeen(context)}
     val prefs = remember { context.getSharedPreferences("notify", Context.MODE_PRIVATE) }
     fun toggle(key: String, def: Boolean = true): Pair<Boolean, (Boolean) -> Unit> = prefs.getBoolean(key, def) to { v -> prefs.edit().putBoolean(key, v).apply() }
     var live by remember { mutableStateOf(prefs.getBoolean("live", true)) }

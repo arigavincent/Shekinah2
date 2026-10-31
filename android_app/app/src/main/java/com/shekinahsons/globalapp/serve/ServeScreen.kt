@@ -166,7 +166,12 @@ private fun TeamTile(t: ServeTeam, status: String?, onClick: () -> Unit) {
             status?.let { StatusChip(it) }
         }
         Spacer(Modifier.weight(1f))
-        Text(t.name, color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        if (t.members > 0) {
+            Text(if (t.members == 1) "1 serving" else "${t.members} serving", color = Color.White, fontSize = 10.5.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(colors.first().copy(alpha = 0.35f)).border(1.dp, colors.first().copy(alpha = 0.6f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp))
+            Spacer(Modifier.height(8.dp))
+        }
+        Text(t.name, color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(4.dp))
         Text(t.description, style = Type.Meta.copy(fontSize = 12.sp, lineHeight = 16.sp), color = Color(0xCCFFFFFF), maxLines = 3, overflow = TextOverflow.Ellipsis)
         if (t.leaderName.isNotBlank()) {

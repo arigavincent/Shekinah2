@@ -54,6 +54,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
@@ -116,12 +119,16 @@ class HomeActions(
     val openReference: (String) -> Unit,
     val openProfile: () -> Unit,
     val seeHistory: () -> Unit = {},
+    val openNotifications: () -> Unit = {},
 )
 
 // Phaneroo's home order: today's devotional, then (when on air) the live
 // preview, then the video, audio and recap rails.
 @Composable
 fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing: Boolean, actions: HomeActions, session: com.shekinahsons.globalapp.data.Session) {
+    val homeContext = androidx.compose.ui.platform.LocalContext.current
+    var unread by remember { mutableIntStateOf(0) }
+    LaunchedEffect(refreshing) { runCatching { com.shekinahsons.globalapp.notify.Unread.count(homeContext) }.onSuccess { unread = it } }
     val screenW = LocalConfiguration.current.screenWidthDp.dp
     val videos = content.videoSermons
     val audios = content.audioSermons
@@ -157,7 +164,7 @@ fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing:
             indicator = { DoveRefreshIndicator(pull, refreshing) },
         ) {
         LazyColumn(state = list, contentPadding = PaddingValues(bottom = NavBarHeight + 120.dp), modifier = Modifier.fillMaxSize()) {
-            item { HomeTopBar(actions.openMenu, actions.openProfile) }
+            item { HomeTopBar(actions.openMenu, actions.openProfile, actions.openNotifications, initials(session.member?.name.orEmpty()), unread) }
             item { Greeting(name, actions.openProfile) }
             if (content.devotions.isNotEmpty()) item { DevotionCarousel(content.devotions, actions.openDevotion) }
             if (content.live.isLive) item { com.shekinahsons.globalapp.live.HomeLivePreview(content, session, actions.openLive) }
@@ -229,8 +236,10 @@ fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing:
     }
 }
 
+private fun initials(name: String) = name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
+
 @Composable
-private fun HomeTopBar(onMenu: () -> Unit, onProfile: () -> Unit) {
+private fun HomeTopBar(onMenu: () -> Unit, onProfile: () -> Unit, onNotifications: () -> Unit, initials: String, unread: Int) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().height(64.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -247,6 +256,11 @@ private fun HomeTopBar(onMenu: () -> Unit, onProfile: () -> Unit) {
             Text("SONS GLOBAL", fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 8.5.sp, lineHeight = 10.sp, letterSpacing = 3.2.sp, color = Brand.Text2)
         }
         Spacer(Modifier.weight(1f))
+        Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onNotifications), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Notifications, if (unread > 0) "Notifications, $unread new" else "Notifications", tint = Brand.White, modifier = Modifier.size(26.dp))
+            if (unread > 0) Box(Modifier.align(Alignment.TopEnd).padding(top = 9.dp, end = 10.dp).size(9.dp).clip(CircleShape).background(Color(0xFFE53935)))
+        }
+        Spacer(Modifier.width(6.dp))
         Box(
             Modifier
                 .size(40.dp)
@@ -258,7 +272,8 @@ private fun HomeTopBar(onMenu: () -> Unit, onProfile: () -> Unit) {
                 .background(Color(0xFF141418)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Rounded.Person, "Profile", tint = Brand.Gold, modifier = Modifier.size(22.dp))
+            if (initials.isNotBlank()) Text(initials, color = Brand.Gold, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            else Icon(Icons.Rounded.Person, "Profile", tint = Brand.Gold, modifier = Modifier.size(22.dp))
         }
     }
 }

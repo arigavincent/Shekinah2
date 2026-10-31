@@ -16,6 +16,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -262,11 +264,13 @@ fun HomeLivePreview(content: HomeContent, session: Session, onOpen: () -> Unit) 
                 LiveBadgeRow(content.live.viewers.toIntOrNull() ?: 0, Modifier.align(Alignment.TopStart).padding(12.dp))
                 Icon(Icons.Rounded.VolumeOff, "Muted", tint = Color.White, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).size(30.dp).glass(CircleShape).padding(6.dp))
                 Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    BroadcastRing()
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(content.live.title.ifBlank { "Live Service" }, style = Type.Title, color = Color.White, maxLines = 1)
-                        Text("Tap to watch with sound and join the chat", style = Type.Meta, color = Color(0xCCFFFFFF))
+                        Text(content.live.title.ifBlank { "Live Service" }, style = Type.Title, color = Color.White, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        Text("Tap to watch with sound and join the chat", style = Type.Meta, color = Color(0xCCFFFFFF), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
-                    Text("Join", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                    Text("Watch now", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp,
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient).padding(horizontal = 18.dp, vertical = 9.dp))
                 }
             }
@@ -675,3 +679,19 @@ internal fun ModeratorSettings(close: () -> Unit) {
     )
 }
 
+
+// A broadcast icon with rings spreading out from it, like a signal going out.
+@Composable
+private fun BroadcastRing() {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "ring")
+    val p by t.animateFloat(0f, 1f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(1600, easing = androidx.compose.animation.core.LinearEasing)), label = "p")
+    Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+        listOf(p, (p + 0.5f) % 1f).forEach { phase ->
+            Box(Modifier.size(42.dp).graphicsLayer { scaleX = 0.55f + 0.6f * phase; scaleY = scaleX; alpha = (1f - phase) * 0.7f }
+                .border(2.dp, Brand.Red, CircleShape))
+        }
+        Box(Modifier.size(26.dp).clip(CircleShape).background(Brand.Red), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Podcasts, null, tint = Color.White, modifier = Modifier.size(16.dp))
+        }
+    }
+}

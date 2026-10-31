@@ -39,6 +39,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -218,10 +220,26 @@ private fun PrayerCard(p: Prayer, showStatus: Boolean, onPray: () -> Unit) {
         Text(p.text, style = Type.Body, color = Brand.White)
         if (!showStatus) {
             Spacer(Modifier.height(12.dp))
-            Row(Modifier.glass().clickable(onClick = onPray).padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.VolunteerActivism, null, tint = Brand.Gold, modifier = Modifier.size(18.dp))
+            // A soft buzz and a warm glow confirm the prayer; the count rolls up.
+            val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+            var prayed by remember(p.id) { mutableStateOf(false) }
+            val glow by androidx.compose.animation.core.animateFloatAsState(if (prayed) 1f else 0f, androidx.compose.animation.core.tween(500), label = "prayed")
+            Row(
+                Modifier.lifted(RoundedCornerShape(50), (10 * glow).dp, Brand.Gold).clip(RoundedCornerShape(50))
+                    .background(Brand.Gold.copy(alpha = 0.18f * glow)).glass()
+                    .clickable { if (!prayed) { haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); prayed = true }; onPray() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.VolunteerActivism, null, tint = Brand.Gold, modifier = Modifier.size(18.dp).graphicsLayer { scaleX = 1f + 0.2f * glow; scaleY = scaleX })
                 Spacer(Modifier.width(8.dp))
-                Text(if (p.count > 0) "I prayed · ${p.count}" else "I prayed", color = Brand.White, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 13.5.sp)
+                Text(if (prayed) "Prayed" else "I prayed", color = if (prayed) Brand.GoldLight else Brand.White, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 13.5.sp)
+                if (p.count > 0) {
+                    Text(" · ", color = Brand.Text2, fontSize = 13.5.sp)
+                    androidx.compose.animation.AnimatedContent(p.count, transitionSpec = {
+                        (androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn()) togetherWith (androidx.compose.animation.slideOutVertically { -it } + androidx.compose.animation.fadeOut())
+                    }, label = "count") { n -> Text("$n", color = if (prayed) Brand.Gold else Brand.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 13.5.sp) }
+                }
             }
         }
     }
@@ -282,14 +300,16 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
         if (tab == "Share yours" && mine.isNotEmpty()) {
             item { Text("Your testimonies (${mine.size})", style = Type.Title, color = Brand.White, modifier = Modifier.padding(top = 8.dp)) }
             items(mine, key = { "mine-" + it.id }) { t ->
-                val (statusText, statusColor) = when (t.status) {
-                    "approved" -> "APPROVED" to Color(0xFF4ADE80)
-                    "declined" -> "PRIVATE" to Color(0x88FFFFFF)
-                    else -> "UNDER REVIEW" to Brand.GoldLight
+                val (statusText, statusColor) = when {
+                    t.status == "approved" && t.featured -> "★ FEATURED" to Brand.Gold
+                    t.status == "approved" -> "SHARED WITH CHURCH" to Color(0xFF4ADE80)
+                    t.status == "rejected" || t.status == "hidden" -> "NOT SHARED" to Color(0x88FFFFFF)
+                    else -> "PENDING REVIEW" to Brand.GoldLight
                 }
                 Card {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(t.title, style = Type.CardTitle, color = Brand.White, modifier = Modifier.weight(1f))
+                        Text(t.title, style = Type.CardTitle, color = Brand.White, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(8.dp))
                         Box(Modifier.clip(RoundedCornerShape(50)).background(statusColor.copy(alpha = 0.18f)).padding(horizontal = 8.dp, vertical = 2.dp)) {
                             Text(statusText, color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
