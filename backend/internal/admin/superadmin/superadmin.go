@@ -274,6 +274,33 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Account updated"})
 }
 
+// SetTemporaryPassword replaces a member's password with a random one shown
+// once, signs them out everywhere and makes them choose their own at sign-in.
+// It works without email, for people who forgot their password.
+func (h *Handler) SetTemporaryPassword(c *gin.Context) {
+	id := c.Param("id")
+	if !notSelf(c, id) {
+		return
+	}
+	b := make([]byte, 6)
+	_, _ = rand.Read(b)
+	temporary := hex.EncodeToString(b)
+	hash, err := bcrypt.GenerateFromPassword([]byte(temporary), bcrypt.DefaultCost)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "Could not secure the password")
+		return
+	}
+	var email string
+	err = h.db.QueryRow(c.Request.Context(), `UPDATE users SET password_hash=$2,password_reset_required=TRUE,session_version=session_version+1,updated_at=NOW()
+		WHERE id::text=$1 AND deleted_at IS NULL RETURNING email`, id, string(hash)).Scan(&email)
+	if err != nil {
+		fail(c, http.StatusNotFound, "Account not found")
+		return
+	}
+	h.audit(c, "TEMPORARY_PASSWORD", "Set a temporary password for "+email, id)
+	c.JSON(http.StatusOK, gin.H{"email": email, "temporaryPassword": temporary, "message": "Share this privately. They will choose their own password when they sign in."})
+}
+
 // ToggleUserSuspend suspends an active account or reactivates a suspended one.
 // A body {"suspend": bool} sets the state explicitly.
 func (h *Handler) ToggleUserSuspend(c *gin.Context) {

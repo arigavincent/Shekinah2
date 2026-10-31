@@ -189,6 +189,10 @@ func (h Handler) AdminSendReset(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Member not found"})
 		return
 	}
+	if !h.service.EmailReady(c.Request.Context()) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "Email isn't set up yet, so no code can be sent. Add it in Settings → Email, or set a temporary password instead."})
+		return
+	}
 	if err := h.service.RequestPasswordReset(c.Request.Context(), PasswordResetRequest{Email: user.Email}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not send the reset code"})
 		return

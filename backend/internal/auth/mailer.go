@@ -122,3 +122,10 @@ func envInt(key string, fallback int) int {
 
 	return parsed
 }
+
+// EmailReady reports whether outgoing email is set up, so staff are never
+// told a code was sent when it could not be.
+func (s Service) EmailReady(ctx context.Context) bool {
+	config, _, err := s.mailer.store.Load(ctx)
+	return err == nil && config.Configured()
+}

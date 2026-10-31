@@ -130,6 +130,7 @@ export function MembersPage() {
                 <button className="btn danger" onClick={() => deleteUser(selected, "soft")}>Soft Delete</button>
                 <button className="btn danger outline" onClick={() => deleteUser(selected, "hard")}>Hard Delete</button>
               </div>
+              <EditMember key={selected.id} token={token} member={selected} onSaved={() => void load()} />
               <hr />
               <h3 style={{ marginTop: 12 }}><StickyNote size={14} style={{ marginRight: 4 }} />Pastoral Notes</h3>
               {notes.length === 0 && <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>No pastoral notes.</p>}
@@ -186,5 +187,38 @@ function AddAccount({ token, onCreated }: { token: string | null; onCreated: () 
         <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
       </div>
     </>)}
+  </div>);
+}
+
+// Edit a member's details and help them back in when they forget a password.
+function EditMember({ token, member, onSaved }: { token: string | null; member: Member; onSaved: () => void }) {
+  const [form, setForm] = useState({ name: member.name, email: member.email, phone: member.phone || "", role: member.role, membershipStatus: member.membershipStatus || "member" });
+  const [busy, setBusy] = useState(""); const [message, setMessage] = useState(""); const [error, setError] = useState(""); const [temporary, setTemporary] = useState("");
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  async function run(kind: string, action: () => Promise<void>) {
+    setBusy(kind); setError(""); setMessage(""); setTemporary("");
+    try { await action(); } catch (e: any) { setError(e.message); }
+    setBusy("");
+  }
+  const save = () => run("save", async () => { await apiRequest(`/api/v1/admin/sa/users/${member.id}`, { method: "PATCH", token, body: form }); setMessage("Details saved."); onSaved(); });
+  const emailCode = () => run("email", async () => { const r = await apiRequest<{ message: string }>(`/api/v1/admin/members/${member.id}/reset-password`, { method: "POST", token }); setMessage(r.message); });
+  const tempPassword = () => run("temp", async () => { const r = await apiRequest<{ temporaryPassword: string }>(`/api/v1/admin/sa/users/${member.id}/temporary-password`, { method: "POST", token }); setTemporary(r.temporaryPassword); });
+  return (<div style={{ display: "grid", gap: 10, margin: "8px 0 16px" }}>
+    <h3 style={{ marginTop: 8 }}>Details</h3>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+      <label>Full name<input className="input" value={form.name} onChange={set("name")} /></label>
+      <label>Email<input className="input" type="email" value={form.email} onChange={set("email")} /></label>
+      <label>Phone<input className="input" value={form.phone} onChange={set("phone")} /></label>
+      <label>Role<select className="input" value={form.role} onChange={set("role")}>{ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+      <label>Membership<select className="input" value={form.membershipStatus} onChange={set("membershipStatus")}>{STATUSES.map((v) => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}</select></label>
+    </div>
+    {error && <div className="alert alert-error">{error}</div>}
+    {message && <div className="alert alert-success">{message}</div>}
+    {temporary && <div className="alert alert-success">Temporary password: <code style={{ userSelect: "all" }}>{temporary}</code> — share it privately. They have been signed out everywhere and will choose their own password when they sign in.</div>}
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button className="btn primary" onClick={save} disabled={!!busy || !form.name.trim() || !form.email.includes("@")}>{busy === "save" ? "Saving…" : "Save details"}</button>
+      <button className="btn" onClick={emailCode} disabled={!!busy}>{busy === "email" ? "Sending…" : "Email a reset code"}</button>
+      <button className="btn" onClick={tempPassword} disabled={!!busy}>{busy === "temp" ? "Setting…" : "Set a temporary password"}</button>
+    </div>
   </div>);
 }

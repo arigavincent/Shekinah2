@@ -187,25 +187,64 @@ internal fun SaMembersPane() {
                     runCatching { Api.delete("/admin/sa/users/${u.id}?mode=soft") }
                         .onSuccess { list.removeAll { it.id == u.id }; selected = null }
                         .onFailure { error = it.message }
-                }}
+                }},
+                onSaved = { updated -> val i = list.indexOfFirst { it.id == updated.id }; if (i >= 0) list[i] = updated }
             )
         }
     }
 }
 
 @Composable
-internal fun SaUserDetailDialog(user: SaUser, onDismiss: () -> Unit, onSuspend: () -> Unit, onSoftDelete: () -> Unit) {
+internal fun SaUserDetailDialog(user: SaUser, onDismiss: () -> Unit, onSuspend: () -> Unit, onSoftDelete: () -> Unit, onSaved: (SaUser) -> Unit = {}) {
+    val scope = rememberCoroutineScope()
+    var name by remember(user.id) { mutableStateOf(user.name) }
+    var email by remember(user.id) { mutableStateOf(user.email) }
+    var phone by remember(user.id) { mutableStateOf(user.phone) }
+    var role by remember(user.id) { mutableStateOf(user.role) }
+    var status by remember(user.id) { mutableStateOf(user.membershipStatus) }
+    var busy by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var temporary by remember { mutableStateOf<String?>(null) }
+    fun act(kind: String, block: suspend () -> Unit) = scope.launch {
+        busy = kind; error = null; note = null; temporary = null
+        runCatching { block() }.onFailure { error = it.message }
+        busy = ""
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color(0xFF1A1A1E),
-        title = { Text(user.name, color = Brand.White, fontWeight = FontWeight.Bold) },
+        title = { Text(user.name, color = Brand.White, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Email: ${user.email}", color = Brand.Text2, fontSize = 13.sp)
-                Text("Role: ${user.role}", color = Brand.Text2, fontSize = 13.sp)
-                Text("Status: ${user.membershipStatus}", color = Brand.Text2, fontSize = 13.sp)
-                if (user.phone.isNotBlank()) Text("Phone: ${user.phone}", color = Brand.Text2, fontSize = 13.sp)
-                HorizontalDivider(color = Brand.Line, modifier = Modifier.padding(vertical = 8.dp))
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Field("FULL NAME", name, { name = it })
+                Field("EMAIL", email, { email = it.trim() }, keyboard = androidx.compose.ui.text.input.KeyboardType.Email)
+                Field("PHONE", phone, { phone = it }, keyboard = androidx.compose.ui.text.input.KeyboardType.Phone)
+                Text("ROLE", color = Brand.Text2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Chips(listOf("member" to "Member", "admin" to "Admin", "super_admin" to "Super admin"), role) { role = it }
+                Text("MEMBERSHIP", color = Brand.Text2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Chips(listOf("member" to "Member", "visitor" to "Visitor", "leader" to "Leader", "pastor" to "Pastor", "staff" to "Staff", "transferred" to "Transferred"), status) { status = it }
+                ErrorNote(error)
+                note?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp) }
+                temporary?.let {
+                    Text("Temporary password (share privately; they choose their own at sign-in):", color = Brand.Text2, fontSize = 12.sp)
+                    Text(it, color = Brand.White, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 16.sp,
+                        modifier = Modifier.glass().padding(horizontal = 14.dp, vertical = 10.dp))
+                }
+                GoldButton(if (busy == "save") "Saving…" else "Save details", busy = busy == "save", enabled = busy.isEmpty() && name.isNotBlank() && "@" in email) {
+                    act("save") {
+                        Api.patch("/admin/sa/users/${user.id}", mapOf("name" to name.trim(), "email" to email, "phone" to phone.trim(), "role" to role, "membershipStatus" to status))
+                        note = "Details saved."
+                        onSaved(user.copy(name = name.trim(), email = email, phone = phone.trim(), role = role, membershipStatus = status))
+                    }
+                }
+                GhostButton(if (busy == "email") "Sending…" else "Email a reset code", Modifier.fillMaxWidth()) {
+                    if (busy.isEmpty()) act("email") { note = Api.post("/admin/members/${user.id}/reset-password", emptyMap<String, String>())["message"]?.jsonPrimitive?.content }
+                }
+                GhostButton(if (busy == "temp") "Setting…" else "Set a temporary password", Modifier.fillMaxWidth()) {
+                    if (busy.isEmpty()) act("temp") { temporary = Api.post("/admin/sa/users/${user.id}/temporary-password", emptyMap<String, String>())["temporaryPassword"]?.jsonPrimitive?.content }
+                }
+                HorizontalDivider(color = Brand.Line, modifier = Modifier.padding(vertical = 4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         if (user.suspended) "Reactivate" else "Suspend",
@@ -214,7 +253,7 @@ internal fun SaUserDetailDialog(user: SaUser, onDismiss: () -> Unit, onSuspend: 
                         modifier = Modifier.glass().clickable(onClick = onSuspend).padding(horizontal = 14.dp, vertical = 8.dp)
                     )
                     Text(
-                        "Soft Delete",
+                        "Archive",
                         color = Color(0xFFFF6B6B), fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
                         modifier = Modifier.glass().clickable(onClick = onSoftDelete).padding(horizontal = 14.dp, vertical = 8.dp)
                     )

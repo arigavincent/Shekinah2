@@ -85,6 +85,19 @@ func TestSuperAdminToolsAccessSafetyAndEffects(t *testing.T) {
 		t.Fatal("new account was not queued for webhooks")
 	}
 
+	// Staff can reset a forgotten password without email; emailed codes say
+	// plainly when email is not set up.
+	reset := req("POST", "/admin/sa/users/"+usherID+"/temporary-password", nil, admin, 200)["temporaryPassword"].(string)
+	req("POST", "/auth/login", map[string]string{"email": "usher@example.invalid", "password": temp}, "", 401)
+	if again := req("POST", "/auth/login", map[string]string{"email": "usher@example.invalid", "password": reset}, "", 200); again["user"].(map[string]any)["passwordResetRequired"] != true {
+		t.Fatal("temporary password must require a new password")
+	}
+	req("POST", "/admin/members/"+usherID+"/reset-password", nil, admin, 503)
+	req("PATCH", "/admin/sa/users/"+usherID, map[string]any{"name": "Head Usher", "phone": "0700000000", "membershipStatus": "leader"}, admin, 200)
+	if p := req("GET", "/admin/sa/users/"+usherID, nil, admin, 200)["profile"].(map[string]any); p["name"] != "Head Usher" || p["membershipStatus"] != "leader" {
+		t.Fatalf("profile not updated: %v", p)
+	}
+
 	// A super admin cannot lock themselves out.
 	req("POST", "/admin/sa/users/"+adminID+"/suspend", nil, admin, 400)
 	req("DELETE", "/admin/sa/users/"+adminID, nil, admin, 400)
