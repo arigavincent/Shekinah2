@@ -1,3 +1,4 @@
+-- +goose Up
 UPDATE sermons
 SET
 	media_url = '/uploads/media/shekinah-grace-for-the-new-season-test.mp3',

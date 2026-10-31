@@ -90,6 +90,15 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.time.Duration
 import java.time.OffsetDateTime
+import androidx.compose.material.icons.rounded.AdminPanelSettings
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.AccountBalance
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Webhook
+import androidx.compose.material.icons.rounded.ManageAccounts
+import androidx.compose.material.icons.rounded.EventNote
+import androidx.compose.material.icons.rounded.Sms
+import androidx.compose.ui.window.Dialog
 
 @Serializable
 data class AdminOverview(
@@ -120,6 +129,7 @@ private enum class Section(val label: String, val icon: ImageVector) {
     Team("Users", Icons.Rounded.Groups),
     Books("Books", Icons.AutoMirrored.Rounded.MenuBook),
     More("More", Icons.Rounded.MoreHoriz),
+    SuperAdmin("SA Tools", Icons.Rounded.AdminPanelSettings),
 }
 
 private val permissionInfo = listOf(
@@ -179,6 +189,7 @@ fun AdminConsole(session: Session, openApp: () -> Unit, openLive: () -> Unit) {
                     Section.Team -> TeamPage()
                     Section.Books -> LibraryScreen(session, openProfile = {}, onBack = { section = Section.Overview }, bottomInset = 76.dp,onFullScreen={bookFullScreen=it})
                     Section.More -> MorePage()
+                    Section.SuperAdmin -> SuperAdminPage()
                 }
             }
         }
@@ -228,10 +239,10 @@ private fun SectionBar(current: Section, modifier: Modifier, select: (Section) -
     }
 }
 
-private val pagePadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 130.dp)
+internal val pagePadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 130.dp)
 
 @Composable
-private fun PageTitle(title: String, subtitle: String) {
+internal fun PageTitle(title: String, subtitle: String) {
     Column(Modifier.padding(bottom = 14.dp)) {
         Text(title, style = Type.Display, color = Brand.White)
         Text(subtitle, style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.Text2)
@@ -279,6 +290,7 @@ private fun OverviewPage(session: Session, go: (Section) -> Unit, goLive: () -> 
                     item { Quick("Gate check-in", Icons.Rounded.QrCodeScanner, onClick = openGate) }
                     item { Quick("Events & registrations", Icons.Rounded.Groups) { go(Section.More) } }
                     item { Quick("Send notification", Icons.Rounded.Campaign) { go(Section.More) } }
+                    item { Quick("SA Governance", Icons.Rounded.AdminPanelSettings) { go(Section.SuperAdmin) } }
                     item { Quick("Publish a book", Icons.AutoMirrored.Rounded.MenuBook) { go(Section.Books) } }
                     item { Quick("Give permissions", Icons.Rounded.Groups) { go(Section.Team) } }
                 }
@@ -466,7 +478,7 @@ private fun PaymentCard(t: Txn, busy: Boolean, confirm: () -> Unit, reject: () -
 }
 
 @Composable
-private fun Empty(text: String) {
+internal fun Empty(text: String) {
     Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(56.dp).clip(CircleShape).background(Color(0x1FD4AF37)), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.Check, null, tint = Brand.Gold, modifier = Modifier.size(28.dp))
@@ -574,9 +586,20 @@ private fun TeamPage() {
 @Composable
 private fun MorePage() {
     var view by rememberSaveable { mutableStateOf("events") }
+    val tools = listOf(
+        "events" to "Events", "serve" to "Serve", "branches" to "Branches",
+        "notify" to "Send notification", "prayers" to "Prayer requests",
+        "sermons" to "Sermons", "devotions" to "Devotions", "updates" to "Updates",
+        "plans" to "Reading plans", "testimonies" to "Testimonies", "community" to "Community",
+        "monetization" to "Monetization", "settings" to "Ministry settings",
+        "members" to "Members", "groups" to "Groups", "attendance" to "Attendance",
+        "kiosks" to "Kiosks", "templates" to "Templates", "apikeys" to "API Keys",
+        "webhooks" to "Webhooks", "audit" to "Audit Trail", "modules" to "Modules",
+        "backup" to "Backup & GDPR"
+    )
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { PageTitle("More", "Content, ministry settings and community care") }
-        item { ToolChoices(listOf("events" to "Events", "serve" to "Serve", "branches" to "Branches", "notify" to "Send notification", "prayers" to "Prayer requests", "sermons" to "Sermons", "devotions" to "Devotions", "updates" to "Updates", "plans" to "Reading plans", "testimonies" to "Testimonies", "community" to "Community", "monetization" to "Monetization", "settings" to "Ministry settings"), view) { view = it } }
+        item { ToolChoices(tools, view) { view = it } }
         when (view) {
             "events" -> item { AdminEventsPane() }
             "serve" -> item { AdminServePane() }
@@ -586,6 +609,16 @@ private fun MorePage() {
             "testimonies", "community" -> item { androidx.compose.runtime.key(view) { AdminModerationPane(view=="testimonies") } }
             "monetization" -> item { AdminMonetizationPane() }
             "settings" -> item { AdminMinistrySettings() }
+            "members" -> item { SaMembersPane() }
+            "groups" -> item { SaGroupsPane() }
+            "attendance" -> item { SaAttendancePane() }
+            "kiosks" -> item { SaKiosksPane() }
+            "templates" -> item { SaTemplatesPane() }
+            "apikeys" -> item { SaApiKeysPane() }
+            "webhooks" -> item { SaWebhooksPane() }
+            "audit" -> item { SaAuditPane() }
+            "modules" -> item { SaModulesPane() }
+            "backup" -> item { SaBackupPane() }
             else -> prayers(this)
         }
     }

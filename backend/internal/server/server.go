@@ -13,6 +13,7 @@ import (
 	adminprayers "github.com/ariga/shekinah-backend/internal/admin/prayers"
 	adminreadingplans "github.com/ariga/shekinah-backend/internal/admin/readingplans"
 	adminsermons "github.com/ariga/shekinah-backend/internal/admin/sermons"
+	"github.com/ariga/shekinah-backend/internal/admin/superadmin"
 	adminupdates "github.com/ariga/shekinah-backend/internal/admin/updates"
 	"github.com/ariga/shekinah-backend/internal/apibible"
 	"github.com/ariga/shekinah-backend/internal/attendance"
@@ -395,6 +396,77 @@ func newRouter(cfg config.Config, db *pgxpool.Pool, background context.Context) 
 			adminGroup.PATCH("/testimonies/:id", testimonyHandler.AdminUpdate)
 			adminGroup.GET("/checkins/recent", checkinHandler.Recent)
 			adminGroup.POST("/checkins/verify", checkinHandler.Verify)
+			// ─── Super Admin only routes ───────────────────────────────────
+			saGroup := adminGroup.Group("")
+			saGroup.Use(func(c *gin.Context) {
+				userID, ok := auth.UserIDFromContext(c)
+				if !ok {
+					c.AbortWithStatusJSON(401, gin.H{"message": "Unauthorized"})
+					return
+				}
+				var role string
+				_ = db.QueryRow(c.Request.Context(), `SELECT role FROM users WHERE id = $1`, userID).Scan(&role)
+				if role != "super_admin" {
+					c.AbortWithStatusJSON(403, gin.H{"message": "Super admin access required"})
+					return
+				}
+				c.Next()
+			})
+			saHandler := superadmin.New(db)
+			// Domain 1 – Identity
+			saGroup.POST("/sa/users", saHandler.CreateUser)
+			saGroup.GET("/sa/users/:id", saHandler.GetUserProfile)
+			saGroup.PATCH("/sa/users/:id", saHandler.UpdateUser)
+			saGroup.POST("/sa/users/:id/suspend", saHandler.ToggleUserSuspend)
+			saGroup.DELETE("/sa/users/:id", saHandler.DeleteUser)
+			// Domain 2 – Members
+			saGroup.POST("/sa/members/:id/merge", saHandler.MergeMemberProfiles)
+			saGroup.GET("/sa/members/:id/pastoral-notes", saHandler.ListPastoralNotes)
+			saGroup.POST("/sa/members/:id/pastoral-notes", saHandler.CreatePastoralNote)
+			saGroup.DELETE("/sa/members/:id/pastoral-notes/:noteId", saHandler.DeletePastoralNote)
+			saGroup.DELETE("/sa/members/:id/purge-gdpr", saHandler.PurgeMemberDataGDPR)
+			// Domain 3 – Finance
+			saGroup.GET("/sa/finance/funds", saHandler.ListFunds)
+			saGroup.PUT("/sa/finance/funds", saHandler.SaveFund)
+			saGroup.POST("/sa/finance/transactions", saHandler.RecordManualTransaction)
+			saGroup.POST("/sa/finance/transactions/:id/refund", saHandler.ProcessRefund)
+			saGroup.DELETE("/sa/finance/transactions/:id", saHandler.HardDeleteFinancialEntry)
+			saGroup.GET("/sa/members/:memberId/donation-statement", saHandler.GenerateDonorStatement)
+			saGroup.GET("/sa/kiosks", saHandler.ListKiosks)
+			saGroup.POST("/sa/kiosks", saHandler.PairKiosk)
+			saGroup.PATCH("/sa/kiosks/:id/lock", saHandler.ToggleKioskLock)
+			saGroup.DELETE("/sa/kiosks/:id", saHandler.UnbindKiosk)
+			// Domain 4 – Groups
+			saGroup.GET("/sa/groups", saHandler.ListGroups)
+			saGroup.PUT("/sa/groups", saHandler.SaveGroup)
+			saGroup.DELETE("/sa/groups/:id", saHandler.DeleteGroup)
+			saGroup.GET("/sa/groups/:id/roster", saHandler.ListGroupRoster)
+			saGroup.POST("/sa/groups/:id/roster", saHandler.AssignGroupMember)
+			saGroup.DELETE("/sa/groups/:id/roster/:userId", saHandler.RemoveGroupMember)
+			// Domain 5 – Attendance
+			saGroup.GET("/sa/attendance/sessions", saHandler.ListAttendanceSessions)
+			saGroup.POST("/sa/attendance/sessions", saHandler.CreateAttendanceSession)
+			saGroup.PATCH("/sa/attendance/sessions/:id", saHandler.UpdateAttendanceSession)
+			saGroup.DELETE("/sa/attendance/sessions/:id", saHandler.DeleteAttendanceSession)
+			// Domain 7 – Comms Templates
+			saGroup.GET("/sa/comm/templates", saHandler.ListTemplates)
+			saGroup.PUT("/sa/comm/templates", saHandler.SaveTemplate)
+			saGroup.DELETE("/sa/comm/templates/:id", saHandler.DeleteTemplate)
+			// Domain 8 – API Keys & Webhooks
+			saGroup.GET("/sa/api-keys", saHandler.ListApiKeys)
+			saGroup.POST("/sa/api-keys", saHandler.CreateApiKey)
+			saGroup.DELETE("/sa/api-keys/:id", saHandler.RevokeApiKey)
+			saGroup.GET("/sa/webhooks", saHandler.ListWebhooks)
+			saGroup.PUT("/sa/webhooks", saHandler.SaveWebhook)
+			saGroup.POST("/sa/webhooks/:id/test", saHandler.TestWebhook)
+			saGroup.DELETE("/sa/webhooks/:id", saHandler.DeleteWebhook)
+			// Domain 9 – Governance
+			saGroup.GET("/sa/audit-trail", saHandler.GetAuditTrail)
+			saGroup.DELETE("/sa/audit-trail", saHandler.PurgeAuditTrail)
+			saGroup.GET("/sa/system/modules", saHandler.GetSystemModules)
+			saGroup.PUT("/sa/system/modules", saHandler.UpdateSystemModules)
+			saGroup.POST("/sa/system/backup", saHandler.TriggerDatabaseBackup)
+
 		}
 	}
 

@@ -1,3 +1,5 @@
+> Native Android builds and release configuration: [release/NATIVE_ANDROID_RELEASE.md](release/NATIVE_ANDROID_RELEASE.md). Older Expo/EAS sections below describe the retired client.
+
 # Shekinah Sons Global
 
 Shekinah Sons Global is a full church digital platform made of three connected applications:

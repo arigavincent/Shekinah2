@@ -344,46 +344,99 @@ private fun LockedLive(live: LiveSession, modifier: Modifier, onClick: (() -> Un
 private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -> Unit, replays: () -> Unit) {
     val glow = Breathing(3600, 0.45f, 1f)
     val start = remember(content.live.nextService) { ServiceReminder.nextStart(content.live.nextService) }
-    Column(Modifier.fillMaxSize().background(Brand.Black)) {
-        TopBar()
-        Column(Modifier.padding(horizontal = 20.dp)) {
-            Text("Live", style = Type.Display, color = Brand.White)
-            Text("Services stream here, with chat for the whole family.", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.Text2)
+    LazyColumn(
+        Modifier.fillMaxSize().background(Brand.Black),
+        contentPadding = PaddingValues(bottom = 120.dp)
+    ) {
+        item { TopBar() }
+        item {
+            Column(Modifier.padding(horizontal = 20.dp)) {
+                Text("Live Service", style = Type.Display, color = Brand.White)
+                Text("Services stream here, with live chat for the whole family.", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.Text2)
+            }
         }
-        Spacer(Modifier.height(22.dp))
-        Box(Modifier.padding(horizontal = 20.dp)) {
-            ColorGlow(Brand.Gold.copy(alpha = 0.4f * glow), Modifier.matchParentSize().padding(10.dp), blur = 40.dp)
+        item { Spacer(Modifier.height(18.dp)) }
+        item {
+            Box(Modifier.padding(horizontal = 20.dp)) {
+                ColorGlow(Brand.Gold.copy(alpha = 0.4f * glow), Modifier.matchParentSize().padding(10.dp), blur = 40.dp)
+                Column(
+                    Modifier.fillMaxWidth().aspectRatio(16 / 10f).clip(RoundedCornerShape(22.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFF2A1F07), Color(0xFF0B0B0D), Color(0xFF0B1630))))
+                        .border(1.dp, Brand.Gold.copy(alpha = 0.35f), RoundedCornerShape(22.dp)).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                ) {
+                    Image(painterResource(R.drawable.dove_mark), null, Modifier.size(54.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Text("NEXT SERVICE", style = Type.Label, color = Brand.Gold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(content.live.nextService.ifBlank { "Sunday Service" }, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
+                    if (start != null) Text(ServiceReminder.countdown(start), style = Type.Meta, color = Brand.Text2)
+                    Spacer(Modifier.height(8.dp))
+                    Text("You'll get a notification the moment we go live.", style = Type.Meta.copy(fontSize = 13.sp), color = Brand.Text2, textAlign = TextAlign.Center)
+                }
+            }
+        }
+        item {
+            Box(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                GoldButton("Watch service replays", onClick = replays)
+            }
+        }
+        item {
             Column(
-                Modifier.fillMaxWidth().aspectRatio(16 / 10f).clip(RoundedCornerShape(22.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF2A1F07), Color(0xFF0B0B0D), Color(0xFF0B1630))))
-                    .border(1.dp, Brand.Gold.copy(alpha = 0.35f), RoundedCornerShape(22.dp)).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
+                    .lifted(RoundedCornerShape(22.dp), 10.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Brush.linearGradient(listOf(Color(0xFF18171C), Color(0xFF0F0F12))))
+                    .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(22.dp))
+                    .padding(18.dp)
             ) {
-                Image(painterResource(R.drawable.dove_mark), null, Modifier.size(54.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Color(0x22D4AF37)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Tune, null, tint = Brand.Gold, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("WEEKLY GATHERINGS", style = Type.Label.copy(fontSize = 10.5.sp), color = Brand.Gold)
+                        Text("Join us in person or online", style = Type.CardTitle.copy(fontSize = 15.sp), color = Brand.White)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Sunday Main Service", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                    Text("9:00 AM & 11:30 AM", color = Brand.GoldLight, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                }
                 Spacer(Modifier.height(10.dp))
-                Text("NEXT SERVICE", style = Type.Label, color = Brand.Gold)
-                Spacer(Modifier.height(6.dp))
-                Text(content.live.nextService.ifBlank { "Sunday Service" }, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
-                if (start != null) Text(ServiceReminder.countdown(start), style = Type.Meta, color = Brand.Text2)
-                Spacer(Modifier.height(8.dp))
-                Text("You'll get a notification the moment we go live.", style = Type.Meta.copy(fontSize = 13.sp), color = Brand.Text2, textAlign = TextAlign.Center)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x14FFFFFF)))
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Midweek Communion", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                    Text("Wednesday 5:30 PM", color = Brand.GoldLight, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
         Box(Modifier.padding(horizontal=20.dp,vertical=12.dp)) { GoldButton("Watch service replays",onClick=replays) }
         if (session.canBroadcast) {
-            Spacer(Modifier.height(24.dp))
-            Box(Modifier.padding(horizontal = 20.dp)) {
-                Row(
-                    Modifier.fillMaxWidth().height(62.dp).lifted(RoundedCornerShape(50), 18.dp, Brand.Red).clip(RoundedCornerShape(50))
-                        .background(Brush.horizontalGradient(listOf(Color(0xFFFF5A4E), Color(0xFFD7263D)))).clickable(onClick = openGoLive),
-                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    PulsingDot(Color.White, 9.dp); Spacer(Modifier.width(10.dp))
-                    Text("Go Live", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            item { Spacer(Modifier.height(18.dp)) }
+            item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().height(62.dp).lifted(RoundedCornerShape(50), 18.dp, Brand.Red).clip(RoundedCornerShape(50))
+                            .background(Brush.horizontalGradient(listOf(Color(0xFFFF5A4E), Color(0xFFD7263D)))).clickable(onClick = openGoLive),
+                        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        PulsingDot(Color.White, 9.dp); Spacer(Modifier.width(10.dp))
+                        Text("Go Live", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
                 }
             }
-            Text("You're allowed to broadcast. Everyone gets notified when you go live.", style = Type.Meta, color = Brand.Muted,
-                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 10.dp))
+            item {
+                Text(
+                    "You're allowed to broadcast. Everyone gets notified when you go live.",
+                    style = Type.Meta, color = Brand.Muted,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 10.dp)
+                )
+            }
         }
     }
 }

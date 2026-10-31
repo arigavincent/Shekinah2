@@ -54,6 +54,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -156,7 +157,7 @@ fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing:
             indicator = { DoveRefreshIndicator(pull, refreshing) },
         ) {
         LazyColumn(state = list, contentPadding = PaddingValues(bottom = NavBarHeight + 120.dp), modifier = Modifier.fillMaxSize()) {
-            item { HomeTopBar(actions.openMenu) }
+            item { HomeTopBar(actions.openMenu, actions.openProfile) }
             item { Greeting(name, actions.openProfile) }
             if (content.devotions.isNotEmpty()) item { DevotionCarousel(content.devotions, actions.openDevotion) }
             if (content.live.isLive) item { com.shekinahsons.globalapp.live.HomeLivePreview(content, session, actions.openLive) }
@@ -229,7 +230,7 @@ fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing:
 }
 
 @Composable
-private fun HomeTopBar(onMenu: () -> Unit) {
+private fun HomeTopBar(onMenu: () -> Unit, onProfile: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().height(64.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -244,6 +245,20 @@ private fun HomeTopBar(onMenu: () -> Unit) {
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = "Shekinah Sons Global" }) {
             Text("SHEKINAH", fontFamily = Cinzel, fontSize = 21.sp, lineHeight = 22.sp, letterSpacing = 1.5.sp, color = Brand.Gold)
             Text("SONS GLOBAL", fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 8.5.sp, lineHeight = 10.sp, letterSpacing = 3.2.sp, color = Brand.Text2)
+        }
+        Spacer(Modifier.weight(1f))
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(listOf(Brand.GoldLight, Brand.GoldDeep)))
+                .clickable(onClick = onProfile)
+                .padding(1.5.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF141418)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Rounded.Person, "Profile", tint = Brand.Gold, modifier = Modifier.size(22.dp))
         }
     }
 }

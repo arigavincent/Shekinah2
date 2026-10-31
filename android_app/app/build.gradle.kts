@@ -22,8 +22,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "com.shekinahsons.globalapp.live.DirectLiveAcceptance"
-        versionCode = providers.gradleProperty("versionCode").orElse("2").get().toInt()
-        versionName = providers.gradleProperty("versionName").orElse("2.0.1").get()
+        versionCode = providers.gradleProperty("versionCode").orElse("7").get().toInt()
+        versionName = providers.gradleProperty("versionName").orElse("2.1.0").get()
         // Firebase: drop the google-services.json from the Firebase console into
         // app/ (it is git-ignored). Without it the app checks the announcement
         // feed itself instead of receiving pushes.
@@ -44,10 +44,13 @@ android {
         }
     }
     buildTypes {
-        // Debug talks to the local backend through `adb reverse tcp:3000 tcp:3000`.
+        // Debug talks to the live Render backend by default or a local backend if debugApiBase property is supplied.
         debug {
             applicationIdSuffix = providers.gradleProperty("debugAppIdSuffix").orNull
-            buildConfigField("String", "API_BASE", "\"http://127.0.0.1:3000\"")
+            val debugApi = providers.gradleProperty("debugApiBase").orElse(
+                System.getenv("SHEKINAH_API_BASE") ?: "https://shekinah-sons-backend.onrender.com"
+            )
+            buildConfigField("String", "API_BASE", "\"${debugApi.get().trimEnd('/')}\"")
         }
         release {
             buildConfigField("String", "API_BASE", "\"${productionApiBase.get().trimEnd('/')}\"")

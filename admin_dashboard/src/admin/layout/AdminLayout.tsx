@@ -24,6 +24,14 @@ import {
   Sun,
   Moon,
   Palette,
+  Users,
+  DollarSign,
+  UsersRound,
+  CalendarCheck,
+  MessageSquareText,
+  KeyRound,
+  Webhook,
+  ShieldAlert,
   type LucideIcon
 } from "lucide-react";
 
@@ -77,6 +85,20 @@ const navSections: NavSection[] = [
   }
 ];
 
+const superAdminNavSection: NavSection = {
+  label: "Super Admin",
+  items: [
+    { label: "Members", to: "/sa/members", icon: Users },
+    { label: "Finance & Funds", to: "/sa/finance", icon: DollarSign },
+    { label: "Groups", to: "/sa/groups", icon: UsersRound },
+    { label: "Attendance", to: "/sa/attendance", icon: CalendarCheck },
+    { label: "Comm Templates", to: "/sa/comm-templates", icon: MessageSquareText },
+    { label: "API Keys", to: "/sa/api-keys", icon: KeyRound },
+    { label: "Webhooks", to: "/sa/webhooks", icon: Webhook },
+    { label: "System & Governance", to: "/sa/system", icon: ShieldAlert },
+  ]
+};
+
 const COLLAPSED_KEY = "shekinah-admin-sidebar-collapsed";
 const SIDEBAR_DRAWER_QUERY = "(max-width: 1180px)";
 
@@ -88,8 +110,10 @@ export function AdminLayout() {
   const admin=user?.role==="admin"||user?.role==="super_admin";
   const [permissions,setPermissions]=useState<string[]|null>(null);
   const scopes:Record<string,string>={"/sermons":"sermons:manage","/library":"books:publish","/events":"events:manage","/devotions":"content:manage","/updates":"content:manage","/reading-plans":"content:manage","/community":"community:moderate","/testimonies":"community:moderate","/giving":"finance:manage","/monetization":"finance:manage","/checkins":"checkin:scan"};
-  const allowed=(path:string)=>admin||(path==="/live"&&Boolean(permissions?.some(p=>["live:broadcast","live:moderate"].includes(p))))||path==="/appearance"||Boolean(scopes[path]&&permissions?.includes(scopes[path]));
-  const visibleSections=navSections.map(s=>({...s,items:s.items.filter(i=>allowed(i.to))})).filter(s=>s.items.length);
+  const isSuperAdmin = user?.role === "super_admin";
+  const allowed=(path:string)=>admin||(path==="/live"&&Boolean(permissions?.some(p=>["live:broadcast","live:moderate"].includes(p))))||path==="/appearance"||Boolean(scopes[path]&&permissions?.includes(scopes[path]))||path.startsWith("/sa/");
+  const baseSections = navSections.map(s=>({...s,items:s.items.filter(i=>allowed(i.to))})).filter(s=>s.items.length);
+  const visibleSections = isSuperAdmin ? [...baseSections, superAdminNavSection] : baseSections;
   useEffect(()=>{void apiRequest<{permissions:string[]}>("/api/v1/permissions/me",{token:getToken()}).then(r=>setPermissions(r.permissions)).catch(()=>setPermissions([]));},[user?.id]);
   useEffect(()=>{if(permissions!==null&&!allowed(location.pathname))navigate(visibleSections[0]?.items[0]?.to||"/appearance",{replace:true});},[permissions,location.pathname]);
 

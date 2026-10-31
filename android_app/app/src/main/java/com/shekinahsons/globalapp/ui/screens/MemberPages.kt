@@ -282,8 +282,19 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
         if (tab == "Share yours" && mine.isNotEmpty()) {
             item { Text("Your testimonies (${mine.size})", style = Type.Title, color = Brand.White, modifier = Modifier.padding(top = 8.dp)) }
             items(mine, key = { "mine-" + it.id }) { t ->
+                val (statusText, statusColor) = when (t.status) {
+                    "approved" -> "APPROVED" to Color(0xFF4ADE80)
+                    "declined" -> "PRIVATE" to Color(0x88FFFFFF)
+                    else -> "UNDER REVIEW" to Brand.GoldLight
+                }
                 Card {
-                    Text(t.title, style = Type.CardTitle, color = Brand.White)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(t.title, style = Type.CardTitle, color = Brand.White, modifier = Modifier.weight(1f))
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(statusColor.copy(alpha = 0.18f)).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                            Text(statusText, color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
                     Text(t.body, style = Type.Body.copy(fontSize = 14.sp), color = Brand.Text2, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Text("${prettyDate(t.createdAt)} \u00B7 ${t.likeCount} amen" + if (t.displayName.contains("(anonymous)")) " \u00B7 shared anonymously" else "",
                         style = Type.Meta, color = Brand.GoldLight, modifier = Modifier.padding(top = 6.dp))
@@ -293,23 +304,43 @@ fun TestimoniesPage(session: Session, onSignIn: () -> Unit) {
         if (tab != "Share yours") {
             if (all.isEmpty()) item { Empty("No testimonies yet. Share the first one!") }
             items(all, key = { it.id }) { t ->
-                Card {
-                    if (t.featured) Text("FEATURED", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold)
+                val shape = RoundedCornerShape(20.dp)
+                Column(
+                    Modifier.fillMaxWidth()
+                        .lifted(shape, if (t.featured) 14.dp else 8.dp, if (t.featured) Brand.Gold.copy(alpha = 0.35f) else Color.Transparent)
+                        .clip(shape)
+                        .background(Brush.linearGradient(listOf(if (t.featured) Color(0xFF221A06) else Color(0xFF18171C), Color(0xFF101014))))
+                        .border(1.dp, if (t.featured) Color(0x66D4AF37) else Color(0x18FFFFFF), shape)
+                        .padding(18.dp)
+                ) {
+                    if (t.featured) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
+                            Box(Modifier.size(6.dp).clip(CircleShape).background(Brand.Gold))
+                            Spacer(Modifier.width(6.dp))
+                            Text("FEATURED TESTIMONY", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold)
+                        }
+                    }
                     Text(t.title, style = Type.Title, color = Brand.White)
-                    Spacer(Modifier.height(6.dp))
-                    Text(t.body, style = Type.Body, color = Brand.Text2)
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text(t.body, style = Type.Body.copy(fontSize = 14.5.sp, lineHeight = 22.sp), color = Color(0xFFE2E2E6))
+                    Spacer(Modifier.height(14.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Avatar(t.displayName, t.displayName, 28.dp)
                         Spacer(Modifier.width(8.dp))
                         Text("${t.displayName} · ${prettyDate(t.createdAt)}", style = Type.Meta, color = Brand.Text2, modifier = Modifier.weight(1f))
                         val on = t.id in liked
-                        Row(Modifier.glass().clickable {
-                            if (session.member == null) onSignIn() else if (!on) scope.launch { runCatching { Api.post("/testimonies/${t.id}/like") }.onSuccess { liked += t.id; reload++ } }
-                        }.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(if (on) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder, "Amen", tint = if (on) Brand.Red else Brand.White, modifier = Modifier.size(16.dp))
+                        Row(
+                            Modifier.clip(RoundedCornerShape(50))
+                                .background(if (on) Color(0x33FF5A4E) else Color(0x14FFFFFF))
+                                .border(1.dp, if (on) Color(0x66FF5A4E) else Color(0x1AFFFFFF), RoundedCornerShape(50))
+                                .clickable {
+                                    if (session.member == null) onSignIn() else if (!on) scope.launch { runCatching { Api.post("/testimonies/${t.id}/like") }.onSuccess { liked += t.id; reload++ } }
+                                }.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(if (on) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder, "Amen", tint = if (on) Brand.Red else Brand.GoldLight, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Amen · ${t.likeCount}", color = Brand.White, fontSize = 13.sp)
+                            Text("Amen · ${t.likeCount}", color = Brand.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
