@@ -409,6 +409,7 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
                     Text(b.description, style = Type.Body, color = Brand.Text2)
                 }
                 if (b.canEdit) {
+                    Spacer(Modifier.height(22.dp))
                     com.shekinahsons.globalapp.admin.PublicationEditor("/library/${b.id}",b.publishedAt,b.isPublished,b.notifyOnPublish,changed)
                     Spacer(Modifier.height(26.dp))
                     Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.7f).padding(16.dp)) {

@@ -166,6 +166,14 @@ fun BrandPlaceholder(label: String, modifier: Modifier = Modifier) {
         contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
         val w = maxWidth.value
+        // Thumbnails are too small for words: show the dove clearly instead.
+        if (w < 120f) {
+            androidx.compose.foundation.Image(
+                androidx.compose.ui.res.painterResource(com.shekinahsons.globalapp.R.drawable.dove_mark), null,
+                Modifier.fillMaxSize(0.6f).graphicsLayer { alpha = 0.55f },
+            )
+            return@BoxWithConstraints
+        }
         androidx.compose.foundation.Image(
             androidx.compose.ui.res.painterResource(com.shekinahsons.globalapp.R.drawable.dove_mark), null,
             Modifier.fillMaxSize(0.9f).graphicsLayer { alpha = 0.07f },

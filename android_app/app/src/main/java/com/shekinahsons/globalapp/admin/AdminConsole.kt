@@ -542,7 +542,7 @@ private fun TeamPage() {
                             Text(m.name, style = Type.CardTitle, color = Brand.White, maxLines = 1)
                             Text(m.email, style = Type.Meta, color = Brand.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        if (admin) Text("ADMIN", color = Brand.Black, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.Gold).padding(horizontal = 9.dp, vertical = 3.dp))
+                        if (admin) Text(if (m.role == "super_admin") "SUPER ADMIN" else "ADMIN", color = Brand.Black, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.Gold).padding(horizontal = 9.dp, vertical = 3.dp))
                     }
                     var resetNote by remember(m.id) { mutableStateOf<String?>(null) }
                     Text(resetNote ?: "Send password reset code", color = if (resetNote != null) Color(0xFF4ADE80) else Brand.BlueText, fontSize = 13.sp, fontWeight = FontWeight.Medium,
@@ -592,10 +592,6 @@ private fun MorePage() {
         "sermons" to "Sermons", "devotions" to "Devotions", "updates" to "Updates",
         "plans" to "Reading plans", "testimonies" to "Testimonies", "community" to "Community",
         "monetization" to "Monetization", "settings" to "Ministry settings",
-        "members" to "Members", "groups" to "Groups", "attendance" to "Attendance",
-        "kiosks" to "Kiosks", "templates" to "Templates", "apikeys" to "API Keys",
-        "webhooks" to "Webhooks", "audit" to "Audit Trail", "modules" to "Modules",
-        "backup" to "Backup & GDPR"
     )
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { PageTitle("More", "Content, ministry settings and community care") }
@@ -609,16 +605,6 @@ private fun MorePage() {
             "testimonies", "community" -> item { androidx.compose.runtime.key(view) { AdminModerationPane(view=="testimonies") } }
             "monetization" -> item { AdminMonetizationPane() }
             "settings" -> item { AdminMinistrySettings() }
-            "members" -> item { SaMembersPane() }
-            "groups" -> item { SaGroupsPane() }
-            "attendance" -> item { SaAttendancePane() }
-            "kiosks" -> item { SaKiosksPane() }
-            "templates" -> item { SaTemplatesPane() }
-            "apikeys" -> item { SaApiKeysPane() }
-            "webhooks" -> item { SaWebhooksPane() }
-            "audit" -> item { SaAuditPane() }
-            "modules" -> item { SaModulesPane() }
-            "backup" -> item { SaBackupPane() }
             else -> prayers(this)
         }
     }
