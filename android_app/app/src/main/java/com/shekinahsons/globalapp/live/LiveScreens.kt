@@ -154,7 +154,9 @@ fun rememberLiveSession(active: Boolean, session: Session): LiveSession? {
 
 private fun money(n: Int) = "KSh ${"%,d".format(n)}"
 
-// A low-latency player for the live HLS stream.
+// The live HLS player. It stays about three segments behind the newest one, so a
+// late upload or a slow phone network is absorbed by the buffer instead of
+// freezing the picture, and it drifts back to that point by gently changing speed.
 @Composable
 fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
     val context = LocalContext.current
@@ -165,23 +167,26 @@ fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
         val http = com.shekinahsons.globalapp.playback.LiveDataSource
         ExoPlayer.Builder(context)
             .setLoadControl(androidx.media3.exoplayer.DefaultLoadControl.Builder()
-                .setBufferDurationsMs(4_000, 12_000, 500, 750)
+                .setBufferDurationsMs(6_000, 20_000, 1_500, 3_000)
                 .setPrioritizeTimeOverSizeThresholds(true).build())
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http)).build().apply {
             val current = this
             addListener(object : Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     retries.removeCallbacksAndMessages(null)
-                    retries.postDelayed({ current.seekToDefaultPosition(); current.prepare(); current.playWhenReady = true }, 1500)
+                    // Only jump to the live point when we have fallen out of the window;
+                    // otherwise resume where we were so nothing is skipped.
+                    val behind = error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW
+                    retries.postDelayed({ if (behind) current.seekToDefaultPosition(); current.prepare(); current.playWhenReady = true }, 1000)
                 }
                 override fun onPlaybackStateChanged(state: Int) {
                     if (state == Player.STATE_READY) retries.removeCallbacksAndMessages(null)
                 }
             })
             setMediaItem(MediaItem.Builder().setUri(if (url.startsWith("/")) com.shekinahsons.globalapp.BuildConfig.API_BASE+url else url).setMimeType(MimeTypes.APPLICATION_M3U8)
-                .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(1500)
-                    .setMinOffsetMs(1000).setMaxOffsetMs(4000)
-                    .setMinPlaybackSpeed(1f).setMaxPlaybackSpeed(1.08f).build()).build())
+                .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(6_000)
+                    .setMinOffsetMs(4_000).setMaxOffsetMs(14_000)
+                    .setMinPlaybackSpeed(0.97f).setMaxPlaybackSpeed(1.04f).build()).build())
             prepare()
             playWhenReady = true
         }
@@ -213,6 +218,7 @@ fun LivePicture(player: ExoPlayer, modifier: Modifier, fill: Boolean = true) {
                     resizeMode = if (fill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
                     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    setKeepContentOnPlayerReset(true)
                 }
             },
             update = { it.resizeMode = if (fill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT },
@@ -369,7 +375,7 @@ private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -
                 Text("You'll get a notification the moment we go live.", style = Type.Meta.copy(fontSize = 13.sp), color = Brand.Text2, textAlign = TextAlign.Center)
             }
         }
-        Box(Modifier.padding(horizontal=20.dp,vertical=12.dp)) { GoldButton("Watch service replays",onClick=replays) }
+        item { Box(Modifier.padding(horizontal=20.dp,vertical=12.dp)) { GoldButton("Watch service replays",onClick=replays) } }
         if (session.canBroadcast) {
             Spacer(Modifier.height(24.dp))
             Box(Modifier.padding(horizontal = 20.dp)) {
