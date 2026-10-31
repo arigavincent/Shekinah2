@@ -48,7 +48,7 @@ func (s Service) Register(ctx context.Context, req RegisterRequest) (AuthRespons
 		return AuthResponse{}, ErrInvalidInput
 	}
 
-	if len(password) < 8 {
+	if len(password) < s.MinPasswordLength(ctx) {
 		return AuthResponse{}, ErrInvalidInput
 	}
 
@@ -129,7 +129,7 @@ func (s Service) ChangePassword(ctx context.Context, userID string, req ChangePa
 		return AuthResponse{}, ErrInvalidInput
 	}
 
-	if len(newPassword) < 8 {
+	if len(newPassword) < s.MinPasswordLength(ctx) {
 		return AuthResponse{}, ErrWeakPassword
 	}
 
@@ -230,7 +230,7 @@ func (s Service) ConfirmPasswordReset(ctx context.Context, req PasswordResetConf
 		return AuthResponse{}, ErrInvalidInput
 	}
 
-	if len(newPassword) < 8 {
+	if len(newPassword) < s.MinPasswordLength(ctx) {
 		return AuthResponse{}, ErrWeakPassword
 	}
 

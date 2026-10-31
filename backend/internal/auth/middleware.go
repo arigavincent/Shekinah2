@@ -14,6 +14,24 @@ const contextUserIDKey = "auth_user_id"
 func RequireAuth(service Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
+		if key := c.GetHeader("X-API-Key"); header == "" && key != "" {
+			// Keys reach only the staff tools, where each route maps to one permission.
+			path := c.FullPath()
+			if !strings.HasPrefix(path, "/api/v1/admin/") || strings.HasPrefix(path, "/api/v1/admin/sa/") {
+				httpx.Error(c, http.StatusForbidden, "forbidden", "API keys can only be used with staff tools")
+				c.Abort()
+				return
+			}
+			userID, perms, err := service.parseAPIKey(c.Request.Context(), key)
+			if err != nil {
+				httpx.Error(c, http.StatusUnauthorized, "unauthorized", "invalid or revoked API key")
+				c.Abort()
+				return
+			}
+			useAPIKey(c, userID, perms)
+			c.Next()
+			return
+		}
 		if header == "" {
 			httpx.Error(c, http.StatusUnauthorized, "unauthorized", "missing authorization header")
 			c.Abort()

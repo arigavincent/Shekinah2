@@ -113,8 +113,8 @@ func TestDirectLivePermissionsOrderingReplayAndRecovery(t *testing.T) {
 	if !strings.Contains(raw, "#EXTINF:3.000000") || !strings.Contains(raw, "X-Amz-Signature") {
 		t.Fatal("missing signed HLS segments")
 	}
-	if !strings.Contains(raw, "#EXT-X-START:TIME-OFFSET=-1.500,PRECISE=YES") {
-		t.Fatal("live playback did not request the newest media")
+	if !strings.Contains(raw, "#EXT-X-START:TIME-OFFSET=-6.000,PRECISE=YES") {
+		t.Fatal("live playback did not start a buffered distance behind the newest media")
 	}
 	input["sequence"] = 1
 	req("POST", prefix+"/segments", input, admin, 200)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"github.com/ariga/shekinah-backend/internal/webhooks"
 	"log"
 	"net/http"
 	"os"
@@ -50,6 +51,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	webhooks.Start(ctx, db)
 	app := server.NewWithContext(ctx, cfg, db)
 	server.StartBackground(ctx, cfg, db)
 

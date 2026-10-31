@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -29,7 +30,7 @@ func (h Handler) Register(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidInput):
-			httpx.Error(c, http.StatusBadRequest, "invalid_input", "name, valid email, and password of at least 8 characters are required")
+			httpx.Error(c, http.StatusBadRequest, "invalid_input", fmt.Sprintf("name, valid email, and password of at least %d characters are required", h.service.MinPasswordLength(c.Request.Context())))
 		case errors.Is(err, ErrEmailTaken):
 			httpx.Error(c, http.StatusConflict, "email_taken", "email is already registered")
 		default:
@@ -102,7 +103,7 @@ func (h Handler) ConfirmPasswordReset(c *gin.Context) {
 		case errors.Is(err, ErrInvalidInput):
 			httpx.Error(c, http.StatusBadRequest, "invalid_input", "email, code, and new password are required")
 		case errors.Is(err, ErrWeakPassword):
-			httpx.Error(c, http.StatusBadRequest, "weak_password", "new password must be at least 8 characters")
+			httpx.Error(c, http.StatusBadRequest, "weak_password", fmt.Sprintf("new password must be at least %d characters", h.service.MinPasswordLength(c.Request.Context())))
 		case errors.Is(err, ErrPasswordReused):
 			httpx.Error(c, http.StatusBadRequest, "password_reused", "new password must be different from the current password")
 		case errors.Is(err, ErrInvalidResetCode):
@@ -164,7 +165,7 @@ func (h Handler) ChangePassword(c *gin.Context) {
 		case errors.Is(err, ErrInvalidInput):
 			httpx.Error(c, http.StatusBadRequest, "invalid_input", "current password and new password are required")
 		case errors.Is(err, ErrWeakPassword):
-			httpx.Error(c, http.StatusBadRequest, "weak_password", "new password must be at least 12 characters")
+			httpx.Error(c, http.StatusBadRequest, "weak_password", fmt.Sprintf("new password must be at least %d characters", h.service.MinPasswordLength(c.Request.Context())))
 		case errors.Is(err, ErrPasswordReused):
 			httpx.Error(c, http.StatusBadRequest, "password_reused", "new password must be different from the current password")
 		case errors.Is(err, ErrInvalidCredentials):

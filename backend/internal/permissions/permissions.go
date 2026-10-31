@@ -42,11 +42,12 @@ func (c Checker) Of(ctx context.Context, userID string) ([]string, error) {
 		return nil, err
 	}
 	if role == "admin" || role == "super_admin" {
-		return All, nil
+		granted = All
 	}
 	out := make([]string, 0, len(granted))
+	scoped, viaKey := auth.APIKeyPermissions(ctx)
 	for _, p := range granted {
-		if slices.Contains(All, p) {
+		if slices.Contains(All, p) && (!viaKey || slices.Contains(scoped, p)) {
 			out = append(out, p)
 		}
 	}
@@ -55,6 +56,9 @@ func (c Checker) Of(ctx context.Context, userID string) ([]string, error) {
 
 // IsAdmin reports whether the account has the admin (or super admin) role.
 func (c Checker) IsAdmin(ctx context.Context, userID string) bool {
+	if _, viaKey := auth.APIKeyPermissions(ctx); viaKey {
+		return false
+	}
 	var role string
 	err := c.db.QueryRow(ctx, `SELECT role FROM users WHERE id = $1 AND is_active = TRUE`, userID).Scan(&role)
 	return err == nil && (role == "admin" || role == "super_admin")
