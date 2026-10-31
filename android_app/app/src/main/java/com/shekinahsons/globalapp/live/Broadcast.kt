@@ -63,6 +63,8 @@ object Broadcast {
     var startedAt by mutableLongStateOf(0L); private set
     var bitrate by mutableLongStateOf(0L); private set
     var target = 2_500_000; private set
+    private var ceiling = 2_500_000
+    private var adjustedAt = 0L
     var micOn by mutableStateOf(true); private set
     var showing by mutableStateOf(Showing.Camera); private set
     var torch by mutableStateOf(false); private set
@@ -140,7 +142,7 @@ object Broadcast {
     private fun prepareNow(s: GenericStream, hd: Boolean, portrait: Boolean, rotation: Int): Boolean {
         val (w, h, rate) = if (hd) Triple(1280, 720, 2_500_000) else Triple(854, 480, 1_000_000)
         width = if (portrait) h else w; height = if (portrait) w else h
-        target = rate
+        target = rate; ceiling = rate
         return s.prepareVideo(w, h, rate, iFrameInterval = 1, rotation = rotation) && s.prepareAudio(44_100, true, 96_000)
     }
 
@@ -156,16 +158,25 @@ object Broadcast {
             }
         })
         LiveService.start(context, screen = false); addFilters()
+        DirectLive.startUploading(context, id)
         s.startRecord(dir.absolutePath, com.pedro.library.base.recording.RecordController.RecordTracks.ALL, object : com.pedro.library.base.recording.RecordController.Listener {
             override fun onStatusChange(status: com.pedro.library.base.recording.RecordController.Status) {}
             override fun onError(e: Exception?) { main.post { error = e?.message ?: "Could not record broadcast"; state = "error" } }
         })
     }
-    fun directSaved(id: String, bytes: Long, duration: Double, transferMs: Long = 0) { main.post {
-        if (directSession == id && transferMs > duration * 900 && target > 250_000) {
-            val sustainable = (bytes * 8000L / transferMs * 0.65).toInt() - 96_000
-            target = minOf((target * 0.8).toInt(), sustainable).coerceAtLeast(250_000)
-            stream?.setVideoBitrateOnFly(target)
+    // Quality follows the upload itself: segments piling up on the phone mean the
+    // network can't keep pace, so step down; a clear queue with quick uploads
+    // steps back up towards the chosen quality. API round trips are not counted.
+    fun directSaved(id: String, bytes: Long, duration: Double, uploadMs: Long, waiting: Int) { main.post {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (directSession == id && now - adjustedAt > 4_000) {
+            val next = when {
+                waiting >= 3 -> (target * 0.7).toInt()
+                waiting >= 2 -> (target * 0.85).toInt()
+                waiting == 0 && uploadMs in 1..(duration * 450).toLong() -> (target * 1.15).toInt()
+                else -> target
+            }.coerceIn(300_000, ceiling)
+            if (next != target) { target = next; adjustedAt = now; stream?.setVideoBitrateOnFly(target) }
         }
         if (directSession == id) { if (state != "live") startedAt = System.currentTimeMillis(); state = "live"; error = null; bitrate = (bytes * 8 / duration).toLong() }
     } }
@@ -182,7 +193,7 @@ object Broadcast {
 
     fun stop(context: Context) {
         stream?.let { if (it.isStreaming) it.stopStream(); if (it.isRecording) it.stopRecord() }
-        directSession?.let { id -> File(DirectLive.folder(context,id),"ended").writeText("1"); DirectLive.enqueue(context,id) }
+        directSession?.let { id -> DirectLive.stopUploading(context, id) }
         directSession = null
         state = "idle"; startedAt = 0; bitrate = 0
         if (showing != Showing.Camera) runCatching { stream?.changeVideoSource(Camera2Source(context.applicationContext)) }
