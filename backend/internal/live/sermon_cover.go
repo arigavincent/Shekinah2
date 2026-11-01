@@ -53,5 +53,6 @@ func (h *Handler) SermonCover(c *gin.Context) {
 		sermonCoverMu.Unlock()
 	}
 	c.Header("Cache-Control", "public, max-age=86400")
+	c.Header("Content-Type", "image/jpeg") // a global middleware presets JSON
 	c.Data(200, "image/jpeg", img)
 }
