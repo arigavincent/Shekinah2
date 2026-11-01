@@ -152,6 +152,7 @@ private fun NewEvent(onBack: () -> Unit, done: () -> Unit) {
     var capacity by remember { mutableStateOf("") }
     var useTiers by remember { mutableStateOf(false) }
     val tiers = remember { mutableStateListOf(TierDraft(name = "Regular"), TierDraft(name = "VIP")) }
+    val questions = remember { mutableStateListOf(FormField(label = "Phone number", type = "phone", required = true)) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { if (it != null) image = it }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BackLine("New event", onBack)
@@ -173,7 +174,16 @@ private fun NewEvent(onBack: () -> Unit, done: () -> Unit) {
         Text("HOW DO PEOPLE REGISTER?", style = Type.Label, color = Brand.Gold, modifier = Modifier.padding(top = 6.dp))
         ToolChoices(listOf("none" to "No registration", "form" to "Form in the app", "link" to "Outside link (e.g. Google Form)"), mode) { mode = it }
         if (mode == "link") Field("FORM LINK", formUrl, { formUrl = it.trim() }, hint = "https://forms.gle/...", keyboard = KeyboardType.Uri)
-        if (mode == "form") Text("Add your questions after creating the event: Manage → Registration setup.", style = Type.Meta, color = Brand.Text2)
+        if (mode == "form") {
+            Text("QUESTIONS PEOPLE ANSWER WHEN REGISTERING", style = Type.Label, color = Brand.Gold)
+            if (questions.isEmpty()) Text("No questions: members just tap Register.", style = Type.Meta, color = Brand.Text2)
+            questions.forEachIndexed { i, f -> QuestionEditor(f, { questions[i] = it }) { questions.removeAt(i) } }
+            Row(Modifier.clip(RoundedCornerShape(50)).border(1.dp, Brand.Gold, RoundedCornerShape(50)).clickable { questions.add(FormField(label = "", type = "text")) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Add, null, tint = Brand.Gold, modifier = Modifier.size(18.dp))
+                Text(" Add question", color = Brand.Gold, fontWeight = FontWeight.SemiBold)
+            }
+        }
         Text("FREE OR PAID?", style = Type.Label, color = Brand.Gold, modifier = Modifier.padding(top = 6.dp))
         ToolChoices(listOf("free" to "Free event", "paid" to "Paid event"), if (paid) "paid" else "free") { paid = it == "paid" }
         if (paid) {
@@ -203,7 +213,8 @@ private fun NewEvent(onBack: () -> Unit, done: () -> Unit) {
                     if (paid && useTiers && tiers.none { it.name.isNotBlank() }) error("Add at least one ticket type")
                     val url = image?.let { uploadImage(context, it) }.orEmpty()
                     val setup = mapOf(
-                        "mode" to mode, "formUrl" to (if (mode == "link") formUrl else ""), "fields" to emptyList<Any>(),
+                        "mode" to mode, "formUrl" to (if (mode == "link") formUrl else ""),
+                        "fields" to (if (mode == "form") questions.filter { it.label.isNotBlank() }.map { mapOf("id" to it.id, "label" to it.label.trim(), "type" to it.type, "required" to it.required, "options" to it.options) } else emptyList()),
                         "price" to (if (paid && !useTiers) price.toIntOrNull() ?: 0 else 0), "capacity" to (capacity.toIntOrNull() ?: 0),
                         "tiers" to (if (paid && useTiers) tiers.filter { it.name.isNotBlank() }.map { mapOf("name" to it.name.trim(), "price" to (it.price.toIntOrNull() ?: 0), "capacity" to (it.capacity.toIntOrNull() ?: 0)) } else emptyList()),
                     )
