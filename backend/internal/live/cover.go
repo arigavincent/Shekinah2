@@ -126,6 +126,19 @@ func drawText(img *image.RGBA, fc font.Face, x, y int, text string, c color.Colo
 
 // RenderReplayCover draws a 1280x720 JPEG cover for a recorded service.
 func RenderReplayCover(seed, title string, date time.Time) ([]byte, error) {
+	sub := ""
+	if !date.IsZero() {
+		if nairobi, err := time.LoadLocation("Africa/Nairobi"); err == nil {
+			date = date.In(nairobi)
+		}
+		sub = date.Format("Monday, 2 January 2006")
+	}
+	return RenderCover(seed, "SERVICE REPLAY", title, sub)
+}
+
+// RenderCover draws a bright branded 1280x720 JPEG: a small label pill, the
+// title in big letters and a subtitle line (date or speaker).
+func RenderCover(seed, labelText, title, subtitle string) ([]byte, error) {
 	if err := loadCoverAssets(); err != nil {
 		return nil, err
 	}
@@ -178,7 +191,7 @@ func RenderReplayCover(seed, title string, date time.Time) ([]byte, error) {
 
 	// "SERVICE REPLAY" pill.
 	label := face(coverInter, 22)
-	text := "SERVICE REPLAY"
+	text := labelText
 	tw := font.MeasureString(label, text).Ceil()
 	pill := image.Rect(64, 300, 64+tw+44, 300+46)
 	for y := pill.Min.Y; y < pill.Max.Y; y++ {
@@ -214,12 +227,8 @@ func RenderReplayCover(seed, title string, date time.Time) ([]byte, error) {
 		drawText(img, big, 64, y, line, white, true)
 		y += int(size * 1.02)
 	}
-	if !date.IsZero() {
-		nairobi, err := time.LoadLocation("Africa/Nairobi")
-		if err == nil {
-			date = date.In(nairobi)
-		}
-		drawText(img, face(coverInter, 28), 66, min(y+14, H-36), date.Format("Monday, 2 January 2006"), color.RGBA{255, 255, 255, 255}, true)
+	if subtitle != "" {
+		drawText(img, face(coverInter, 28), 66, min(y+14, H-36), subtitle, color.RGBA{255, 255, 255, 255}, true)
 	}
 
 	var out bytes.Buffer

@@ -52,8 +52,8 @@ object Publishing {
   runCatching{withContext(Dispatchers.IO){PublishTransfer(c,Vault.open(j.auth)){false}.let{t->t.request("DELETE","/uploads/${j.id}");if(j.coverUri.isNotBlank())t.request("DELETE","/uploads/${j.coverUploadID.ifBlank{UUID.nameUUIDFromBytes((j.id+"cover").toByteArray()).toString()}}")}}}
  }
 }
-internal class PublishTransfer(private val context:Context,private val token:String,private val stopped:()->Boolean){
- private val http=Api.http.newBuilder().readTimeout(30,TimeUnit.MINUTES).writeTimeout(2,TimeUnit.MINUTES).build()
+internal class PublishTransfer(private val context:Context,private val token:String,private val callTimeoutSeconds:Long=0,private val stopped:()->Boolean){
+ private val http=Api.http.newBuilder().readTimeout(30,TimeUnit.MINUTES).writeTimeout(2,TimeUnit.MINUTES).apply{if(callTimeoutSeconds>0)callTimeout(callTimeoutSeconds,TimeUnit.SECONDS)}.build()
  fun request(method:String,path:String,body:RequestBody?=null,headers:Map<String,String> = emptyMap()):JsonObject {
   check(!stopped()){ "Upload paused" }
   val r=Request.Builder().url(BuildConfig.API_BASE+"/api/v1"+path).header("Authorization","Bearer $token")

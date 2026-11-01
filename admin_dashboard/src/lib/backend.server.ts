@@ -9,6 +9,9 @@ export async function forwardBackend(request: Request): Promise<Response> {
   for(const key of ["accept","authorization","x-api-key","content-type","range","if-range","x-receipt-token","upload-offset","content-length"]) {
     const value=request.headers.get(key);if(value)headers.set(key,value);
   }
+  // The API builds public links (e.g. automatic sermon covers) from these.
+  headers.set("x-forwarded-host",request.headers.get("x-forwarded-host")||source.host);
+  headers.set("x-forwarded-proto",(request.headers.get("x-forwarded-proto")||source.protocol.replace(":","")).split(",")[0]);
   const init: RequestInit & {duplex?: "half"} = {method:request.method,headers,redirect:"manual",signal:request.signal};
   if(!["GET","HEAD"].includes(request.method)){init.body=request.body;init.duplex="half";}
   try {
@@ -17,7 +20,9 @@ export async function forwardBackend(request: Request): Promise<Response> {
     for(const key of ["content-type","content-disposition","content-range","accept-ranges","etag","last-modified"]) {
       const value=upstream.headers.get(key);if(value)responseHeaders.set(key,value);
     }
-    responseHeaders.set("Cache-Control","private, no-store");
+    const cache=upstream.headers.get("cache-control")||"";
+    // Public images (covers) may be cached; everything else stays private.
+    responseHeaders.set("Cache-Control",cache.startsWith("public")?cache:"private, no-store");
     return new Response(upstream.body,{status:upstream.status,headers:responseHeaders});
   } catch {return Response.json({message:"The ministry API is temporarily unavailable."},{status:502});}
 }

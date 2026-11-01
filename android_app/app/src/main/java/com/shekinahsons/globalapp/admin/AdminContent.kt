@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.shekinahsons.globalapp.data.Api
 import com.shekinahsons.globalapp.ui.components.*
@@ -31,6 +32,8 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
  val values=remember(kind){mutableStateMapOf<String,String>()};val days=remember(kind){mutableStateListOf<JsonObject>()}
  var error by remember(kind){mutableStateOf<String?>(null)};var busy by remember{mutableStateOf(false)};var tick by remember{mutableIntStateOf(0)};var confirm by remember{mutableStateOf(false)}
  var categories by remember{mutableStateOf(emptyList<JsonObject>())}
+ val context=androidx.compose.ui.platform.LocalContext.current;var coverBusy by remember{mutableStateOf(false)}
+ val coverPick=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()){uri->if(uri!=null)scope.launch{coverBusy=true;runCatching{uploadImage(context,uri)}.onSuccess{values["thumbnailUrl"]=it}.onFailure{error=it.message};coverBusy=false}}
  val endpoint=if(kind=="plans") "reading-plans" else kind
  val key=if(kind=="plans") "plans" else kind
  LaunchedEffect(kind,tick){runCatching{(Api.get("/admin/$endpoint")[key] as? JsonArray)?.map{it.jsonObject}.orEmpty()}.onSuccess{records=it;error=null}.onFailure{error=it.message};if(kind=="sermons") runCatching{(Api.get("/admin/sermon-categories")["categories"] as? JsonArray)?.map{it.jsonObject}.orEmpty()}.onSuccess{categories=it}}
@@ -46,6 +49,15 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
    fields(kind).forEach{field->when{
     field.key=="publishedAt"->CalendarTimeField("Publish at",values[field.key].orEmpty(),{values[field.key]=it})
     field.key.endsWith("Date")->CalendarField(field.label.substringBefore(" ("),values[field.key].orEmpty(),{values[field.key]=it})
+    field.key=="thumbnailUrl"&&kind=="sermons"->Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+     Text("COVER",style=Type.Label,color=Brand.Gold)
+     FadeImage(values["thumbnailUrl"].orEmpty(),Modifier.fillMaxWidth().aspectRatio(16/9f).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)),label="SERMON")
+     Text(if(values["thumbnailUrl"].isNullOrBlank())"No cover uploaded: members see the bright automatic Shekinah cover." else "Your uploaded cover",style=Type.Meta,color=Brand.Text2)
+     Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){
+      GhostButton(if(coverBusy)"Uploading…" else "Choose cover image",Modifier.weight(1f)){coverPick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))}
+      if(!values["thumbnailUrl"].isNullOrBlank())GhostButton("Use automatic cover",Modifier.weight(1f)){values["thumbnailUrl"]=""}
+     }
+    }
     else->Field(field.label.uppercase(),values[field.key].orEmpty(),{values[field.key]=it},singleLine=!field.long,minHeight=if(field.long)120.dp else 52.dp)
    }}
    if(kind=="sermons") {

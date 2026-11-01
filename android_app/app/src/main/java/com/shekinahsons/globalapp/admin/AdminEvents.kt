@@ -255,13 +255,9 @@ private fun SetupEditor(e: AdminEvent) {
         }
         if (mode == "link") Field("FORM LINK", formUrl, { formUrl = it.trim(); saved = false }, hint = "https://forms.gle/...", keyboard = KeyboardType.Uri)
         run {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Paid event", color = Brand.White, fontWeight = FontWeight.SemiBold)
-                    Text("Paid with M-Pesa, Airtel or bank; the ticket shows once finance confirms", style = Type.Meta, color = Brand.Text2)
-                }
-                Switch(paid, { paid = it; saved = false }, colors = SwitchDefaults.colors(checkedThumbColor = Brand.Black, checkedTrackColor = Brand.Gold, uncheckedTrackColor = Color(0x22FFFFFF)))
-            }
+            Text("FREE OR PAID?", style = Type.Label, color = Brand.Gold)
+            ToolChoices(listOf("free" to "Free event", "paid" to "Paid event"), if (paid) "paid" else "free") { paid = it == "paid"; saved = false }
+            Text(if (paid) "Paid with M-Pesa, Airtel, card or bank; the ticket shows once the payment is confirmed" else "Anyone can register without paying", style = Type.Meta, color = Brand.Text2)
             if (paid) Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Ticket types", color = Brand.White, fontWeight = FontWeight.SemiBold)

@@ -353,6 +353,7 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var editPrice by remember(b.id) { mutableStateOf(b.price.toString()) }
+    var editPaid by remember(b.id) { mutableStateOf(!b.free) }
     val have = remember(b.id, Books.version) { Books.has(context, b) }
     val progress = Books.downloading[b.id]
 
@@ -421,8 +422,13 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
                             style = Type.Meta, color = Brand.Text2,
                         )
                         Spacer(Modifier.height(10.dp))
+                        com.shekinahsons.globalapp.admin.ToolChoices(listOf("free" to "Free for everyone", "paid" to "Paid"), if (editPaid) "paid" else "free") { k ->
+                            editPaid = k == "paid"; editPrice = if (k == "free") "0" else (if (b.price > 0) "${b.price}" else "")
+                        }
+                        Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.Bottom) {
-                            Field("PRICE (KSH, 0 = FREE)", editPrice, { editPrice = it.filter(Char::isDigit).take(7) }, Modifier.weight(1f), keyboard = KeyboardType.Number)
+                            if (editPaid) Field("PRICE (KSH)", editPrice, { editPrice = it.filter(Char::isDigit).take(7) }, Modifier.weight(1f), hint = "e.g. 500", keyboard = KeyboardType.Number)
+                            else Text("Anyone can read it free.", style = Type.Meta, color = Brand.Text2, modifier = Modifier.weight(1f).padding(bottom = 12.dp))
                             Spacer(Modifier.width(10.dp))
                             Text("Save", color = Brand.Black, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.Gold).clickable(enabled = !busy) {
                                 scope.launch { busy = true; runCatching { Books.update(b.id, mapOf("price" to (editPrice.toIntOrNull() ?: 0))) }.onSuccess { changed() }.onFailure { error = it.message }; busy = false }

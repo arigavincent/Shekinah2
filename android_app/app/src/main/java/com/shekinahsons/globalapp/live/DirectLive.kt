@@ -22,7 +22,27 @@ import java.util.concurrent.TimeUnit
 object DirectLive {
     // Segments are reserved in order but up to this many travel at once, so one
     // slow round trip to the API no longer holds back the whole broadcast.
-    private const val IN_FLIGHT = 4
+    private const val IN_FLIGHT = 6
+    // Live uploads: one HTTP/1.1 connection per upload, so a stalled mobile
+    // connection holds back only its own chunk, and short limits so a stuck
+    // upload is retried within seconds instead of waiting ten or more.
+    private val segmentHttp by lazy {
+        Api.http.newBuilder().protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+            .connectionPool(okhttp3.ConnectionPool(10, 5, TimeUnit.MINUTES))
+            .connectTimeout(4, TimeUnit.SECONDS).writeTimeout(5, TimeUnit.SECONDS).readTimeout(5, TimeUnit.SECONDS)
+            .callTimeout(9, TimeUnit.SECONDS).build()
+    }
+    private suspend fun <T> retrying(times: Int = 4, block: () -> T): T {
+        var last: Throwable? = null
+        repeat(times) { attempt ->
+            try { return block() } catch (e: ApiException) {
+                if (e.status in 400..499 && e.status != 408 && e.status != 429) throw e
+                last = e
+            } catch (e: java.io.IOException) { last = e }
+            delay(150L * (attempt + 1))
+        }
+        throw last ?: IllegalStateException("Upload failed")
+    }
     // One drain at a time per phone, shared by the live loop and the fallback worker.
     private val serial = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -89,7 +109,7 @@ object DirectLive {
     suspend fun drain(c: Context, id: String, stopped: () -> Boolean): Boolean = serial.withLock { coroutineScope {
         val dir = folder(c, id)
         val job = runCatching { Api.json.decodeFromString<DirectJob>(File(dir, "session.json").readText()) }.getOrNull() ?: return@coroutineScope true
-        val transfer = PublishTransfer(c, Vault.open(job.auth), stopped)
+        val transfer = PublishTransfer(c, Vault.open(job.auth), 8, stopped)
         val base = "/live/direct/$id/segments"
         val running = ArrayDeque<Deferred<Unit>>()
         var failure: Throwable? = null
@@ -98,7 +118,7 @@ object DirectLive {
             val chunk = Api.json.decodeFromString<DirectChunk>(meta.readText())
             val file = File(dir, "%06d.ts".format(chunk.sequence))
             val reservation = try {
-                transfer.json("POST", base, mapOf("sequence" to JsonPrimitive(chunk.sequence), "size" to JsonPrimitive(chunk.size), "sha256" to JsonPrimitive(chunk.sha256), "duration" to JsonPrimitive(chunk.duration)))
+                retrying { transfer.json("POST", base, mapOf("sequence" to JsonPrimitive(chunk.sequence), "size" to JsonPrimitive(chunk.size), "sha256" to JsonPrimitive(chunk.sha256), "duration" to JsonPrimitive(chunk.duration))) }
             } catch (e: Exception) { failure = e; break }
             running.addLast(async {
                 var putMs = 0L
@@ -106,9 +126,14 @@ object DirectLive {
                     val request = Request.Builder().url(reservation["url"]!!.jsonPrimitive.content).put(file.asRequestBody())
                     reservation["headers"]?.jsonObject?.forEach { (name, value) -> request.header(name, value.jsonPrimitive.content) }
                     val sentAt = SystemClock.elapsedRealtime()
-                    Api.http.newCall(request.build()).execute().use { response -> check(response.isSuccessful || response.code == 412) { "Video upload interrupted (${response.code})" } }
+                    val put = request.build()
+                    retrying {
+                        segmentHttp.newCall(put).execute().use { response ->
+                            if (!(response.isSuccessful || response.code == 412)) throw java.io.IOException("Video upload interrupted (${response.code})")
+                        }
+                    }
                     putMs = SystemClock.elapsedRealtime() - sentAt
-                    transfer.request("POST", "$base/${chunk.sequence}/commit")
+                    retrying { transfer.request("POST", "$base/${chunk.sequence}/commit") }
                 }
                 meta.delete(); file.delete()
                 val waiting = dir.listFiles().orEmpty().count { it.name.endsWith(".json") && it.name != "session.json" }
