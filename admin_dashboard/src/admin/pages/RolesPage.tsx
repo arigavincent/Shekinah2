@@ -37,7 +37,7 @@ export function RolesPage() {
     try { await apiRequest(`/api/v1/admin/sa/roles/${r.id}`, { method: "DELETE", token }); if (form.id === r.id) setForm(empty); void load(); } catch (e: any) { setError(e.message); }
   }
   return (<div className="admin-page">
-    <div className="page-header"><h1><BadgeCheck size={20} style={{ marginRight: 8 }} />Roles</h1></div>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Roles</h1><p className="muted">Named sets of permissions (e.g. Media team). Editing a role updates everyone who has it.</p></div></header>
     <p style={{ color: "var(--text-secondary)", margin: 0 }}>Design roles like "Media team" or "Finance officer", then give them to people from Members. Editing a role updates everyone who has it.</p>
     {error && <div className="alert alert-error">{error}</div>}
     <div className="card">

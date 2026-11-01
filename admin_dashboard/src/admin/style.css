@@ -2887,3 +2887,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media print {
   #admin-sidebar, .page-header, .tabs, .admin-page button, .admin-page .card:not(:has(.statement)) { display: none !important; }
 }
+
+/* Empty tables say so instead of showing bare headings. */
+.data-table:has(tbody:empty)::after {
+  content: "Nothing here yet. Use the button above to add the first one.";
+  display: block;
+  padding: 18px 12px;
+  color: var(--text-secondary, #9a9aa3);
+  font-size: 13px;
+}
+
+/* Keep header buttons clear of the light/dark toggle in the corner. */
+.admin-page .page-header { padding-right: 52px; }

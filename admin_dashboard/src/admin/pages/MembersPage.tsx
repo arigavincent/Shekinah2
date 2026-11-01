@@ -90,7 +90,7 @@ export function MembersPage() {
 
   return (
     <div className="admin-page">
-      <div className="page-header"><h1>Member Management</h1></div>
+      <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Member Management</h1><p className="muted">Accounts for everyone: create, edit, suspend, merge duplicates and keep pastoral notes.</p></div></header>
       {error && <div className="alert alert-error">{error}</div>}
       <AddAccount token={token} onCreated={() => void load()} />
       <div className="card" style={{ marginBottom: 16, padding: 16 }}>
@@ -111,7 +111,7 @@ export function MembersPage() {
             <table className="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody>
               {filtered.map(m => (
                 <tr key={m.id} onClick={() => selectMember(m)} style={{ cursor: "pointer", background: selected?.id === m.id ? "var(--surface-hover)" : undefined }}>
-                  <td>{m.name}</td><td>{m.email}</td><td><span className="badge">{m.role}</span></td>
+                  <td>{m.name}</td><td>{m.email}</td><td><span className="badge">{({ super_admin: "Super admin", admin: "Admin", member: "Member" } as Record<string, string>)[m.role] || m.role}</span></td>
                   <td>{m.isActive === false ? <span className="badge danger">Inactive</span> : <span className="badge success">Active</span>}</td>
                   <td style={{ display: "flex", gap: 4 }}>
                     <button className="btn-icon" title="Toggle suspend" onClick={e => { e.stopPropagation(); suspend(m); }}>{m.isActive === false ? <UserCheck size={14} /> : <UserX size={14} />}</button>

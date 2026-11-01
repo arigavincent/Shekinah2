@@ -40,7 +40,7 @@ export function GroupsPage() {
   const typeBadge = (t: string) => ({ ministry: "🏛️", department: "🏢", small_group: "👥", sunday_school: "📖", committee: "📋" }[t] || "📌");
 
   return (<div className="admin-page">
-    <div className="page-header"><h1>Groups & Ministries</h1><button className="btn primary" onClick={() => setShowForm(true)}>+ New Group</button></div>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Groups & Ministries</h1><p className="muted">Cell groups, ministries and teams, with leaders and members.</p></div><button className="btn primary" onClick={() => setShowForm(true)}>+ New Group</button></header>
     {error && <div className="alert alert-error">{error}</div>}
     {showForm && <div className="card" style={{ padding: 16, marginBottom: 16 }}>
       <h3>Create Group</h3>

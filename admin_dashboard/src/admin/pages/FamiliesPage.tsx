@@ -27,7 +27,7 @@ export function FamiliesPage() {
     void run(() => apiRequest(`/api/v1/admin/sa/families/${f.id}`, { method: "DELETE", token }));
   }
   return (<div className="admin-page">
-    <div className="page-header"><h1><Home size={20} style={{ marginRight: 8 }} />Families</h1></div>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Families</h1><p className="muted">Households: head, spouse, children and others, linked to member accounts.</p></div></header>
     {error && <div className="alert alert-error">{error}</div>}
     <div className="card">
       <h3>{form.id ? "Edit family" : "New family"}</h3>

@@ -161,7 +161,7 @@ export function TeamPage() {
               <summary>
                 <strong>{m.name}</strong> · {m.email}{" "}
                 <span className="status-chip">
-                  {admin ? "Administrator" : m.permissions.length ? "Staff" : "Member"}
+                  {m.role === "super_admin" ? "Super admin" : admin ? "Admin" : m.permissions.length ? "Staff" : "Member"}
                 </span>{" "}
                 <span className={`status-chip ${m.isActive ? "success" : "danger"}`}>
                   {m.isActive ? "Active" : "Inactive"}

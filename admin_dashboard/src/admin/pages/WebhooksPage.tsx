@@ -38,7 +38,7 @@ export function WebhooksPage() {
   const statusColor = (s: number) => s >= 200 && s < 300 ? "success" : s > 0 ? "danger" : "";
 
   return (<div className="admin-page">
-    <div className="page-header"><h1><Webhook size={20} style={{ marginRight: 8 }} />Webhooks</h1><button className="btn primary" onClick={openNew}>+ New Webhook</button></div>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Webhooks</h1><p className="muted">Notify tools such as n8n or Zapier when things happen. Each call is signed.</p></div><button className="btn primary" onClick={openNew}>+ New Webhook</button></header>
     {error && <div className="alert alert-error">{error}</div>}
     {showForm && <div className="card" style={{ padding: 16, marginBottom: 16 }}>
       <h3>{editing ? "Edit" : "New"} Webhook</h3>

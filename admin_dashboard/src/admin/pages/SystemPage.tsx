@@ -22,7 +22,7 @@ export function SystemPage() {
   const [tab, setTab] = useState<"modules" | "audit" | "security" | "backup">("modules");
   const token = getToken();
   return (<div className="admin-page">
-    <div className="page-header"><h1><ShieldAlert size={20} style={{ marginRight: 8 }} />System & Governance</h1></div>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>System & Governance</h1><p className="muted">Feature switches, audit trail, security policies and backups.</p></div></header>
     <div className="tabs" style={{ display: "flex", gap: 4, marginBottom: 16 }}>
       {([["modules", "Modules"], ["audit", "Audit Trail"], ["security", "Security"], ["backup", "Data & Backup"]] as const).map(([k, l]) =>
         <button key={k} className={`btn compact ${tab === k ? "primary" : ""}`} onClick={() => setTab(k)}>{l}</button>

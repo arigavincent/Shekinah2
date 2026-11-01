@@ -40,7 +40,7 @@ export function ApiKeysPage() {
   async function copyKey() { await navigator.clipboard.writeText(rawKey); showToast({ title: "Copied", message: "Key copied to clipboard", tone: "success" }); }
 
   return (<div className="admin-page">
-    <div className="page-header"><h1><KeyRound size={20} style={{ marginRight: 8 }} />API Keys</h1><button className="btn primary" onClick={() => setShowForm(true)}>+ Generate Key</button></div>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>API Keys</h1><p className="muted">Keys for outside tools, limited to chosen permissions. Rotate or revoke at any time.</p></div><button className="btn primary" onClick={() => setShowForm(true)}>+ Generate Key</button></header>
     {error && <div className="alert alert-error">{error}</div>}
     {rawKey && <div className="card" style={{ padding: 16, marginBottom: 16, border: "1px solid var(--accent)" }}>
       <h3 style={{ color: "var(--accent)" }}>🔑 New API Key Generated</h3>

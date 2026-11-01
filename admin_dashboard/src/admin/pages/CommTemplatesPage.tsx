@@ -33,7 +33,7 @@ export function CommTemplatesPage() {
   const preview = (body: string) => body.replace(/\{\{(\w+)\}\}/g, (_, v) => `[${v}]`);
 
   return (<div className="admin-page">
-    <div className="page-header"><h1>Communication Templates</h1><button className="btn primary" onClick={openNew}>+ New Template</button></div>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Communication Templates</h1><p className="muted">Reusable wording for messages and emails.</p></div><button className="btn primary" onClick={openNew}>+ New Template</button></header>
     {error && <div className="alert alert-error">{error}</div>}
     {showForm && <div className="card" style={{ padding: 16, marginBottom: 16 }}>
       <h3>{editing ? "Edit" : "New"} Template</h3>

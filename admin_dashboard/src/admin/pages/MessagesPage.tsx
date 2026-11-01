@@ -34,7 +34,7 @@ export function MessagesPage() {
     setBusy(false);
   }
   return (<div className="admin-page">
-    <div className="page-header"><h1><Send size={20} style={{ marginRight: 8 }} />Messages</h1></div>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Messages</h1><p className="muted">Send push and email to everyone, a group, a staff role, a membership status or all staff.</p></div></header>
     <div className="card">
       <h3>New message</h3>
       {templates.length > 0 && <label>Start from a template<select className="input" value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) { setTitle(t.subject || t.name); setBody(t.body); } }}>

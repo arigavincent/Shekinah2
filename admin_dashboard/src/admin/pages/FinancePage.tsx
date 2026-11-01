@@ -12,7 +12,7 @@ export function FinancePage() {
   const token = getToken();
   return (
     <div className="admin-page">
-      <div className="page-header"><h1>Finance & Funds</h1></div>
+      <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Finance & Funds</h1><p className="muted">Funds, cash and cheque entries, refunds and yearly giving statements.</p></div></header>
       <div className="tabs" style={{ display: "flex", gap: 4, marginBottom: 16 }}>
         {(["funds","transaction","kiosks","refunds","statements"] as const).map(t => (
           <button key={t} className={`btn compact ${tab===t?"primary":""}`} onClick={() => setTab(t)}>{t === "funds" ? "Chart of Accounts" : t === "transaction" ? "Manual Entry" : t === "kiosks" ? "POS & Kiosks" : t === "refunds" ? "Refunds" : "Donor Statements"}</button>

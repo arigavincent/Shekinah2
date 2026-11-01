@@ -28,7 +28,7 @@ export function AttendancePage() {
   }
 
   return (<div className="admin-page">
-    <div className="page-header"><h1>Attendance Sessions</h1><button className="btn primary" onClick={() => setShowForm(true)}>+ New Session</button></div>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Attendance Sessions</h1><p className="muted">Services and meetings with headcounts and kiosk check-in.</p></div><button className="btn primary" onClick={() => setShowForm(true)}>+ New Session</button></header>
     {error && <div className="alert alert-error">{error}</div>}
     {showForm && <div className="card" style={{ padding: 16, marginBottom: 16 }}>
       <h3>New Attendance Session</h3>

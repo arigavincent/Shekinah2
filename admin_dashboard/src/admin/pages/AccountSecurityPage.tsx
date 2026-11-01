@@ -27,7 +27,7 @@ export function AccountSecurityPage() {
   const disable = () => run(async () => { const r = await apiRequest<{ message: string }>("/api/v1/auth/mfa/disable", { method: "POST", token, body: { code } }); setMessage(r.message); setCode(""); await load(); });
   const codeInput = <input className="input" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="6-digit code" style={{ maxWidth: 180 }} />;
   return (<div className="admin-page">
-    <div className="page-header"><h1><ShieldCheck size={20} style={{ marginRight: 8 }} />Account security</h1></div>
+    <header className="page-header"><div><p className="eyebrow">Profile</p><h1>Account security</h1><p className="muted">Your two-step sign-in and password.</p></div></header>
     <div className="card" style={{ maxWidth: 640 }}>
       <h3>Two-step sign-in</h3>
       <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>After your password, you also enter a code from an authenticator app on your phone (Google Authenticator, Microsoft Authenticator or Authy). Someone who learns your password still cannot get in.</p>
