@@ -13,6 +13,7 @@ import kotlinx.serialization.json.*
  val scope=rememberCoroutineScope();val fields=remember{mutableStateMapOf<String,String>()};var error by remember{mutableStateOf<String?>(null)};var saved by remember{mutableStateOf(false)};var busy by remember{mutableStateOf(false)}
  LaunchedEffect(Unit){runCatching{Api.get("/admin/settings/ministry")["ministry"]?.jsonObject}.onSuccess{it?.forEach{(k,v)->fields[k]=(v as? JsonPrimitive)?.content.orEmpty()}}.onFailure{error=it.message}}
  Column(verticalArrangement=Arrangement.spacedBy(12.dp)){
+  AdminNextService()
   Text("Ministry details",style=Type.Title,color=Brand.White);Text("Use the ministry's confirmed details. Blank links stay unavailable in the app.",style=Type.Meta,color=Brand.Text2)
   listOf("phone" to "Phone","email" to "Email","address" to "Address","website" to "Website URL","radioUrl" to "Radio stream URL","tvUrl" to "TV stream URL","appUrl" to "App download URL").forEach{(k,label)->Field(label.uppercase(),fields[k].orEmpty(),{fields[k]=it;saved=false})}
   ErrorNote(error);if(saved)Text("Saved",color=Brand.Gold)
