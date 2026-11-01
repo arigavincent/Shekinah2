@@ -41,6 +41,10 @@ android {
             storePassword=System.getenv("SHEKINAH_STORE_PASSWORD")
             keyAlias=System.getenv("SHEKINAH_KEY_ALIAS")
             keyPassword=System.getenv("SHEKINAH_KEY_PASSWORD")
+            // v1 + v2 + v3 so every phone's installer (including OEM ones) accepts the APK.
+            enableV1Signing=true
+            enableV2Signing=true
+            enableV3Signing=true
         }
     }
     buildTypes {
