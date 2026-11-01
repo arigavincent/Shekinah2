@@ -162,11 +162,8 @@ fun PlansScreen(session: Session, openProfile: () -> Unit, openReference: (Strin
                 }
                 if (others.isNotEmpty()) {
                     item { SectionTitle(if (mine.isEmpty()) "Choose a plan" else "Discover more") }
-                    item {
-                        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(others, key = { it.id }) { p -> PlanCover(p, Modifier.width(170.dp)) { open = p.id } }
-                        }
-                    }
+                    // One plan under another, full width.
+                    items(others, key = { it.id }) { p -> PlanCover(p, Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 22.dp)) { open = p.id } }
                 }
             }
         }
@@ -187,13 +184,13 @@ private fun PlanCover(p: Plan, modifier: Modifier, onClick: () -> Unit) {
             com.shekinahsons.globalapp.ui.components.FadeImage(p.imageUrl, Modifier.fillMaxWidth().aspectRatio(16 / 9f).lifted(RoundedCornerShape(16.dp), 10.dp).clip(RoundedCornerShape(16.dp)), label = "PLAN")
             Spacer(Modifier.height(8.dp))
             Text("${p.durationDays} DAYS", style = Type.Label, color = Brand.Gold)
-            Text(p.title, color = Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 18.sp, maxLines = 2)
-            Text(p.description, style = Type.Meta.copy(fontSize = 12.sp, lineHeight = 16.sp), color = Brand.Text2, maxLines = 2)
+            Text(p.title, color = Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 21.sp, maxLines = 2)
+            Text(p.description, style = Type.Meta.copy(fontSize = 13.sp, lineHeight = 18.sp), color = Brand.Text2, maxLines = 3)
         }
         return
     }
     Column(modifier.pressable(onClick)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(0.78f).lifted(RoundedCornerShape(20.dp), 12.dp).clip(RoundedCornerShape(20.dp)).background(Brush.verticalGradient(colors))) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16 / 9f).lifted(RoundedCornerShape(20.dp), 12.dp).clip(RoundedCornerShape(20.dp)).background(Brush.verticalGradient(colors))) {
             androidx.compose.foundation.Image(painterResource(R.drawable.dove_mark), null, Modifier.align(Alignment.Center).size(110.dp).graphicsLayer { alpha = 0.09f })
             Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween) {
                 Text("${p.durationDays} DAYS", style = Type.Label, color = Brand.Gold)

@@ -288,7 +288,9 @@ fun DownloadsPage(content: HomeContent, library: Library, openVideo: (Sermon, Li
 // Watch history: every sermon opened, most recent first.
 @Composable
 fun HistoryPage(content: HomeContent, library: Library, openVideo: (Sermon, List<Sermon>) -> Unit, openAudio: (Sermon, List<Sermon>) -> Unit) {
-    val everything = remember(content) { (content.sermons+library.catalogue()).distinctBy{it.id} + content.clips.map { it.asSermon() } }
+    // One entry per id: a recap opened earlier is also in the saved catalogue, and a
+    // repeated id in the list below crashed the page.
+    val everything = remember(content) { (content.sermons + library.catalogue() + content.clips.map { it.asSermon() }).filter { it.id.isNotBlank() }.distinctBy { it.id } }
     val items = remember(library.progressVersion, everything) { library.history(everything) }
     var confirm by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp)) {

@@ -152,7 +152,7 @@ fun HomeScreen(content: HomeContent, library: Library, name: String, refreshing:
         }
 
         // Started-but-unfinished sermons; re-read whenever progress is saved.
-        val everything = remember(content) { content.sermons + content.clips.map { it.asSermon() } }
+        val everything = remember(content) { (content.sermons + content.clips.map { it.asSermon() }).distinctBy { it.id } }
         val continuing = remember(library.progressVersion, everything) { library.history(everything).take(15) }
         val pull = rememberPullToRefreshState()
 
