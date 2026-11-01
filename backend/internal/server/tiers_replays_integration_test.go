@@ -79,6 +79,14 @@ func TestTicketTiersAndReplayAdmin(t *testing.T) {
 		t.Fatalf("registrations %v", regs)
 	}
 
+	// Choosing paid + ticket types right when creating the event.
+	ev2 := req("POST", "/admin/events", map[string]any{"title": "Concert", "eventDate": "2030-02-01", "eventTime": "6:00 PM", "location": "Hall", "description": "x",
+		"registrationSetup": map[string]any{"mode": "link", "formUrl": "https://forms.gle/abc", "tiers": []map[string]any{{"name": "Regular", "price": 300}, {"name": "VIP", "price": 1500, "capacity": 20}}}}, admin, 201)
+	got := req("GET", "/admin/events/"+ev2["event"].(map[string]any)["id"].(string)+"/registration", nil, admin, 200)["setup"].(map[string]any)
+	if got["mode"] != "link" || len(got["tiers"].([]any)) != 2 || got["price"].(float64) != 300 {
+		t.Fatalf("created setup %v", got)
+	}
+
 	// Replays: list, rename, describe, custom cover, delete.
 	if _, err = db.Exec(ctx, `INSERT INTO live_sessions(id,title,stream_key,status,started_at,ended_at,transport) VALUES('live-aaaaaaaaaaaa','Old title','k1','ended',NOW(),NOW(),'r2');
 		INSERT INTO live_archives(session_id,status,object_key) VALUES('live-aaaaaaaaaaaa','ready','r2-hls/live-aaaaaaaaaaaa')`); err != nil {

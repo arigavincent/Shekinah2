@@ -233,7 +233,7 @@ function toLocalInput(iso: string) {
 }
 
 // Ticket types (e.g. VIP and Regular), each with its own price and places.
-function TierEditor({ tiers, onChange }: { tiers: TicketTier[]; onChange: (t: TicketTier[]) => void }) {
+export function TierEditor({ tiers, onChange }: { tiers: TicketTier[]; onChange: (t: TicketTier[]) => void }) {
   const edit = (i: number, p: Partial<TicketTier>) => onChange(tiers.map((t, k) => (k === i ? { ...t, ...p } : t)));
   return (
     <fieldset className="queue-item" style={{ display: "grid", gap: 8 }}>

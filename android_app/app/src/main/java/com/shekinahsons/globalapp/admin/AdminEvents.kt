@@ -145,6 +145,13 @@ private fun NewEvent(onBack: () -> Unit, done: () -> Unit) {
     var image by remember { mutableStateOf<Uri?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var mode by remember { mutableStateOf("none") }
+    var formUrl by remember { mutableStateOf("") }
+    var paid by remember { mutableStateOf(false) }
+    var price by remember { mutableStateOf("") }
+    var capacity by remember { mutableStateOf("") }
+    var useTiers by remember { mutableStateOf(false) }
+    val tiers = remember { mutableStateListOf(TierDraft(name = "Regular"), TierDraft(name = "VIP")) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { if (it != null) image = it }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BackLine("New event", onBack)
@@ -163,13 +170,44 @@ private fun NewEvent(onBack: () -> Unit, done: () -> Unit) {
         }
         Field("PLACE", location, { location = it.take(120) })
         Field("DESCRIPTION", description, { description = it.take(3000) }, minHeight = 110.dp, singleLine = false)
+        Text("HOW DO PEOPLE REGISTER?", style = Type.Label, color = Brand.Gold, modifier = Modifier.padding(top = 6.dp))
+        ToolChoices(listOf("none" to "No registration", "form" to "Form in the app", "link" to "Outside link (e.g. Google Form)"), mode) { mode = it }
+        if (mode == "link") Field("FORM LINK", formUrl, { formUrl = it.trim() }, hint = "https://forms.gle/...", keyboard = KeyboardType.Uri)
+        if (mode == "form") Text("Add your questions after creating the event: Manage → Registration setup.", style = Type.Meta, color = Brand.Text2)
+        Text("FREE OR PAID?", style = Type.Label, color = Brand.Gold, modifier = Modifier.padding(top = 6.dp))
+        ToolChoices(listOf("free" to "Free event", "paid" to "Paid event"), if (paid) "paid" else "free") { paid = it == "paid" }
+        if (paid) {
+            ToolChoices(listOf("one" to "One price", "tiers" to "Ticket types (VIP, Regular…)"), if (useTiers) "tiers" else "one") { useTiers = it == "tiers" }
+            if (!useTiers) Field("PRICE (KSH)", price, { price = it.filter(Char::isDigit).take(7) }, hint = "e.g. 500", keyboard = KeyboardType.Number)
+            else {
+                tiers.forEachIndexed { i, t ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                        Field("NAME", t.name, { tiers[i] = t.copy(name = it.take(40)) }, Modifier.weight(1.3f))
+                        Field("KSH", t.price, { tiers[i] = t.copy(price = it.filter(Char::isDigit).take(7)) }, Modifier.weight(1f), keyboard = KeyboardType.Number)
+                        Field("PLACES", t.capacity, { tiers[i] = t.copy(capacity = it.filter(Char::isDigit).take(6)) }, Modifier.weight(1f), keyboard = KeyboardType.Number)
+                        Icon(Icons.Rounded.Delete, "Remove", tint = Brand.Text2, modifier = Modifier.padding(bottom = 6.dp).size(36.dp).clip(CircleShape).clickable { tiers.removeAt(i) }.padding(8.dp))
+                    }
+                }
+                if (tiers.size < 10) Text("+ Add ticket type", color = Brand.Gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { tiers.add(TierDraft()) }.padding(6.dp))
+                Text("Blank price = free ticket · blank places = no limit", style = Type.Meta, color = Brand.Text2)
+            }
+        }
+        if (mode != "none" || paid) Field("TOTAL PLACES (BLANK = NO LIMIT)", capacity, { capacity = it.filter(Char::isDigit).take(6) }, keyboard = KeyboardType.Number)
         ErrorNote(error)
         GoldButton("Create event", busy = busy, enabled = title.isNotBlank() && Regex("""\d{4}-\d{2}-\d{2}""").matches(date)) {
             scope.launch {
                 busy = true; error = null
                 runCatching {
+                    if (mode == "link" && !formUrl.startsWith("https://")) error("Paste the full form link starting with https://")
+                    if (paid && !useTiers && (price.toIntOrNull() ?: 0) <= 0) error("Enter the ticket price, or choose Free event")
+                    if (paid && useTiers && tiers.none { it.name.isNotBlank() }) error("Add at least one ticket type")
                     val url = image?.let { uploadImage(context, it) }.orEmpty()
-                    Api.post("/admin/events", mapOf("title" to title.trim(), "eventDate" to date, "eventTime" to time.trim(), "location" to location.trim(), "imageUrl" to url, "description" to description.trim()))
+                    val setup = mapOf(
+                        "mode" to mode, "formUrl" to (if (mode == "link") formUrl else ""), "fields" to emptyList<Any>(),
+                        "price" to (if (paid && !useTiers) price.toIntOrNull() ?: 0 else 0), "capacity" to (capacity.toIntOrNull() ?: 0),
+                        "tiers" to (if (paid && useTiers) tiers.filter { it.name.isNotBlank() }.map { mapOf("name" to it.name.trim(), "price" to (it.price.toIntOrNull() ?: 0), "capacity" to (it.capacity.toIntOrNull() ?: 0)) } else emptyList()),
+                    )
+                    Api.post("/admin/events", mapOf("title" to title.trim(), "eventDate" to date, "eventTime" to time.trim(), "location" to location.trim(), "imageUrl" to url, "description" to description.trim(), "registrationSetup" to setup))
                 }.onSuccess { done() }.onFailure { error = it.message }
                 busy = false
             }

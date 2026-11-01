@@ -50,7 +50,7 @@ private fun fileInfo(context:android.content.Context,uri:Uri):Pair<String,Long> 
    val queueTime=maxOf(System.currentTimeMillis(),jobs.maxOfOrNull{it.queuedAt}?:0L)+1
    val first=if(publishNow)Instant.now() else Instant.parse(releaseInstant(publishAt));val days=if(uploadMode=="single"||publishNow)0L else spacing.toLongOrNull()?:error("Use a number of days between releases")
    check(days in 0..365){"Release spacing must be between 0 and 365 days"}
-   val cost=price.toIntOrNull()?:error("Use a whole-number price");check(cost in 0..1_000_000){"Invalid price"}
+   val cost=price.toIntOrNull()?:error("Enter the price in KSh, or choose Free");check(cost in 0..1_000_000){"Invalid price"};if(section in listOf("book","event")&&price!="0")check(cost>0){"Enter the price in KSh, or choose Free"}
    val registration=if(section=="event") buildJsonObject{put("mode",mode);put("formUrl",formUrl);put("price",cost);put("capacity",capacity.toIntOrNull()?:0);putJsonArray("fields"){questions.lines().filter{it.isNotBlank()}.forEachIndexed{i,q->add(buildJsonObject{put("id","q${i+1}");put("label",q.trim().removeSuffix("*"));put("type","text");put("required",q.trim().endsWith("*"))})}}} else null
    uris.forEachIndexed{i,uri->
     val (name,size)=fileInfo(context,uri);val title=name.substringBeforeLast('.').replace('_',' ')
@@ -79,7 +79,7 @@ private fun fileInfo(context:android.content.Context,uri:Uri):Pair<String,Long> 
    if(uploadMode=="batch"&&!publishNow)Field("DAYS BETWEEN RELEASES · 0 TO RELEASE TOGETHER",spacing,{spacing=it})
    ToggleRow("Publish automatically","Turn off to save server drafts",published){published=it}
    ToggleRow("Notify members on release","Keep off when importing older material",notify){notify=it}
-   if(section in listOf("book","event")){ToolChoices(listOf("free" to "Free","paid" to "Paid"),if((price.toIntOrNull()?:0)>0)"paid" else "free"){price=if(it=="free")"0" else "1"};if((price.toIntOrNull()?:0)>0)Field("PRICE IN KSH",price,{price=it})}
+   if(section in listOf("book","event")){Text("FREE OR PAID?",style=Type.Label,color=Brand.Gold);ToolChoices(listOf("free" to "Free","paid" to "Paid"),if(price!="0")"paid" else "free"){price=if(it=="free")"0" else ""};if(price!="0")Field("PRICE IN KSH",price,{price=it.filter(Char::isDigit).take(7)},hint="e.g. 500")}
    if(section=="event"){
     Field("LOCATION",location,{location=it});ClockField("EVENT TIME",eventTime,{eventTime=it})
     Row{listOf("none","form","link").forEach{m->Text(m.uppercase(),color=if(mode==m)Brand.Gold else Brand.Text2,modifier=Modifier.clickable{mode=m}.padding(10.dp))}}

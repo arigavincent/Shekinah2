@@ -15,6 +15,7 @@ import {
   type UploadJob,
 } from "../publishing/queue";
 import { AccessPrice } from "./AccessPrice";
+import { TierEditor } from "./EventAccessEditor";
 import {
   RegistrationFields,
   emptyRegistration,
@@ -358,7 +359,10 @@ export function PublishingQueue({
                 rows={3}
               />
             </label>
-            {section !== "sermons" && <AccessPrice price={price} onChange={setPrice} />}
+            {section !== "sermons" && <AccessPrice label="Free or paid?" price={price} onChange={setPrice} />}
+            {section === "event" && price > 0 && (
+              <TierEditor tiers={registration.tiers || []} onChange={(tiers) => setRegistration({ ...registration, tiers })} />
+            )}
             {section === "event" && (
               <RegistrationFields value={registration} onChange={setRegistration} />
             )}
