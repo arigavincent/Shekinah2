@@ -171,8 +171,8 @@ object Broadcast {
         val now = android.os.SystemClock.elapsedRealtime()
         if (directSession == id && now - adjustedAt > 4_000) {
             val next = when {
-                waiting >= 3 -> (target * 0.7).toInt()
-                waiting >= 2 -> (target * 0.85).toInt()
+                waiting >= 5 -> (target * 0.7).toInt()
+                waiting >= 3 -> (target * 0.85).toInt()
                 waiting == 0 && uploadMs in 1..(duration * 450).toLong() -> (target * 1.15).toInt()
                 else -> target
             }.coerceIn(300_000, ceiling)

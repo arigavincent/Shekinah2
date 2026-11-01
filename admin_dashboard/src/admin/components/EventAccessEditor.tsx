@@ -10,6 +10,7 @@ import {
   RegistrationFields,
   emptyRegistration,
   type RegistrationSetup,
+  type TicketTier,
 } from "./RegistrationFields";
 type Registrant = {
   id: string;
@@ -18,6 +19,7 @@ type Registrant = {
   email: string;
   phone: string;
   ticket: string;
+  tierId?: string;
   payment: string;
   status?: string;
   answers: Record<string, string>;
@@ -38,7 +40,8 @@ export function EventAccessEditor({
 }) {
   const [cancelled, setCancelled] = useState(!!cancelledAt),
     [deadline, setDeadline] = useState(closesAt ? toLocalInput(closesAt) : ""),
-    [issueTo, setIssueTo] = useState("");
+    [issueTo, setIssueTo] = useState(""),
+    [issueTier, setIssueTier] = useState("");
   async function act(path: string, method: string, body?: unknown, done?: (r: { message?: string; ticket?: string }) => void) {
     setError(""); setNotice("");
     try {
@@ -132,7 +135,8 @@ export function EventAccessEditor({
       {notice && <p role="status">{notice}</p>}
       {loaded && (
         <>
-          <AccessPrice price={setup.price} onChange={(price) => setSetup({ ...setup, price })} />
+          {!(setup.tiers || []).length && <AccessPrice price={setup.price} onChange={(price) => setSetup({ ...setup, price })} />}
+          <TierEditor tiers={setup.tiers || []} onChange={(tiers) => setSetup({ ...setup, tiers })} />
           <RegistrationFields value={setup} onChange={setSetup} />
           <div className="two-col">
 <DateTimeField label="Release · Nairobi" value={release} onChange={v=>setRelease(releaseISO(v))} allowNow/>
@@ -179,7 +183,15 @@ export function EventAccessEditor({
                 Issue a ticket (registered in person)
                 <MemberSelect token={getToken()} value={issueTo} onChange={setIssueTo} />
               </label>
-              <button className="secondary compact" disabled={!issueTo} onClick={() => void act("/registrations", "POST", { userId: issueTo }, () => { setIssueTo(""); void registrations(); })}>Issue ticket</button>
+              {(setup.tiers || []).length > 0 && (
+                <label>
+                  Ticket type
+                  <select value={issueTier || setup.tiers![0].id} onChange={(e) => setIssueTier(e.target.value)}>
+                    {setup.tiers!.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <button className="secondary compact" disabled={!issueTo} onClick={() => void act("/registrations", "POST", { userId: issueTo, tierId: issueTier || setup.tiers?.[0]?.id || "" }, () => { setIssueTo(""); void registrations(); })}>Issue ticket</button>
             </div>
             <button className="secondary compact" onClick={() => void csv()}>
               Export registrations CSV
@@ -195,7 +207,7 @@ export function EventAccessEditor({
                       {r.email} · {r.phone}
                     </p>
                     <p className="small-muted">
-                      {r.voided ? "Voided · " : ""}{r.payment || r.status} · {r.ticket || "Ticket pending payment"}
+                      {r.voided ? "Voided · " : ""}{setup.tiers?.find((t) => t.id === r.tierId)?.name ? `${setup.tiers.find((t) => t.id === r.tierId)!.name} · ` : ""}{r.payment || r.status} · {r.ticket || "Ticket pending payment"}
                     </p>
                     {!r.voided && r.id && <button className="secondary compact" onClick={() => void act(`/registrations/${r.id}`, "DELETE", undefined, () => void registrations())}>Void registration</button>}
                     {Object.entries(r.answers || {}).map(([key, value]) => (
@@ -218,4 +230,41 @@ function toLocalInput(iso: string) {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Ticket types (e.g. VIP and Regular), each with its own price and places.
+function TierEditor({ tiers, onChange }: { tiers: TicketTier[]; onChange: (t: TicketTier[]) => void }) {
+  const edit = (i: number, p: Partial<TicketTier>) => onChange(tiers.map((t, k) => (k === i ? { ...t, ...p } : t)));
+  return (
+    <fieldset className="queue-item" style={{ display: "grid", gap: 8 }}>
+      <legend>Ticket types</legend>
+      {!tiers.length ? (
+        <p className="small-muted">One price for everyone. Add ticket types for VIP, Regular and so on.</p>
+      ) : (
+        tiers.map((t, i) => (
+          <div className="filters-row" key={t.id || i} style={{ alignItems: "end", gap: 8, flexWrap: "wrap" }}>
+            <label style={{ flex: 2, minWidth: 160 }}>
+              Name
+              <input value={t.name} maxLength={40} placeholder="e.g. VIP" onChange={(e) => edit(i, { name: e.target.value })} />
+            </label>
+            <label style={{ flex: 1, minWidth: 110 }}>
+              Price (KSh, 0 = free)
+              <input type="number" min={0} value={t.price} onChange={(e) => edit(i, { price: Math.max(0, Number(e.target.value) || 0) })} />
+            </label>
+            <label style={{ flex: 1, minWidth: 110 }}>
+              Places (0 = no limit)
+              <input type="number" min={0} value={t.capacity} onChange={(e) => edit(i, { capacity: Math.max(0, Number(e.target.value) || 0) })} />
+            </label>
+            {t.spotsLeft !== undefined && t.spotsLeft >= 0 && <span className="small-muted">{t.spotsLeft} left</span>}
+            <button type="button" className="danger compact" onClick={() => onChange(tiers.filter((_, k) => k !== i))}>Remove</button>
+          </div>
+        ))
+      )}
+      {tiers.length < 10 && (
+        <button type="button" className="secondary compact" onClick={() => onChange([...tiers, { id: "", name: tiers.length ? "" : "Regular", price: 0, capacity: 0 }])}>
+          Add ticket type
+        </button>
+      )}
+    </fieldset>
+  );
 }

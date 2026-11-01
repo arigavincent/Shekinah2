@@ -36,12 +36,45 @@ type Field struct {
 	Options  []string `json:"options,omitempty"`
 }
 
+// Tier is a kind of ticket (e.g. VIP, Regular) with its own price and places.
+// Capacity 0 means no limit for that tier.
+type Tier struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Price     int    `json:"price"`
+	Capacity  int    `json:"capacity"`
+	SpotsLeft int    `json:"spotsLeft"` // filled in on reads; -1 = no limit
+}
+
 type Setup struct {
 	Mode     string  `json:"mode"` // none, form, link
 	FormURL  string  `json:"formUrl"`
 	Fields   []Field `json:"fields"`
 	Price    int     `json:"price"`
 	Capacity int     `json:"capacity"`
+	Tiers    []Tier  `json:"tiers"`
+}
+
+// priceFor is what a ticket costs: the tier's price when the event has tiers.
+func (s Setup) priceFor(tierID string) int {
+	if len(s.Tiers) == 0 {
+		return s.Price
+	}
+	for _, t := range s.Tiers {
+		if t.ID == tierID {
+			return t.Price
+		}
+	}
+	return 0
+}
+
+func (s Setup) tier(id string) (Tier, bool) {
+	for _, t := range s.Tiers {
+		if t.ID == id {
+			return t, true
+		}
+	}
+	return Tier{}, false
 }
 
 type Mine struct {
@@ -50,6 +83,9 @@ type Mine struct {
 	Answers    map[string]string `json:"answers,omitempty"`
 	// none (free or not yet paid), pending (code sent, being checked), paid
 	Payment string `json:"payment"`
+	TierID  string `json:"tierId,omitempty"`
+	Tier    string `json:"tier,omitempty"`
+	Price   int    `json:"price"`
 }
 
 func randomHex(n int) string {
@@ -60,11 +96,11 @@ func randomHex(n int) string {
 
 func (h Handler) setup(c *gin.Context, eventID string) (Setup, string, error) {
 	var s Setup
-	var raw []byte
+	var raw, tiers []byte
 	var title string
 	admin := strings.Contains(c.FullPath(), "/admin/")
-	err := h.db.QueryRow(c.Request.Context(), `SELECT title, registration, form_url, form_fields, price, capacity FROM events WHERE id = $1 AND ($2 OR (is_published AND published_at<=NOW()))`, eventID, admin).
-		Scan(&title, &s.Mode, &s.FormURL, &raw, &s.Price, &s.Capacity)
+	err := h.db.QueryRow(c.Request.Context(), `SELECT title, registration, form_url, form_fields, price, capacity, ticket_tiers FROM events WHERE id = $1 AND ($2 OR (is_published AND published_at<=NOW()))`, eventID, admin).
+		Scan(&title, &s.Mode, &s.FormURL, &raw, &s.Price, &s.Capacity, &tiers)
 	if err != nil {
 		return s, "", err
 	}
@@ -72,27 +108,46 @@ func (h Handler) setup(c *gin.Context, eventID string) (Setup, string, error) {
 	if s.Fields == nil {
 		s.Fields = []Field{}
 	}
+	_ = json.Unmarshal(tiers, &s.Tiers)
+	if s.Tiers == nil {
+		s.Tiers = []Tier{}
+	}
+	// Places left per tier.
+	for i := range s.Tiers {
+		s.Tiers[i].SpotsLeft = -1
+		if s.Tiers[i].Capacity > 0 {
+			var n int
+			_ = h.db.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM event_registrations WHERE event_id = $1 AND tier_id = $2 AND voided_at IS NULL`, eventID, s.Tiers[i].ID).Scan(&n)
+			s.Tiers[i].SpotsLeft = max(s.Tiers[i].Capacity-n, 0)
+		}
+	}
 	return s, title, nil
 }
 
 func (h Handler) count(c *gin.Context, eventID string) int {
 	var n int
-	_ = h.db.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM event_registrations WHERE event_id = $1`, eventID).Scan(&n)
+	_ = h.db.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM event_registrations WHERE event_id = $1 AND voided_at IS NULL`, eventID).Scan(&n)
 	return n
 }
 
-func (h Handler) mine(c *gin.Context, eventID, userID string, price int) Mine {
+func (h Handler) mine(c *gin.Context, eventID, userID string, s Setup) Mine {
 	m := Mine{Payment: "none"}
 	if userID == "" {
 		return m
 	}
 	var raw []byte
-	err := h.db.QueryRow(c.Request.Context(), `SELECT ticket, answers FROM event_registrations WHERE event_id = $1 AND user_id::text = $2`, eventID, userID).Scan(&m.Ticket, &raw)
+	err := h.db.QueryRow(c.Request.Context(), `SELECT ticket, answers, tier_id FROM event_registrations WHERE event_id = $1 AND user_id::text = $2 AND voided_at IS NULL`, eventID, userID).Scan(&m.Ticket, &raw, &m.TierID)
 	if err == nil {
 		m.Registered = true
 		_ = json.Unmarshal(raw, &m.Answers)
 	}
-	if price > 0 {
+	if t, ok := s.tier(m.TierID); ok {
+		m.Tier = t.Name
+	}
+	m.Price = s.priceFor(m.TierID)
+	price := m.Price
+	// A payment already made counts even if the tier was free.
+	if price > 0 || len(s.Tiers) > 0 {
 		var status string
 		_ = h.db.QueryRow(c.Request.Context(), `SELECT status FROM giving_transactions WHERE item_id = $1 AND user_id::text = $2 AND status IN ('success','awaiting_verification')
 			ORDER BY status = 'success' DESC LIMIT 1`, eventID, userID).Scan(&status)
@@ -103,7 +158,7 @@ func (h Handler) mine(c *gin.Context, eventID, userID string, price int) Mine {
 			m.Payment = "pending"
 		}
 		// The ticket only counts once paid.
-		if m.Payment != "paid" {
+		if m.Payment != "paid" && price > 0 {
 			m.Ticket = ""
 		}
 	}
@@ -124,7 +179,7 @@ func (h Handler) Get(c *gin.Context) {
 	if s.Capacity > 0 {
 		left = max(s.Capacity-taken, 0)
 	}
-	c.JSON(http.StatusOK, gin.H{"setup": s, "registered": taken, "spotsLeft": left, "mine": h.mine(c, eventID, userID, s.Price)})
+	c.JSON(http.StatusOK, gin.H{"setup": s, "registered": taken, "spotsLeft": left, "mine": h.mine(c, eventID, userID, s)})
 }
 
 // POST /events/:id/register {"answers": {...}} — signs the member up (or
@@ -137,14 +192,23 @@ func (h Handler) Register(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Event not found"})
 		return
 	}
-	if s.Mode != "form" && s.Mode != "link" && !(s.Mode == "none" && s.Price > 0) {
+	if s.Mode != "form" && s.Mode != "link" && !(s.Mode == "none" && (s.Price > 0 || len(s.Tiers) > 0)) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "This event doesn't take registrations in the app"})
 		return
 	}
 	var req struct {
 		Answers map[string]string `json:"answers"`
+		TierID  string            `json:"tierId"`
 	}
 	_ = c.ShouldBindJSON(&req)
+	var tier Tier
+	if len(s.Tiers) > 0 {
+		var ok bool
+		if tier, ok = s.tier(req.TierID); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Choose a ticket type"})
+			return
+		}
+	}
 	answers := map[string]string{}
 	for _, f := range s.Fields {
 		if s.Mode != "form" {
@@ -194,9 +258,31 @@ func (h Handler) Register(c *gin.Context) {
 		return
 	}
 	var exists bool
-	_ = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM event_registrations WHERE event_id = $1 AND user_id::text = $2 AND voided_at IS NULL)`, eventID, userID).Scan(&exists)
+	var oldTier string
+	err = tx.QueryRow(ctx, `SELECT tier_id FROM event_registrations WHERE event_id = $1 AND user_id::text = $2 AND voided_at IS NULL`, eventID, userID).Scan(&oldTier)
+	exists = err == nil
+	err = nil
+	tierFull := func() bool {
+		if tier.Capacity <= 0 {
+			return false
+		}
+		var n int
+		_ = tx.QueryRow(ctx, `SELECT COUNT(*) FROM event_registrations WHERE event_id = $1 AND tier_id = $2 AND voided_at IS NULL`, eventID, tier.ID).Scan(&n)
+		return n >= tier.Capacity
+	}
 	if exists {
-		_, err = tx.Exec(ctx, `UPDATE event_registrations SET answers = $3, updated_at = NOW() WHERE event_id = $1 AND user_id::text = $2`, eventID, userID, raw)
+		if oldTier != tier.ID {
+			// Switching ticket type: only before paying, and only if there's room.
+			if m := h.mine(c, eventID, userID, s); m.Payment != "none" {
+				c.JSON(http.StatusConflict, gin.H{"message": "You've already paid for your ticket. Contact the church office to change it."})
+				return
+			}
+			if tierFull() {
+				c.JSON(http.StatusConflict, gin.H{"message": "Sorry, " + tier.Name + " tickets are sold out."})
+				return
+			}
+		}
+		_, err = tx.Exec(ctx, `UPDATE event_registrations SET answers = $3, tier_id = $4, updated_at = NOW() WHERE event_id = $1 AND user_id::text = $2`, eventID, userID, raw, tier.ID)
 	} else {
 		var taken int
 		_ = tx.QueryRow(ctx, `SELECT COUNT(*) FROM event_registrations WHERE event_id = $1 AND voided_at IS NULL`, eventID).Scan(&taken)
@@ -204,17 +290,21 @@ func (h Handler) Register(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"message": "Sorry, this event is full."})
 			return
 		}
+		if tierFull() {
+			c.JSON(http.StatusConflict, gin.H{"message": "Sorry, " + tier.Name + " tickets are sold out."})
+			return
+		}
 		ticket := strings.ToUpper(randomHex(4))
 		// A voided registration is brought back with a fresh ticket.
-		_, err = tx.Exec(ctx, `INSERT INTO event_registrations (id, event_id, user_id, answers, ticket) VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (event_id, user_id) DO UPDATE SET answers = EXCLUDED.answers, ticket = EXCLUDED.ticket, voided_at = NULL, updated_at = NOW()`,
-			"reg-"+randomHex(6), eventID, userID, raw, ticket)
+		_, err = tx.Exec(ctx, `INSERT INTO event_registrations (id, event_id, user_id, answers, ticket, tier_id) VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (event_id, user_id) DO UPDATE SET answers = EXCLUDED.answers, ticket = EXCLUDED.ticket, tier_id = EXCLUDED.tier_id, voided_at = NULL, updated_at = NOW()`,
+			"reg-"+randomHex(6), eventID, userID, raw, ticket, tier.ID)
 	}
 	if err != nil || tx.Commit(ctx) != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not register"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"mine": h.mine(c, eventID, userID, s.Price)})
+	c.JSON(http.StatusOK, gin.H{"mine": h.mine(c, eventID, userID, s)})
 }
 
 // DELETE /events/:id/register — cancels, unless already paid.
@@ -226,7 +316,7 @@ func (h Handler) Cancel(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Event not found"})
 		return
 	}
-	if m := h.mine(c, eventID, userID, s.Price); m.Payment != "none" {
+	if m := h.mine(c, eventID, userID, s); m.Payment != "none" {
 		c.JSON(http.StatusConflict, gin.H{"message": "You've paid for this event. Contact the church office to cancel."})
 		return
 	}
@@ -250,8 +340,9 @@ func (h Handler) AdminSetup(c *gin.Context) {
 	clean := s.Fields
 
 	raw, _ := json.Marshal(clean)
-	tag, err := h.db.Exec(c.Request.Context(), `UPDATE events SET registration = $2, form_url = $3, form_fields = $4, price = $5, capacity = $6, updated_at = NOW() WHERE id = $1`,
-		c.Param("id"), s.Mode, s.FormURL, raw, s.Price, s.Capacity)
+	tiers, _ := json.Marshal(s.Tiers)
+	tag, err := h.db.Exec(c.Request.Context(), `UPDATE events SET registration = $2, form_url = $3, form_fields = $4, price = $5, capacity = $6, ticket_tiers = $7, updated_at = NOW() WHERE id = $1`,
+		c.Param("id"), s.Mode, s.FormURL, raw, s.Price, s.Capacity, tiers)
 	if err != nil || tag.RowsAffected() == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Event not found"})
 		return
@@ -267,13 +358,14 @@ type Row struct {
 	Email      string            `json:"email"`
 	Answers    map[string]string `json:"answers"`
 	Ticket     string            `json:"ticket"`
+	TierID     string            `json:"tierId"`
 	Payment    string            `json:"payment"`
 	Registered time.Time         `json:"registered"`
 }
 
 func (h Handler) rows(c *gin.Context, eventID string) ([]Row, error) {
 	rows, err := h.db.Query(c.Request.Context(), `
-		SELECT r.id, r.voided_at IS NOT NULL, u.name, u.email, r.answers, r.ticket, r.created_at,
+		SELECT r.id, r.voided_at IS NOT NULL, u.name, u.email, r.answers, r.ticket, r.tier_id, r.created_at,
 			COALESCE((SELECT g.status FROM giving_transactions g WHERE g.item_id = r.event_id AND g.user_id = r.user_id AND g.status IN ('success','awaiting_verification') ORDER BY g.status = 'success' DESC LIMIT 1), '')
 		FROM event_registrations r JOIN users u ON u.id = r.user_id
 		WHERE r.event_id = $1 ORDER BY r.voided_at IS NOT NULL, r.created_at`, eventID)
@@ -286,7 +378,7 @@ func (h Handler) rows(c *gin.Context, eventID string) ([]Row, error) {
 		var r Row
 		var raw []byte
 		var pay string
-		if err := rows.Scan(&r.ID, &r.Voided, &r.Name, &r.Email, &raw, &r.Ticket, &r.Registered, &pay); err != nil {
+		if err := rows.Scan(&r.ID, &r.Voided, &r.Name, &r.Email, &raw, &r.Ticket, &r.TierID, &r.Registered, &pay); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(raw, &r.Answers)
@@ -329,13 +421,17 @@ func (h Handler) AdminCSV(c *gin.Context) {
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", "registrations-"+strings.ReplaceAll(strings.ToLower(title), " ", "-")+".csv"))
 	w := csv.NewWriter(c.Writer)
-	head := []string{"Name", "Email", "Registered", "Ticket", "Payment"}
+	head := []string{"Name", "Email", "Registered", "Ticket", "Ticket type", "Payment"}
 	for _, f := range s.Fields {
 		head = append(head, f.Label)
 	}
 	_ = w.Write(head)
 	for _, r := range list {
-		line := []string{r.Name, r.Email, r.Registered.Format("2006-01-02 15:04"), r.Ticket, r.Payment}
+		tierName := ""
+		if t, ok := s.tier(r.TierID); ok {
+			tierName = t.Name
+		}
+		line := []string{r.Name, r.Email, r.Registered.Format("2006-01-02 15:04"), r.Ticket, tierName, r.Payment}
 		for _, f := range s.Fields {
 			line = append(line, r.Answers[f.ID])
 		}
@@ -396,6 +492,40 @@ func NormalizeSetup(s Setup) (Setup, error) {
 		}
 	}
 	s.Fields = clean
+	tiers := []Tier{}
+	names := map[string]bool{}
+	for _, t := range s.Tiers {
+		t.Name = strings.TrimSpace(t.Name)
+		if t.Name == "" {
+			continue
+		}
+		if len(t.Name) > 40 {
+			return s, errors.New("ticket type names must be 40 characters or fewer")
+		}
+		if names[strings.ToLower(t.Name)] {
+			return s, errors.New("ticket types need different names")
+		}
+		names[strings.ToLower(t.Name)] = true
+		if t.Price < 0 || t.Price > 1_000_000 || t.Capacity < 0 || t.Capacity > 1_000_000 {
+			return s, errors.New("check the price and places for " + t.Name)
+		}
+		if t.ID == "" || len(t.ID) > 20 {
+			t.ID = "t" + randomHex(3)
+		}
+		t.SpotsLeft = 0
+		tiers = append(tiers, t)
+		if len(tiers) > 10 {
+			return s, errors.New("use at most 10 ticket types")
+		}
+	}
+	s.Tiers = tiers
+	if len(tiers) > 0 {
+		// The headline price is the cheapest ticket ("from KES ...").
+		s.Price = tiers[0].Price
+		for _, t := range tiers {
+			s.Price = min(s.Price, t.Price)
+		}
+	}
 	return s, nil
 }
 
@@ -462,18 +592,25 @@ func (h Handler) AdminVoid(c *gin.Context) {
 func (h Handler) AdminIssue(c *gin.Context) {
 	var req struct {
 		UserID string `json:"userId"`
+		TierID string `json:"tierId"`
 	}
 	if c.ShouldBindJSON(&req) != nil || req.UserID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Choose a member"})
 		return
 	}
+	if s, _, err := h.setup(c, c.Param("id")); err == nil && len(s.Tiers) > 0 {
+		if _, ok := s.tier(req.TierID); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Choose a ticket type"})
+			return
+		}
+	}
 	staff, _ := auth.UserIDFromContext(c)
 	ticket := strings.ToUpper(randomHex(4))
 	var issued string
-	err := h.db.QueryRow(c.Request.Context(), `INSERT INTO event_registrations (id, event_id, user_id, answers, ticket, issued_by)
-		SELECT $1, e.id, u.id, '{}'::jsonb, $4, NULLIF($5, '')::uuid FROM events e, users u WHERE e.id = $2 AND u.id::text = $3
-		ON CONFLICT (event_id, user_id) DO UPDATE SET voided_at = NULL, ticket = CASE WHEN event_registrations.voided_at IS NULL THEN event_registrations.ticket ELSE EXCLUDED.ticket END, updated_at = NOW()
-		RETURNING ticket`, "reg-"+randomHex(6), c.Param("id"), req.UserID, ticket, staff).Scan(&issued)
+	err := h.db.QueryRow(c.Request.Context(), `INSERT INTO event_registrations (id, event_id, user_id, answers, ticket, issued_by, tier_id)
+		SELECT $1, e.id, u.id, '{}'::jsonb, $4, NULLIF($5, '')::uuid, $6 FROM events e, users u WHERE e.id = $2 AND u.id::text = $3
+		ON CONFLICT (event_id, user_id) DO UPDATE SET voided_at = NULL, tier_id = CASE WHEN $6 = '' THEN event_registrations.tier_id ELSE $6 END, ticket = CASE WHEN event_registrations.voided_at IS NULL THEN event_registrations.ticket ELSE EXCLUDED.ticket END, updated_at = NOW()
+		RETURNING ticket`, "reg-"+randomHex(6), c.Param("id"), req.UserID, ticket, staff, req.TierID).Scan(&issued)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Event or member not found"})
 		return

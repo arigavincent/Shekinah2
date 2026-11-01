@@ -82,10 +82,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 
 @Serializable
-data class AdminEvent(val cancelledAt:String?=null,val publishedAt:String="",val isPublished:Boolean=true,val notifyOnPublish:Boolean=false,val id: String = "", val title: String = "", val eventDate: String = "", val eventTime: String = "", val location: String = "", val imageUrl: String = "", val description: String = "")
+data class AdminEvent(val registrationClosesAt:String?=null,val cancelledAt:String?=null,val publishedAt:String="",val isPublished:Boolean=true,val notifyOnPublish:Boolean=false,val id: String = "", val title: String = "", val eventDate: String = "", val eventTime: String = "", val location: String = "", val imageUrl: String = "", val description: String = "")
 
 @Serializable
-data class Registrant(val id: String = "", val voided: Boolean = false, val name: String = "", val email: String = "", val answers: Map<String, String> = emptyMap(), val ticket: String = "", val payment: String = "none", val registered: String = "")
+data class Registrant(val tierId: String = "", val id: String = "", val voided: Boolean = false, val name: String = "", val email: String = "", val answers: Map<String, String> = emptyMap(), val ticket: String = "", val payment: String = "none", val registered: String = "")
 
 private val fieldTypes = listOf("text" to "Short answer", "longtext" to "Paragraph", "phone" to "Phone", "email" to "Email", "number" to "Number", "choice" to "Choice")
 
@@ -216,13 +216,19 @@ private fun SetupEditor(e: AdminEvent) {
     var price by remember { mutableStateOf("") }
     var capacity by remember { mutableStateOf("") }
     val fields = remember { mutableStateListOf<FormField>() }
+    val tiers = remember { mutableStateListOf<TierDraft>() }
+    var useTiers by remember { mutableStateOf(false) }
+    var hasDeadline by remember(e.id) { mutableStateOf(!e.registrationClosesAt.isNullOrBlank()) }
+    var deadline by remember(e.id) { mutableStateOf(e.registrationClosesAt?.takeIf { it.isNotBlank() } ?: java.time.Instant.now().plusSeconds(86_400).toString()) }
     var loaded by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(e.id) {
         runCatching { Api.decode<RegSetup>(Api.get("/events/${e.id}/registration")["setup"]) }.onSuccess { s ->
-            mode = s.mode; formUrl = s.formUrl; paid = s.price > 0; price = if (s.price > 0) "${s.price}" else ""
+            mode = s.mode; formUrl = s.formUrl; paid = s.paid; price = if (s.price > 0) "${s.price}" else ""
             capacity = if (s.capacity > 0) "${s.capacity}" else ""; fields.clear(); fields.addAll(s.fields)
+            tiers.clear(); tiers.addAll(s.tiers.map { TierDraft(it.id, it.name, if (it.price > 0) "${it.price}" else "", if (it.capacity > 0) "${it.capacity}" else "") })
+            useTiers = s.tiers.isNotEmpty()
         }
         loaded = true
     }
@@ -256,10 +262,49 @@ private fun SetupEditor(e: AdminEvent) {
                 }
                 Switch(paid, { paid = it; saved = false }, colors = SwitchDefaults.colors(checkedThumbColor = Brand.Black, checkedTrackColor = Brand.Gold, uncheckedTrackColor = Color(0x22FFFFFF)))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (paid) Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Ticket types", color = Brand.White, fontWeight = FontWeight.SemiBold)
+                    Text("e.g. VIP and Regular, each with its own price and places", style = Type.Meta, color = Brand.Text2)
+                }
+                Switch(useTiers, { on ->
+                    useTiers = on; saved = false
+                    if (on && tiers.isEmpty()) { tiers.add(TierDraft(name = "Regular", price = price)); tiers.add(TierDraft(name = "VIP")) }
+                }, colors = SwitchDefaults.colors(checkedThumbColor = Brand.Black, checkedTrackColor = Brand.Gold, uncheckedTrackColor = Color(0x22FFFFFF)))
+            }
+            if (paid && useTiers) {
+                tiers.forEachIndexed { index, t ->
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x14FFFFFF)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Field("TICKET NAME", t.name, { tiers[index] = t.copy(name = it.take(40)); saved = false }, Modifier.weight(1f), hint = "e.g. VIP")
+                            Icon(Icons.Rounded.Delete, "Remove ticket type", tint = Brand.Text2, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp).size(40.dp).clip(CircleShape).clickable { tiers.removeAt(index); saved = false }.padding(9.dp))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Field("PRICE (KSH, BLANK = FREE)", t.price, { tiers[index] = t.copy(price = it.filter(Char::isDigit).take(7)); saved = false }, Modifier.weight(1f), keyboard = KeyboardType.Number)
+                            Field("PLACES (BLANK = NO LIMIT)", t.capacity, { tiers[index] = t.copy(capacity = it.filter(Char::isDigit).take(6)); saved = false }, Modifier.weight(1f), keyboard = KeyboardType.Number)
+                        }
+                    }
+                }
+                if (tiers.size < 10) Row(Modifier.clip(RoundedCornerShape(50)).border(1.dp, Brand.Gold, RoundedCornerShape(50)).clickable { tiers.add(TierDraft()); saved = false }.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Add, null, tint = Brand.Gold, modifier = Modifier.size(18.dp))
+                    Text(" Add ticket type", color = Brand.Gold, fontWeight = FontWeight.SemiBold)
+                }
+                Field("TOTAL PLACES FOR THE EVENT (BLANK = NO LIMIT)", capacity, { capacity = it.filter(Char::isDigit).take(6); saved = false }, keyboard = KeyboardType.Number)
+            } else Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (paid) Field("PRICE (KSH)", price, { price = it.filter(Char::isDigit).take(7); saved = false }, Modifier.weight(1f), keyboard = KeyboardType.Number)
                 Field("PLACES (BLANK = NO LIMIT)", capacity, { capacity = it.filter(Char::isDigit).take(6); saved = false }, Modifier.weight(1f), keyboard = KeyboardType.Number)
             }
+        }
+        if (mode != "none" || paid) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Registration deadline", color = Brand.White, fontWeight = FontWeight.SemiBold)
+                    Text(if (hasDeadline) "Sign-ups close at the time below" else "Sign-ups stay open", style = Type.Meta, color = Brand.Text2)
+                }
+                Switch(hasDeadline, { hasDeadline = it; saved = false }, colors = SwitchDefaults.colors(checkedThumbColor = Brand.Black, checkedTrackColor = Brand.Gold, uncheckedTrackColor = Color(0x22FFFFFF)))
+            }
+            if (hasDeadline) CalendarTimeField("Registration closes", deadline) { deadline = it; saved = false }
         }
         if (mode == "form") {
             Text("QUESTIONS", style = Type.Label, color = Brand.Gold, modifier = Modifier.padding(top = 4.dp))
@@ -277,16 +322,27 @@ private fun SetupEditor(e: AdminEvent) {
             scope.launch {
                 error = null
                 runCatching {
-                    Api.put("/admin/events/${e.id}/registration", mapOf(
+                    if (paid && useTiers && tiers.none { it.name.isNotBlank() }) error("Add at least one ticket type, or switch ticket types off")
+                    val res = Api.put("/admin/events/${e.id}/registration", mapOf(
                         "mode" to mode, "formUrl" to formUrl, "price" to (if (paid) price.toIntOrNull() ?: 0 else 0),
                         "capacity" to (capacity.toIntOrNull() ?: 0),
                         "fields" to fields.map { mapOf("id" to it.id, "label" to it.label, "type" to it.type, "required" to it.required, "options" to it.options) },
+                        "tiers" to (if (paid && useTiers) tiers.map { mapOf("id" to it.id, "name" to it.name, "price" to (it.price.toIntOrNull() ?: 0), "capacity" to (it.capacity.toIntOrNull() ?: 0)) } else emptyList()),
                     ))
-                }.onSuccess { saved = true; it["setup"]?.let { s -> Api.decode<RegSetup>(s).fields.let { f -> fields.clear(); fields.addAll(f) } } }.onFailure { error = it.message }
+                    Api.put("/admin/events/${e.id}/deadline", mapOf("closesAt" to (if (hasDeadline && (mode != "none" || paid)) java.time.Instant.parse(deadline).toString() else "")))
+                    res
+                }.onSuccess {
+                    saved = true
+                    it["setup"]?.let { raw -> val s = Api.decode<RegSetup>(raw)
+                        fields.clear(); fields.addAll(s.fields)
+                        tiers.clear(); tiers.addAll(s.tiers.map { t -> TierDraft(t.id, t.name, if (t.price > 0) "${t.price}" else "", if (t.capacity > 0) "${t.capacity}" else "") }) }
+                }.onFailure { error = it.message }
             }
         }
     }
 }
+
+data class TierDraft(val id: String = "", val name: String = "", val price: String = "", val capacity: String = "")
 
 @Composable
 private fun QuestionEditor(f: FormField, change: (FormField) -> Unit, remove: () -> Unit) {
@@ -318,6 +374,8 @@ private fun Registrants(e: AdminEvent) {
     val list = remember { mutableStateListOf<Registrant>() }
     val fields = remember { mutableStateListOf<FormField>() }
     var price by remember { mutableIntStateOf(0) }
+    val tiers = remember { mutableStateListOf<com.shekinahsons.globalapp.events.TicketTier>() }
+    var issueTier by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     var cancelled by remember(e.id) { mutableStateOf(!e.cancelledAt.isNullOrBlank()) }
@@ -326,7 +384,8 @@ private fun Registrants(e: AdminEvent) {
     LaunchedEffect(e.id, reload) {
         runCatching { Api.get("/admin/events/${e.id}/registrations") }.onSuccess { res ->
             list.clear(); list.addAll(Api.decode<List<Registrant>>(res["registrations"]))
-            val s = Api.decode<RegSetup>(res["setup"]); fields.clear(); fields.addAll(s.fields); price = s.price
+            val s = Api.decode<RegSetup>(res["setup"]); fields.clear(); fields.addAll(s.fields); price = if (s.paid) maxOf(s.price, 1) else 0
+            tiers.clear(); tiers.addAll(s.tiers); if (issueTier.isBlank()) issueTier = s.tiers.firstOrNull()?.id.orEmpty()
         }.onFailure { error = it.message }
     }
     fun act(method: String, path: String, body: Map<String, Any?> = emptyMap(), done: () -> Unit = {}) = scope.launch {
@@ -364,7 +423,9 @@ private fun Registrants(e: AdminEvent) {
         note?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp) }
         Text("ISSUE A TICKET (REGISTERED IN PERSON)", style = Type.Label, color = Brand.Gold)
         SaMemberPicker(issueTo) { issueTo = it }
-        if (issueTo.isNotBlank()) GoldButton("Issue ticket") { act("POST", "/registrations", mapOf("userId" to issueTo)) { issueTo = "" } }
+        if (issueTo.isNotBlank() && tiers.isNotEmpty()) ToolChoices(tiers.map { it.id to "${it.name}${if (it.spotsLeft >= 0) " · ${it.spotsLeft} left" else ""}" }, issueTier) { issueTier = it }
+        if (issueTo.isNotBlank()) GoldButton("Issue ticket") { act("POST", "/registrations", mapOf("userId" to issueTo, "tierId" to issueTier)) { issueTo = "" } }
+        if (tiers.isNotEmpty()) Text(tiers.joinToString("  ·  ") { t -> "${t.name}: ${list.count { !it.voided && it.tierId == t.id }}" }, style = Type.Meta, color = Brand.GoldLight)
         if (cancelled) com.shekinahsons.globalapp.ui.components.GhostButton("Restore event (show it in the app again)", Modifier.fillMaxWidth()) { act("POST", "/restore") { cancelled = false } }
         else com.shekinahsons.globalapp.ui.components.GhostButton("Cancel event (hide it; records are kept)", Modifier.fillMaxWidth()) { act("POST", "/cancel", mapOf("reason" to "")) { cancelled = true } }
         if (list.isEmpty()) Text("No one has registered yet.", style = Type.Meta, color = Brand.Text2)
@@ -374,6 +435,7 @@ private fun Registrants(e: AdminEvent) {
                     Column(Modifier.weight(1f)) {
                         Text(r.name, style = Type.CardTitle, color = Brand.White)
                         Text(r.email, style = Type.Meta, color = Brand.Text2)
+                        tiers.firstOrNull { it.id == r.tierId }?.let { Text(it.name.uppercase(), style = Type.Label, color = Brand.GoldLight, modifier = Modifier.padding(top = 3.dp)) }
                     }
                     if (price > 0) {
                         val (label, color) = when (r.payment) { "paid" -> "Paid" to Color(0xFF4ADE80); "pending" -> "Checking" to Brand.GoldLight; else -> "Not paid" to Brand.Red }

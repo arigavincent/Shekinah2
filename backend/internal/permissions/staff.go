@@ -42,7 +42,7 @@ func (c Checker) StaffRoute() gin.HandlerFunc {
 		path := strings.TrimPrefix(ctx.FullPath(), "/api/v1/admin/")
 		permission := ""
 		switch {
-		case strings.HasPrefix(path, "sermons"), strings.HasPrefix(path, "sermon-categories"):
+		case strings.HasPrefix(path, "sermons"), strings.HasPrefix(path, "sermon-categories"), strings.HasPrefix(path, "replays"):
 			permission = SermonsManage
 		case strings.HasPrefix(path, "events"):
 			permission = EventsManage

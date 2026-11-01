@@ -5,12 +5,20 @@ export type Question = {
   required: boolean;
   options?: string[];
 };
+export type TicketTier = {
+  id: string;
+  name: string;
+  price: number;
+  capacity: number;
+  spotsLeft?: number;
+};
 export type RegistrationSetup = {
   mode: string;
   formUrl: string;
   price: number;
   capacity: number;
   fields: Question[];
+  tiers?: TicketTier[];
 };
 export const emptyRegistration: RegistrationSetup = {
   mode: "form",
@@ -18,6 +26,7 @@ export const emptyRegistration: RegistrationSetup = {
   price: 0,
   capacity: 0,
   fields: [],
+  tiers: [],
 };
 export function RegistrationFields({
   value,

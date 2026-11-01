@@ -40,6 +40,7 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
   if(edit==null){if(kind=="sermons")BatchPublishingPane("sermons")
  GoldButton("Add ${when(kind){"plans"->"reading plan";"updates"->"update";"devotions"->"devotion";else->"sermon"}} "){begin(JsonObject(emptyMap()))}
    records.forEach{item->Column(Modifier.fillMaxWidth().glass().clickable{begin(item)}.padding(16.dp)){Text(item.text("title"),style=Type.CardTitle,color=Brand.White);Text("Edit",style=Type.Meta,color=Brand.Gold)}}
+   if(kind=="sermons")AdminReplaysPane()
   } else {
    Text(if(edit!!.text("id").isBlank())"New content" else "Edit content",style=Type.Title,color=Brand.White)
    fields(kind).forEach{field->when{

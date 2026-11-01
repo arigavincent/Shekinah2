@@ -203,7 +203,7 @@ func (h Handler) Confirm(c *gin.Context) {
 			c.JSON(500, gin.H{"message": "Could not record purchase"})
 			return
 		}
-		title, price, kind, err := h.itemPrice(c.Request.Context(), itemID)
+		title, price, kind, err := h.itemPrice(c.Request.Context(), itemID, buyer)
 		if err != nil || price <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "This isn't for sale"})
 			return
@@ -314,11 +314,20 @@ func strconvBase36(v int64) string {
 }
 
 // itemPrice: what a purchase is for, by its id: a book, an event or a live.
-func (h Handler) itemPrice(ctx context.Context, itemID string) (title string, price int, kind string, err error) {
+// An event with ticket tiers charges the price of the tier the buyer registered for.
+func (h Handler) itemPrice(ctx context.Context, itemID, buyer string) (title string, price int, kind string, err error) {
 	switch {
 	case strings.HasPrefix(itemID, "evt-"):
 		kind = "Event"
-		err = h.db.QueryRow(ctx, `SELECT title, price FROM events WHERE id = $1 AND is_published AND published_at<=NOW()`, itemID).Scan(&title, &price)
+		var tier string
+		err = h.db.QueryRow(ctx, `SELECT e.title,
+				COALESCE((SELECT (t->>'price')::int FROM jsonb_array_elements(e.ticket_tiers) t WHERE t->>'id' = r.tier_id), CASE WHEN jsonb_array_length(e.ticket_tiers) > 0 THEN 0 ELSE e.price END),
+				COALESCE((SELECT t->>'name' FROM jsonb_array_elements(e.ticket_tiers) t WHERE t->>'id' = r.tier_id), '')
+			FROM events e LEFT JOIN event_registrations r ON r.event_id = e.id AND r.user_id::text = $2 AND r.voided_at IS NULL
+			WHERE e.id = $1 AND e.is_published AND e.published_at<=NOW()`, itemID, buyer).Scan(&title, &price, &tier)
+		if tier != "" {
+			title += " (" + tier + ")"
+		}
 	case strings.HasPrefix(itemID, "live-"):
 		kind = "Live"
 		err = h.db.QueryRow(ctx, `SELECT l.title, l.price FROM live_sessions l WHERE l.id = $1 AND (l.status IN ('starting','live') OR EXISTS(SELECT 1 FROM live_archives a WHERE a.session_id=l.id AND a.status='ready'))`, itemID).Scan(&title, &price)

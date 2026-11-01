@@ -28,6 +28,7 @@ import {
   updateSermon
 } from "../api/adminSermonsApi";
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
+import { ServiceRecordings } from "../components/ServiceRecordings";
 import { BatchUploadDialog, type BatchField } from "../components/BatchUploadDialog";
 import { SermonCategoriesCard } from "../components/SermonCategoriesCard";
 import { InlineAlert } from "../components/InlineAlert";
@@ -1576,6 +1577,7 @@ export function SermonsPage() {
         </div>
       ) : null}
 
+      <ServiceRecordings />
     </main>
   );
 }

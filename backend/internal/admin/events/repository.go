@@ -91,6 +91,10 @@ func (r Repository) FindByID(ctx context.Context, id string) (Event, error) {
 
 func (r Repository) Create(ctx context.Context, command Command) (Event, error) {
 	raw, _ := json.Marshal(command.Setup.Fields)
+	tiers, _ := json.Marshal(command.Setup.Tiers)
+	if command.Setup.Tiers == nil {
+		tiers = []byte("[]")
+	}
 	const query = `
 		INSERT INTO events (
 			id,
@@ -99,9 +103,9 @@ func (r Repository) Create(ctx context.Context, command Command) (Event, error) 
 			event_time,
 			location,
 			image_url,
-			description, published_at, is_published, notify_on_publish, registration,form_url,form_fields,price,capacity
+			description, published_at, is_published, notify_on_publish, registration,form_url,form_fields,price,capacity,ticket_tiers
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12,$13,$14,$15)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12,$13,$14,$15,$16)
 		RETURNING
 			id,
 			title,
@@ -124,7 +128,7 @@ func (r Repository) Create(ctx context.Context, command Command) (Event, error) 
 			command.EventTime,
 			command.Location,
 			command.ImageURL,
-			command.Description, command.PublishedAt, command.IsPublished, command.NotifyOnPublish, command.Setup.Mode, command.Setup.FormURL, raw, command.Setup.Price, command.Setup.Capacity,
+			command.Description, command.PublishedAt, command.IsPublished, command.NotifyOnPublish, command.Setup.Mode, command.Setup.FormURL, raw, command.Setup.Price, command.Setup.Capacity, tiers,
 		),
 	)
 	if err != nil {

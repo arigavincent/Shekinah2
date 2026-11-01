@@ -51,7 +51,8 @@ func (h Handler) bindPurchase(c *gin.Context, itemID string, amount *int, kind, 
 	if strings.TrimSpace(itemID) == "" {
 		return true
 	}
-	title, price, itemKind, e := h.itemPrice(c.Request.Context(), itemID)
+	buyer, _ := auth.UserIDFromContext(c)
+	title, price, itemKind, e := h.itemPrice(c.Request.Context(), itemID, buyer)
 	if e != nil || price <= 0 {
 		c.JSON(400, gin.H{"message": "This item is not available for purchase"})
 		return false

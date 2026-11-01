@@ -156,7 +156,7 @@ fun rememberLiveSession(active: Boolean, session: Session): LiveSession? {
 
 private fun money(n: Int) = "KSh ${"%,d".format(n)}"
 
-// The live HLS player. It stays about three segments behind the newest one, so a
+// The live HLS player. It stays about three one-second segments behind the newest one, so a
 // late upload or a slow phone network is absorbed by the buffer instead of
 // freezing the picture, and it drifts back to that point by gently changing speed.
 @Composable
@@ -169,7 +169,7 @@ fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
         val http = com.shekinahsons.globalapp.playback.LiveDataSource
         ExoPlayer.Builder(context)
             .setLoadControl(androidx.media3.exoplayer.DefaultLoadControl.Builder()
-                .setBufferDurationsMs(6_000, 20_000, 1_500, 3_000)
+                .setBufferDurationsMs(2_500, 15_000, 500, 1_000)
                 .setPrioritizeTimeOverSizeThresholds(true).build())
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(http)).build().apply {
             val current = this
@@ -186,9 +186,9 @@ fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
                 }
             })
             setMediaItem(MediaItem.Builder().setUri(if (url.startsWith("/")) com.shekinahsons.globalapp.BuildConfig.API_BASE+url else url).setMimeType(MimeTypes.APPLICATION_M3U8)
-                .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(6_000)
-                    .setMinOffsetMs(4_000).setMaxOffsetMs(14_000)
-                    .setMinPlaybackSpeed(0.97f).setMaxPlaybackSpeed(1.04f).build()).build())
+                .setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(3_000)
+                    .setMinOffsetMs(2_000).setMaxOffsetMs(9_000)
+                    .setMinPlaybackSpeed(0.96f).setMaxPlaybackSpeed(1.06f).build()).build())
             prepare()
             playWhenReady = true
         }

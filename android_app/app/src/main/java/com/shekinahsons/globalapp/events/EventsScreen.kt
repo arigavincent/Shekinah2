@@ -103,10 +103,16 @@ import java.time.ZoneId
 data class FormField(val id: String = "", val label: String = "", val type: String = "text", val required: Boolean = false, val options: List<String> = emptyList())
 
 @Serializable
-data class RegSetup(val mode: String = "none", val formUrl: String = "", val fields: List<FormField> = emptyList(), val price: Int = 0, val capacity: Int = 0)
+data class RegSetup(val mode: String = "none", val formUrl: String = "", val fields: List<FormField> = emptyList(), val price: Int = 0, val capacity: Int = 0, val tiers: List<TicketTier> = emptyList()) {
+    val paid get() = price > 0 || tiers.any { it.price > 0 }
+}
+
+// A ticket type such as VIP or Regular. spotsLeft -1 means no limit.
+@Serializable
+data class TicketTier(val id: String = "", val name: String = "", val price: Int = 0, val capacity: Int = 0, val spotsLeft: Int = -1)
 
 @Serializable
-data class MyReg(val registered: Boolean = false, val ticket: String = "", val answers: Map<String, String> = emptyMap(), val payment: String = "none")
+data class MyReg(val registered: Boolean = false, val ticket: String = "", val answers: Map<String, String> = emptyMap(), val payment: String = "none", val tierId: String = "", val tier: String = "", val price: Int = 0)
 
 @Serializable
 data class RegInfo(val setup: RegSetup = RegSetup(), val registered: Int = 0, val spotsLeft: Int = -1, val mine: MyReg = MyReg())
@@ -229,6 +235,7 @@ private fun EventDetail(e: Event, session: Session, openProfile: () -> Unit, onB
     var editing by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var payAmount by remember { mutableIntStateOf(0) }
     LaunchedEffect(reload, session.member) {
         runCatching { Api.decode<RegInfo>(Api.get("/events/${e.id}/registration")) }.onSuccess { info = it }.onFailure { error = it.message }
     }
@@ -239,7 +246,7 @@ private fun EventDetail(e: Event, session: Session, openProfile: () -> Unit, onB
     if (paying && i != null) {
         Column(Modifier.fillMaxSize().background(Brand.Black)) {
             TopBar(title = "Pay for your place", onBack = { paying = false })
-            GivingPage(session, Purchase(e.id, e.title, i.setup.price, kind = "Event",
+            GivingPage(session, Purchase(e.id, if (i.mine.tier.isNotBlank()) "${e.title} (${i.mine.tier})" else e.title, if (payAmount > 0) payAmount else if (i.setup.tiers.isEmpty()) i.setup.price else i.mine.price, kind = "Event",
                 after = "is reserved for you. Your ticket appears as soon as the finance team confirms your payment.", back = "Back to the event")) { paying = false; reload++ }
         }
         return
@@ -292,12 +299,12 @@ private fun EventDetail(e: Event, session: Session, openProfile: () -> Unit, onB
                 ErrorNote(error)
                 if (i == null) Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Gold) }
                 else Registration(e, i, session, editing, openProfile, submitting,
-                    edit = { editing = it }, pay = { paying = true },
-                    submit = { answers ->
+                    edit = { editing = it }, pay = { payAmount = 0; paying = true },
+                    submit = { answers, tierId, price ->
                         scope.launch {
                             error = null; submitting = true
-                            runCatching { Api.post("/events/${e.id}/register", mapOf("answers" to answers)) }
-                                .onSuccess { editing = false; reload++; if (i.setup.price > 0 && i.mine.payment == "none") paying = true }
+                            runCatching { Api.post("/events/${e.id}/register", mapOf("answers" to answers, "tierId" to tierId)) }
+                                .onSuccess { editing = false; reload++; if (price > 0 && i.mine.payment == "none") { payAmount = price; paying = true } }
                                 .onFailure { error = it.message }
                             submitting = false
                         }
@@ -332,20 +339,22 @@ private fun SmallAction(icon: androidx.compose.ui.graphics.vector.ImageVector, l
 @Composable
 private fun Registration(
     e: Event, i: RegInfo, session: Session, editing: Boolean, openProfile: () -> Unit, busy: Boolean,
-    edit: (Boolean) -> Unit, pay: () -> Unit, submit: (Map<String, String>) -> Unit, cancel: () -> Unit,
+    edit: (Boolean) -> Unit, pay: () -> Unit, submit: (Map<String, String>, String, Int) -> Unit, cancel: () -> Unit,
 ) {
     val context = LocalContext.current
     val s = i.setup
     val mine = i.mine
+    val myPrice = if (s.tiers.isEmpty()) s.price else mine.price
+    val fromPrice = if (s.tiers.isEmpty()) s.price else s.tiers.minOf { it.price }
     Text("Registration", style = Type.Title, color = Brand.White)
     Spacer(Modifier.height(10.dp))
-    if(s.mode=="link" && s.price>0) Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
+    if(s.mode=="link" && s.paid) Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
         Text("External registration form",style=Type.CardTitle,color=Brand.White)
         Text("Complete the external form separately. Your Shekinah ticket requires confirmed payment below; external responses are not synced.",style=Type.Body,color=Brand.Text2)
         GhostButton("Open form"){runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(s.formUrl)))}}
     }
     when {
-        s.mode == "link" && s.price==0 -> Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp)) {
+        s.mode == "link" && !s.paid -> Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp)) {
             Text("Register with the event's form. It opens in your browser.", style = Type.Body, color = Brand.Text2)
             Spacer(Modifier.height(12.dp))
             Row(
@@ -358,13 +367,13 @@ private fun Registration(
                 Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, tint = Brand.Black, modifier = Modifier.size(18.dp))
             }
         }
-        s.mode == "none" && s.price == 0 -> Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        s.mode == "none" && !s.paid -> Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.CheckCircle, null, tint = Color(0xFF4ADE80))
             Spacer(Modifier.width(12.dp))
             Text("No registration needed. Just come, everyone is welcome!", style = Type.Body, color = Brand.White)
         }
-        session.member == null -> SignInCard(if (s.price > 0) "Sign in to get your place at this event (${money(s.price)})." else "Sign in to register for this event.", openProfile)
-        mine.registered && !editing && (s.price == 0 || mine.payment == "paid") -> Ticket(e, session, mine, canCancel = s.price == 0, edit = { edit(true) }, cancel = cancel, hasForm = s.fields.isNotEmpty())
+        session.member == null -> SignInCard(if (s.paid) "Sign in to get your place at this event (${if (s.tiers.size > 1) "from " else ""}${money(fromPrice)})." else "Sign in to register for this event.", openProfile)
+        mine.registered && !editing && (myPrice == 0 || mine.payment == "paid") -> Ticket(e, session, mine, canCancel = mine.payment == "none", edit = { edit(true) }, cancel = cancel, hasForm = s.fields.isNotEmpty() || (s.tiers.size > 1 && mine.payment == "none"))
         mine.registered && !editing && mine.payment == "pending" -> Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.HourglassTop, null, tint = Brand.GoldLight)
             Spacer(Modifier.width(12.dp))
@@ -373,7 +382,8 @@ private fun Registration(
         mine.registered && !editing -> Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp)) {
             Text("Your details are saved. Complete payment to get your ticket.", style = Type.Body, color = Brand.White)
             Spacer(Modifier.height(12.dp))
-            GoldButton("Pay ${money(s.price)}", onClick = pay)
+            if (mine.tier.isNotBlank()) Text("Ticket: ${mine.tier}", style = Type.CardTitle, color = Brand.GoldLight, modifier = Modifier.padding(bottom = 8.dp))
+            GoldButton("Pay ${money(myPrice)}", onClick = pay)
             Text("Change my details", color = Brand.GoldLight, fontSize = 13.5.sp, modifier = Modifier.padding(top = 10.dp).clickable { edit(true) })
         }
         i.spotsLeft == 0 && !mine.registered -> Text("This event is fully booked.", style = Type.Body, color = Brand.Text2)
@@ -382,11 +392,36 @@ private fun Registration(
 }
 
 @Composable
-private fun RegistrationForm(s: RegSetup, mine: MyReg, busy: Boolean, submit: (Map<String, String>) -> Unit, cancelEdit: (() -> Unit)?) {
+private fun RegistrationForm(s: RegSetup, mine: MyReg, busy: Boolean, submit: (Map<String, String>, String, Int) -> Unit, cancelEdit: (() -> Unit)?) {
     val answers = remember { mutableStateMapOf<String, String>().apply { putAll(mine.answers) } }
-    val missing = s.fields.any { it.required && answers[it.id].isNullOrBlank() }
+    var tierId by remember { mutableStateOf(mine.tierId.ifBlank { s.tiers.firstOrNull { it.spotsLeft != 0 }?.id.orEmpty() }) }
+    val tier = s.tiers.firstOrNull { it.id == tierId }
+    val price = if (s.tiers.isEmpty()) s.price else tier?.price ?: 0
+    val missing = s.fields.any { it.required && answers[it.id].isNullOrBlank() } || (s.tiers.isNotEmpty() && tier == null)
     Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.8f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (s.fields.isEmpty()) Text("Reserve your place for this event.", style = Type.Body, color = Brand.Text2)
+        if (s.tiers.isNotEmpty()) {
+            Text("CHOOSE YOUR TICKET", style = Type.Label, color = Brand.Gold)
+            s.tiers.forEach { t ->
+                val on = t.id == tierId
+                val soldOut = t.spotsLeft == 0 && t.id != mine.tierId
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                        .background(if (on) Brush.linearGradient(listOf(Color(0x40D4AF37), Color(0x14D4AF37))) else Brush.linearGradient(listOf(Color(0x10FFFFFF), Color(0x10FFFFFF))))
+                        .border(if (on) 1.5.dp else 1.dp, if (on) Brand.Gold else Color(0x22FFFFFF), RoundedCornerShape(16.dp))
+                        .clickable(enabled = !soldOut) { tierId = t.id }.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.ConfirmationNumber, null, tint = if (soldOut) Brand.Text2 else Brand.Gold, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(t.name, color = if (soldOut) Brand.Text2 else Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(when { soldOut -> "Sold out"; t.spotsLeft > 0 -> "${t.spotsLeft} left"; else -> "Available" }, style = Type.Meta, color = if (soldOut) Brand.Red else Brand.Text2)
+                    }
+                    Text(if (t.price > 0) money(t.price) else "Free", color = if (on) Brand.GoldLight else Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            }
+        }
+        if (s.fields.isEmpty() && s.tiers.isEmpty()) Text("Reserve your place for this event.", style = Type.Body, color = Brand.Text2)
         s.fields.forEach { f ->
             val label = f.label.uppercase() + if (f.required) " *" else ""
             when (f.type) {
@@ -407,8 +442,8 @@ private fun RegistrationForm(s: RegSetup, mine: MyReg, busy: Boolean, submit: (M
                 )
             }
         }
-        GoldButton(if (s.price > 0 && mine.payment == "none") "Continue to payment · ${money(s.price)}" else if (mine.registered) "Save changes" else "Register", busy = busy, enabled = !missing) {
-            submit(answers.toMap())
+        GoldButton(if (price > 0 && mine.payment == "none") "Continue to payment · ${money(price)}" else if (mine.registered) "Save changes" else "Register", busy = busy, enabled = !missing) {
+            submit(answers.toMap(), tierId, price)
         }
         cancelEdit?.let { Text("Cancel", color = Brand.Text2, modifier = Modifier.align(Alignment.CenterHorizontally).clickable(onClick = it).padding(6.dp)) }
     }
@@ -432,6 +467,8 @@ private fun Ticket(e: Event, session: Session, mine: MyReg, canCancel: Boolean, 
         Spacer(Modifier.height(6.dp))
         Text(session.member?.name.orEmpty(), style = Type.Title, color = Color.White)
         Text(e.title, style = Type.Meta, color = Brand.GoldLight)
+        if (mine.tier.isNotBlank()) Text(mine.tier.uppercase(), color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.5.sp,
+            modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(50)).background(Brand.GoldGradient).padding(horizontal = 12.dp, vertical = 4.dp))
         Spacer(Modifier.height(14.dp))
         Box(Modifier.size(190.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).padding(10.dp)) {
             Image(qr, "Ticket code", Modifier.fillMaxSize())

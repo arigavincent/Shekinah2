@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 object DirectLive {
     // Segments are reserved in order but up to this many travel at once, so one
     // slow round trip to the API no longer holds back the whole broadcast.
-    private const val IN_FLIGHT = 3
+    private const val IN_FLIGHT = 4
     // One drain at a time per phone, shared by the live loop and the fallback worker.
     private val serial = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
