@@ -3,6 +3,7 @@ package live
 // Automatic covers for sermons without an uploaded cover: the same bright
 // Shekinah design as service replays, labelled AUDIO SERMON or SERMON.
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,5 +55,37 @@ func (h *Handler) SermonCover(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "public, max-age=86400")
 	c.Header("Content-Type", "image/jpeg") // a global middleware presets JSON
+	c.Data(200, "image/jpeg", img)
+}
+
+// GET /covers/plans/:file (file = <plan id>.jpg): bright cover for reading plans.
+func (h *Handler) PlanCover(c *gin.Context) {
+	id := strings.TrimSuffix(c.Param("file"), ".jpg")
+	var title string
+	var days int
+	if h.db.QueryRow(c.Request.Context(), `SELECT title, duration_days FROM reading_plans WHERE id=$1`, id).Scan(&title, &days) != nil {
+		c.Status(404)
+		return
+	}
+	key := "plan|" + id + "|" + title + "|" + strconv.Itoa(days)
+	sermonCoverMu.Lock()
+	img, ok := sermonCoverCache[key]
+	sermonCoverMu.Unlock()
+	if !ok {
+		sub := "Shekinah Sons Global"
+		if days > 0 {
+			sub = strconv.Itoa(days) + "-day plan  ·  " + sub
+		}
+		var err error
+		if img, err = RenderCover(id, "READING PLAN", title, sub); err != nil {
+			c.Status(500)
+			return
+		}
+		sermonCoverMu.Lock()
+		sermonCoverCache[key] = img
+		sermonCoverMu.Unlock()
+	}
+	c.Header("Cache-Control", "public, max-age=86400")
+	c.Header("Content-Type", "image/jpeg")
 	c.Data(200, "image/jpeg", img)
 }

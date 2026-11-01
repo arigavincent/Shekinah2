@@ -204,6 +204,7 @@ func newRouter(cfg config.Config, db *pgxpool.Pool, background context.Context) 
 		api.GET("/permissions/me", auth.RequireAuth(authService), perms.Mine)
 		api.GET("/live/replays", auth.OptionalAuth(authService), liveHandler.Replays)
 		api.GET("/covers/sermons/:file", liveHandler.SermonCover)
+		api.GET("/covers/plans/:file", liveHandler.PlanCover)
 		api.GET("/live/replays/:id/file", auth.OptionalAuth(authService), liveHandler.Replay)
 		directPublish := []gin.HandlerFunc{auth.RequireAuth(authService), perms.Require(permissions.LiveBroadcast)}
 		api.POST("/live/direct/:id/segments", append(directPublish, liveHandler.DirectPrepare)...)

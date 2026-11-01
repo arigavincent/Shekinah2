@@ -92,10 +92,31 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
 
 @Composable fun AdminModerationPane(testimonies:Boolean) {
  val scope=rememberCoroutineScope();var rows by remember(testimonies){mutableStateOf(emptyList<JsonObject>())};var error by remember{mutableStateOf<String?>(null)};var tick by remember{mutableIntStateOf(0)}
- val endpoint=if(testimonies)"testimonies" else "community/messages";val key=if(testimonies)"testimonies" else "messages"
+ val endpoint=if(testimonies)"testimonies" else "community/messages";val key=if(testimonies)"testimonies" else "messages";var deleting by remember{mutableStateOf<JsonObject?>(null)}
  LaunchedEffect(testimonies,tick){runCatching{(Api.get("/admin/$endpoint")[key] as? JsonArray)?.map{it.jsonObject}.orEmpty()}.onSuccess{rows=it}.onFailure{error=it.message}}
  Column(verticalArrangement=Arrangement.spacedBy(12.dp)){ErrorNote(error);if(!testimonies) AdminReportsPane();rows.forEach{row->Column(Modifier.fillMaxWidth().glass().padding(16.dp)){
   Text(row.text(if(testimonies)"title" else "displayName"),style=Type.CardTitle,color=Brand.White);Text(row.text(if(testimonies)"body" else "message"),style=Type.Body,color=Brand.Text2);Text(row.text("status"),style=Type.Meta,color=Brand.Gold)
-  Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){listOf("approved" to "Approve","hidden" to "Hide").forEach{(status,label)->Text(label,color=Brand.Gold,modifier=Modifier.clickable{scope.launch{runCatching{Api.patch("/admin/$endpoint/${row.text("id")}",mapOf("status" to status,"hiddenReason" to "Reviewed by ministry team"))}.onSuccess{tick++}.onFailure{error=it.message}}}.padding(vertical=14.dp))}}
- }}}
+  Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){listOf("approved" to "Approve","hidden" to "Hide").forEach{(status,label)->Text(label,color=Brand.Gold,modifier=Modifier.clickable{scope.launch{runCatching{Api.patch("/admin/$endpoint/${row.text("id")}",mapOf("status" to status,"hiddenReason" to "Reviewed by ministry team"))}.onSuccess{tick++}.onFailure{error=it.message}}}.padding(vertical=14.dp))}
+   if(!testimonies)Text("Delete",color=Brand.Red,modifier=Modifier.clickable{deleting=row}.padding(vertical=14.dp))}
+ }}
+ if(!testimonies)AdminChatBlocksPane()}
+ deleting?.let{row->AlertDialog(onDismissRequest={deleting=null},containerColor=androidx.compose.ui.graphics.Color(0xFF1C1C20),
+  title={Text("Delete this message?",color=Brand.White)},text={Text("\"${row.text("message").take(120)}\" from ${row.text("displayName")} is removed for everyone in the app. A hidden copy is kept for the records.",color=Brand.Text2)},
+  confirmButton={TextButton({deleting=null;scope.launch{runCatching{Api.delete("/admin/community/messages/${row.text("id")}")}.onSuccess{tick++}.onFailure{error=it.message}}}){Text("Delete",color=Brand.Red)}},
+  dismissButton={TextButton({deleting=null}){Text("Keep it",color=Brand.Text2)}})}
+}
+
+// People blocked from live chat (blocked by a moderator during a service), with Unblock.
+@Composable fun AdminChatBlocksPane(){
+ val scope=rememberCoroutineScope();var rows by remember{mutableStateOf(emptyList<JsonObject>())};var tick by remember{mutableIntStateOf(0)};var error by remember{mutableStateOf<String?>(null)}
+ LaunchedEffect(tick){runCatching{(Api.get("/live/chat/bans")["bans"] as? JsonArray)?.map{it.jsonObject}.orEmpty()}.onSuccess{rows=it;error=null}.onFailure{error=it.message}}
+ Column(Modifier.fillMaxWidth().glass().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+  Text("Blocked from live chat (${rows.size})",style=Type.CardTitle,color=Brand.White)
+  ErrorNote(error)
+  if(rows.isEmpty())Text("No one is blocked. During a live service, long-press a comment to pin it, remove it or block the person.",style=Type.Meta,color=Brand.Text2)
+  rows.forEach{r->Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+   Column(Modifier.weight(1f)){Text(r.text("name"),style=Type.Body,color=Brand.White);Text(r.text("reason"),style=Type.Meta,color=Brand.Text2)}
+   Text("Unblock",color=Brand.Gold,modifier=Modifier.clickable{scope.launch{runCatching{Api.delete("/live/chat/bans/${r.text("userId")}")}.onSuccess{tick++}.onFailure{error=it.message}}}.padding(10.dp))
+  }}
+ }
 }
