@@ -264,7 +264,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
             scanner = session.canScan,
         )
 
-        if (route is Route.Root) {
+        if (route is Route.Root && !com.shekinahsons.globalapp.playback.ImmersiveState.active) {
             Column(Modifier.align(Alignment.BottomCenter)) {
                 if (!menuOpen) MiniPlayer(audio, onOpen = { audio.current?.let { nav.push(Route.Audio(it, content.audioSermons)) } })
                 BottomBar(nav.tab, content.live.isLive, onSelect = { menuOpen = false; nav.select(it) })

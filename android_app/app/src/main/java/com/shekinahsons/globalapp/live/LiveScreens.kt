@@ -149,7 +149,10 @@ fun rememberLiveSession(active: Boolean, session: Session): LiveSession? {
     var current by remember { mutableStateOf<LiveSession?>(null) }
     LaunchedEffect(active, session.member) {
         while (active) {
-            runCatching { Api.decode<LiveSession?>(Api.get("/live/current")["session"]) }.onSuccess { current = it }
+            runCatching { Api.decode<LiveSession?>(Api.get("/live/current")["session"]) }.onSuccess { s ->
+                s?.playbackUrl?.takeIf { it.isNotBlank() }?.let { com.shekinahsons.globalapp.playback.LiveDataSource.trustPlayback(it) }
+                current = s
+            }
             delay(2_000)
         }
     }
@@ -164,6 +167,8 @@ private fun money(n: Int) = "KSh ${"%,d".format(n)}"
 @Composable
 fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
     val context = LocalContext.current
+    // The address comes from our own API, so the live video server may see the sign-in.
+    remember(url) { com.shekinahsons.globalapp.playback.LiveDataSource.trustPlayback(url) }
     val token = com.shekinahsons.globalapp.data.Api.token
     val retries = remember(url, token) { android.os.Handler(android.os.Looper.getMainLooper()) }
     val player = remember(url, token) {
@@ -196,6 +201,15 @@ fun rememberLivePlayer(url: String, muted: Boolean): ExoPlayer {
         }
     }
     LaunchedEffect(muted) { player.volume = if (muted) 0f else 1f }
+    // A slow connection can leave the picture far behind; a service should be
+    // live, so past 15 s behind jump back to the live point.
+    LaunchedEffect(player) {
+        while (true) {
+            kotlinx.coroutines.delay(3_000)
+            val behind = player.currentLiveOffset
+            if (player.isCurrentMediaItemLive && behind != androidx.media3.common.C.TIME_UNSET && behind > 15_000) player.seekToDefaultPosition()
+        }
+    }
     DisposableEffect(player) { onDispose { retries.removeCallbacksAndMessages(null); player.release() } }
     return player
 }
@@ -500,6 +514,7 @@ private fun LiveWatch(content: HomeContent, session: Session, openProfile: () ->
         }
     }
     DisposableEffect(fullscreen) {
+        com.shekinahsons.globalapp.playback.ImmersiveState.active = fullscreen
         val insets = WindowInsetsControllerCompat(activity.window, activity.window.decorView)
         if (fullscreen) {
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -509,7 +524,10 @@ private fun LiveWatch(content: HomeContent, session: Session, openProfile: () ->
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             insets.show(WindowInsetsCompat.Type.systemBars())
         }
-        onDispose { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED; insets.show(WindowInsetsCompat.Type.systemBars()) }
+        onDispose {
+            com.shekinahsons.globalapp.playback.ImmersiveState.active = false
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED; insets.show(WindowInsetsCompat.Type.systemBars())
+        }
     }
     BackHandler(enabled = fullscreen) { fullscreen = false }
 

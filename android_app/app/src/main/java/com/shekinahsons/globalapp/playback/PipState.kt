@@ -8,3 +8,8 @@ import androidx.compose.runtime.setValue
 object PipState {
     var active by mutableStateOf(false)
 }
+
+// True while a video fills the screen (live full screen): the app's own bars hide.
+object ImmersiveState {
+    var active by mutableStateOf(false)
+}
