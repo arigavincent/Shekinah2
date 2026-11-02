@@ -26,16 +26,16 @@ func NewRepository(db *pgxpool.Pool) Repository {
 	return Repository{db: db}
 }
 
-func (r Repository) CreateUser(ctx context.Context, name string, email string, passwordHash string) (User, error) {
+func (r Repository) CreateUser(ctx context.Context, name string, email string, passwordHash string, phone string) (User, error) {
 	const query = `
-		INSERT INTO users (name, email, password_hash)
-		VALUES ($1, $2, $3)
-		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
+		INSERT INTO users (name, email, password_hash, phone)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at, phone
 	`
 
 	var user User
 
-	err := r.db.QueryRow(ctx, query, name, email, passwordHash).Scan(
+	err := r.db.QueryRow(ctx, query, name, email, passwordHash, phone).Scan(
 		&user.ID,
 		&user.Name,
 		&user.Email,
@@ -45,6 +45,7 @@ func (r Repository) CreateUser(ctx context.Context, name string, email string, p
 		&user.PasswordResetRequired,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.Phone,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -66,7 +67,7 @@ func (r Repository) CreateUser(ctx context.Context, name string, email string, p
 
 func (r Repository) FindByEmail(ctx context.Context, email string) (User, error) {
 	const query = `
-		SELECT id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
+		SELECT id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at, phone
 		FROM users
 		WHERE lower(trim(email)) = lower(trim($1))
 		LIMIT 1
@@ -84,6 +85,7 @@ func (r Repository) FindByEmail(ctx context.Context, email string) (User, error)
 		&user.PasswordResetRequired,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.Phone,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -98,7 +100,7 @@ func (r Repository) FindByEmail(ctx context.Context, email string) (User, error)
 
 func (r Repository) FindByID(ctx context.Context, id string) (User, error) {
 	const query = `
-		SELECT id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
+		SELECT id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at, phone
 		FROM users
 		WHERE id = $1
 		LIMIT 1
@@ -116,6 +118,7 @@ func (r Repository) FindByID(ctx context.Context, id string) (User, error) {
 		&user.PasswordResetRequired,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.Phone,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -136,7 +139,7 @@ func (r Repository) UpdatePassword(ctx context.Context, userID string, passwordH
 		    session_version = session_version + 1,
 		    updated_at = now()
 		WHERE id = $1
-		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
+		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at, phone
 	`
 
 	var user User
@@ -151,6 +154,7 @@ func (r Repository) UpdatePassword(ctx context.Context, userID string, passwordH
 		&user.PasswordResetRequired,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.Phone,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -256,7 +260,7 @@ func (r Repository) UsePasswordResetAndUpdatePassword(ctx context.Context, token
 		    session_version = session_version + 1,
 		    updated_at = now()
 		WHERE id = $1
-		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at
+		RETURNING id::text, name, email, password_hash, role, is_active, password_reset_required, created_at, updated_at, phone
 	`
 
 	var user User
@@ -270,6 +274,7 @@ func (r Repository) UsePasswordResetAndUpdatePassword(ctx context.Context, token
 		&user.PasswordResetRequired,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.Phone,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -284,4 +289,10 @@ func (r Repository) UsePasswordResetAndUpdatePassword(ctx context.Context, token
 	}
 
 	return user, nil
+}
+
+// UpdatePhone saves the member's phone number (already normalised).
+func (r Repository) UpdatePhone(ctx context.Context, userID, phone string) error {
+	_, err := r.db.Exec(ctx, `UPDATE users SET phone=$2, updated_at=NOW() WHERE id=$1`, userID, phone)
+	return err
 }

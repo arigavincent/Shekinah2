@@ -124,7 +124,8 @@ data class TeamMember(val id: String = "", val name: String = "", val email: Str
 data class PermissionChange(val member: String = "", val email: String = "", val permission: String = "", val action: String = "", val changedBy: String = "", val at: String = "")
 
 @Serializable
-data class AdminPrayer(val id: String = "", val name: String = "", val text: String = "", val category: String = "", val status: String = "", val ownerEmail: String = "", val createdAt: String = "")
+data class AdminPrayer(val id: String = "", val name: String = "", val text: String = "", val category: String = "", val status: String = "", val ownerEmail: String = "", val createdAt: String = "",
+    val isPublic: Boolean = true, val pinned: Boolean = false, val shownFrom: String = "")
 
 private enum class Section(val label: String, val icon: ImageVector) {
     Overview("Overview", Icons.Rounded.Dashboard),
@@ -680,19 +681,45 @@ private fun PrayerList() {
     var filter by rememberSaveable { mutableStateOf("new") }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var wallDays by remember { mutableIntStateOf(30) }
+    var daysText by remember { mutableStateOf("30") }
+    var savedNote by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         runCatching { Api.decode<List<AdminPrayer>>(Api.get("/admin/prayers")["prayers"]) }.onSuccess { list.addAll(it) }.onFailure { error = it.message }
+        runCatching { Api.decode<Int>(Api.get("/admin/prayers/settings")["wallDays"]) }.onSuccess { wallDays = it; daysText = "$it" }
         loading = false
     }
+    fun pin(p: AdminPrayer) = scope.launch {
+        runCatching { Api.patch("/admin/prayers/${p.id}/pin", mapOf("pinned" to !p.pinned)) }
+            .onSuccess { val i = list.indexOfFirst { it.id == p.id }; if (i >= 0) list[i] = p.copy(pinned = !p.pinned, shownFrom = if (p.pinned) java.time.Instant.now().toString() else p.shownFrom) }.onFailure { error = it.message }
+    }
+    fun leaves(p: AdminPrayer): String = runCatching {
+        val end = java.time.OffsetDateTime.parse(p.shownFrom).plusDays(wallDays.toLong())
+        if (end.isBefore(java.time.OffsetDateTime.now())) "Off the wall" else "On the wall until " + end.atZoneSameInstant(java.time.ZoneId.of("Africa/Nairobi")).format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
+    }.getOrDefault("")
     fun mark(p: AdminPrayer, status: String) = scope.launch {
         runCatching { Api.patch("/admin/prayers/${p.id}", mapOf("status" to status)) }
             .onSuccess { val i = list.indexOfFirst { it.id == p.id }; if (i >= 0) list[i] = p.copy(status = status) }.onFailure { error = it.message }
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Chips(listOf("new" to "New (${list.count { it.status == "new" }})", "prayed_for" to "Prayed for", "all" to "All"), filter) { filter = it }
+        // How long requests stay on the public wall.
+        Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(22.dp), 0.9f).padding(16.dp)) {
+            Text("PRAYER WALL", style = Type.Label, color = Brand.Gold)
+            Text("Requests leave the public wall after this many days. Members are reminded 2 days before and can keep theirs up. Pinned requests stay.", style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                com.shekinahsons.globalapp.ui.components.Field("DAYS ON THE WALL", daysText, { daysText = it.filter(Char::isDigit).take(3) }, Modifier.weight(1f), keyboard = androidx.compose.ui.text.input.KeyboardType.Number)
+                Spacer(Modifier.width(10.dp))
+                Text("Save", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, modifier = Modifier.padding(top = 20.dp).clip(RoundedCornerShape(50)).background(Brand.GoldGradient).clickable {
+                    val d = daysText.toIntOrNull() ?: 0
+                    scope.launch { runCatching { Api.put("/admin/prayers/settings", mapOf("wallDays" to d)) }.onSuccess { wallDays = d; savedNote = "Saved: $d days" }.onFailure { savedNote = null; error = it.message } }
+                }.padding(horizontal = 18.dp, vertical = 12.dp))
+            }
+            savedNote?.let { Text(it, style = Type.Meta, color = Color(0xFF4ADE80), modifier = Modifier.padding(top = 6.dp)) }
+        }
+        Chips(listOf("new" to "New (${list.count { it.status == "new" }})", "prayed_for" to "Prayed for", "pinned" to "Pinned", "all" to "All"), filter) { filter = it }
         ErrorNote(error)
         if (loading) Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Gold) }
-        val shown = list.filter { filter == "all" || it.status == filter }
+        val shown = list.filter { filter == "all" || (filter == "pinned" && it.pinned) || it.status == filter }
         if (!loading && shown.isEmpty()) Empty("No prayer requests here.")
         shown.forEach { p ->
             Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(22.dp), 0.9f).padding(16.dp)) {
@@ -703,13 +730,18 @@ private fun PrayerList() {
                 if (p.category.isNotBlank()) Text(p.category.uppercase(), style = Type.Label, color = Brand.Gold, modifier = Modifier.padding(top = 2.dp))
                 Spacer(Modifier.height(8.dp))
                 Text(p.text, style = Type.Body, color = Color(0xFFE6E6EA))
+                if (p.isPublic && p.status != "hidden") Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (p.pinned) "\uD83D\uDCCC Pinned to the wall" else leaves(p), style = Type.Meta, color = Brand.Text2, modifier = Modifier.weight(1f))
+                    Text(if (p.pinned) "Unpin" else "Pin", color = Brand.GoldLight, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).glass().clickable { pin(p) }.padding(horizontal = 14.dp, vertical = 7.dp))
+                } else Text("Private: only the pastoral team sees it", style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 10.dp))
                 Spacer(Modifier.height(12.dp))
                 if (p.status == "new") Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Prayed for", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 13.5.sp,
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient).clickable { mark(p, "prayed_for") }.padding(horizontal = 16.dp, vertical = 9.dp))
                     Text("Mark read", color = Brand.White, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp,
                         modifier = Modifier.glass().clickable { mark(p, "reviewed") }.padding(horizontal = 16.dp, vertical = 9.dp))
-                } else Text(when (p.status) { "prayed_for" -> "Prayed for"; "reviewed" -> "Read"; "contacted" -> "Contacted"; else -> p.status }, style = Type.Meta, color = Color(0xFF4ADE80))
+                } else Text(when (p.status) { "prayed_for" -> "Prayed for"; "reviewed" -> "Read"; "contacted" -> "Contacted"; "answered" -> "Answered \uD83D\uDE4C"; else -> p.status }, style = Type.Meta, color = Color(0xFF4ADE80))
             }
         }
     }

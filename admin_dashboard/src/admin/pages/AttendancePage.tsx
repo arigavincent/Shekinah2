@@ -28,7 +28,7 @@ export function AttendancePage() {
   }
 
   return (<div className="admin-page">
-    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Attendance Sessions</h1><p className="muted">Services and meetings with headcounts and kiosk check-in.</p></div><button className="btn primary" onClick={() => setShowForm(true)}>+ New Session</button></header>
+    <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Attendance Sessions</h1><p className="muted">Services and meetings with headcounts and POS check-in.</p></div><button className="btn primary" onClick={() => setShowForm(true)}>+ New Session</button></header>
     {error && <div className="alert alert-error">{error}</div>}
     {showForm && <div className="card" style={{ padding: 16, marginBottom: 16 }}>
       <h3>New Attendance Session</h3>
@@ -42,7 +42,7 @@ export function AttendancePage() {
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}><button className="btn primary" onClick={create} disabled={!fTitle}>Create</button><button className="btn" onClick={() => setShowForm(false)}>Cancel</button></div>
     </div>}
     {loading ? <div className="loading-spinner" /> : (
-      <div className="card"><table className="data-table"><thead><tr><th>Date</th><th>Title</th><th>Occasion</th><th>Headcount</th><th>Kiosk</th><th>Actions</th></tr></thead><tbody>
+      <div className="card"><table className="data-table"><thead><tr><th>Date</th><th>Title</th><th>Occasion</th><th>Headcount</th><th>POS</th><th>Actions</th></tr></thead><tbody>
         {sessions.map(s => <tr key={s.id} style={{ opacity: s.archived ? 0.5 : 1 }}>
           <td>{s.sessionDate?.slice(0, 10)}</td><td>{s.title}</td><td>{s.occasion}</td>
           <td><input className="input" type="number" style={{ width: 70 }} defaultValue={s.headcount} onBlur={e => { if (parseInt(e.target.value) !== s.headcount) updateHeadcount(s, e.target.value); }} /></td>

@@ -70,6 +70,7 @@ fun MenuPage(
     openAudio: (Sermon, List<Sermon>) -> Unit,
     openProfile: () -> Unit,
     openReference: (String) -> Unit,
+    openPage: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     if (page == "Chat") { ChatScreen(session, onSignIn = openProfile, onBack = onBack); return }
@@ -89,7 +90,7 @@ fun MenuPage(
             "Downloads" -> DownloadsPage(content, library, openVideo, openAudio)
             "History" -> HistoryPage(content, library, openVideo, openAudio)
             "Library" -> LibraryPage(content, library, openVideo, openAudio)
-            "Prayer" -> PrayerPage(session, openProfile)
+            "Prayer" -> PrayerPage(session, openProfile) { openPage("Testimonies") }
             "Testimonies" -> TestimoniesPage(session, openProfile)
             "ReadingPlans" -> ReadingPlansPage(session, openProfile, openReference)
             "Giving" -> GivingPage(session)

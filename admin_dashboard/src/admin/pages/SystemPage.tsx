@@ -10,7 +10,7 @@ type Modules = Record<string, boolean | number>;
 
 const MODULE_LABELS: Record<string, string> = {
   onlineGiving: "Online Giving", counseling: "Counseling Module", volunteerScheduling: "Volunteer Scheduling",
-  livestream: "Livestream", communityChat: "Community Chat", attendanceKiosk: "Attendance Kiosk", taxStatements: "Tax Statements",
+  livestream: "Livestream", communityChat: "Community Chat", attendanceKiosk: "Attendance POS", taxStatements: "Tax Statements",
 };
 const SECURITY_FIELDS: { key: string; label: string; type: "toggle" | "number" }[] = [
   { key: "minPasswordLength", label: "Minimum password length (8–64)", type: "number" },

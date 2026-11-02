@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -122,38 +123,55 @@ fun Greeting(name: String, onProfile: () -> Unit) {
 @Composable
 fun ServiceStrip(nextService: String) {
     val context = LocalContext.current
-    val start = remember(nextService) { ServiceReminder.nextStart(nextService) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
+    // Ticks every second; the next service is re-worked out as each one passes.
+    LaunchedEffect(Unit) { while (true) { delay(1000 - System.currentTimeMillis() % 1000); now = System.currentTimeMillis() } }
+    val next = remember(nextService, now / 60_000) { ServiceReminder.next(nextService) }
+    val start = next?.first
     var reminded by remember(start) { mutableStateOf(start != null && ServiceReminder.isSet(context, start)) }
     val shape = RoundedCornerShape(18.dp)
-    Row(
+    Column(
         Modifier.padding(horizontal = 16.dp).padding(top = 22.dp).fillMaxWidth().lifted(shape, 10.dp)
             .clip(shape).background(Brush.horizontalGradient(listOf(Color(0xE6241D0E), Color(0xE6101220))))
             .border(1.dp, Brush.horizontalGradient(listOf(Color(0x55D4AF37), Color(0x224A8BFF))), shape)
-            .padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
     ) {
-        Box(Modifier.size(38.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Schedule, null, tint = Brand.Gold, modifier = Modifier.size(20.dp))
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text("NEXT SERVICE", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold)
-            Text(nextService.ifBlank { "Sunday Service" }, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Brand.White, maxLines = 1)
-            if (start != null) Text(ServiceReminder.countdown(start, now), style = Type.Meta, color = Brand.Text2)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(38.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Schedule, null, tint = Brand.Gold, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("NEXT SERVICE", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold)
+                Text(next?.second ?: nextService.ifBlank { "Sunday Service" }, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Brand.White, maxLines = 1)
+            }
+            if (start != null) {
+                Row(
+                    Modifier.clip(RoundedCornerShape(50))
+                        .background(if (reminded) Color(0x33D4AF37) else Brand.Gold)
+                        .clickable { reminded = ServiceReminder.toggle(context, start) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(if (reminded) Icons.Rounded.NotificationsActive else Icons.Outlined.NotificationsNone, null, tint = if (reminded) Brand.GoldLight else Brand.Black, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text(if (reminded) "Reminder on" else "Remind me", color = if (reminded) Brand.GoldLight else Brand.Black, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                }
+            }
         }
         if (start != null) {
-            Row(
-                Modifier.clip(RoundedCornerShape(50))
-                    .background(if (reminded) Color(0x33D4AF37) else Brand.Gold)
-                    .clickable { reminded = ServiceReminder.toggle(context, start) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(if (reminded) Icons.Rounded.NotificationsActive else Icons.Outlined.NotificationsNone, null, tint = if (reminded) Brand.GoldLight else Brand.Black, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(5.dp))
-                Text(if (reminded) "Reminder on" else "Remind me", color = if (reminded) Brand.GoldLight else Brand.Black, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+            Spacer(Modifier.height(12.dp))
+            val (d, h, m, sec) = ServiceReminder.parts(start, now)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(d to "DAYS", h to "HOURS", m to "MINS", sec to "SECS").forEach { (value, unit) ->
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Color(0x40000000)).border(1.dp, Color(0x22D4AF37), RoundedCornerShape(12.dp)).padding(vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        androidx.compose.animation.AnimatedContent(value, transitionSpec = {
+                            (androidx.compose.animation.slideInVertically { -it / 2 } + androidx.compose.animation.fadeIn()) togetherWith (androidx.compose.animation.slideOutVertically { it / 2 } + androidx.compose.animation.fadeOut())
+                        }, label = unit) { v -> Text("%02d".format(v), fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = if (unit == "SECS") Brand.GoldLight else Brand.White) }
+                        Text(unit, style = Type.Label.copy(fontSize = 9.sp), color = Brand.Text2)
+                    }
+                }
             }
         }
     }

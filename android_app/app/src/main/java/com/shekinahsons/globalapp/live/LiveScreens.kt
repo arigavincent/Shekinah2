@@ -353,7 +353,10 @@ private fun LockedLive(live: LiveSession, modifier: Modifier, onClick: (() -> Un
 @Composable
 private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -> Unit, replays: () -> Unit) {
     val glow = Breathing(3600, 0.45f, 1f)
-    val start = remember(content.live.nextService) { ServiceReminder.nextStart(content.live.nextService) }
+    var now by remember { androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(1000 - System.currentTimeMillis() % 1000); now = System.currentTimeMillis() } }
+    val next = remember(content.live.nextService, now / 60_000) { ServiceReminder.next(content.live.nextService) }
+    val start = next?.first
     LazyColumn(
         Modifier.fillMaxSize().background(Brand.Black),
         contentPadding = PaddingValues(bottom = 120.dp)
@@ -379,8 +382,11 @@ private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -
                     Spacer(Modifier.height(10.dp))
                     Text("NEXT SERVICE", style = Type.Label, color = Brand.Gold)
                     Spacer(Modifier.height(6.dp))
-                    Text(content.live.nextService.ifBlank { "Sunday Service" }, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
-                    if (start != null) Text(ServiceReminder.countdown(start), style = Type.Meta, color = Brand.Text2)
+                    Text(next?.second ?: content.live.nextService.ifBlank { "Sunday Service" }, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
+                    if (start != null) {
+                        val (d, h, m, sec) = ServiceReminder.parts(start, now)
+                        Text((if (d > 0) "${d}d  " else "") + "%02d:%02d:%02d".format(h, m, sec), fontFamily = com.shekinahsons.globalapp.ui.theme.Inter, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 26.sp, color = Brand.GoldLight, modifier = Modifier.padding(top = 6.dp))
+                    }
                     Spacer(Modifier.height(8.dp))
                     Text("You'll get a notification the moment we go live.", style = Type.Meta.copy(fontSize = 13.sp), color = Brand.Text2, textAlign = TextAlign.Center)
                 }

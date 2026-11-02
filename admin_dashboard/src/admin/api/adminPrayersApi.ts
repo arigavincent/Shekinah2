@@ -14,6 +14,8 @@ export type AdminPrayer = {
   createdAt: string;
   updatedAt: string;
   reviewedAt?: string | null;
+  pinned?: boolean;
+  shownFrom?: string;
 };
 
 export type UpdatePrayerPayload = {
@@ -32,5 +34,25 @@ export async function updatePrayer(id: string, payload: UpdatePrayerPayload) {
     method: "PATCH",
     token: getToken(),
     body: payload
+  });
+}
+
+export async function pinPrayer(id: string, pinned: boolean) {
+  return apiRequest<{ pinned: boolean; message: string }>(`/api/v1/admin/prayers/${id}/pin`, {
+    method: "PATCH",
+    token: getToken(),
+    body: { pinned }
+  });
+}
+
+export async function getPrayerSettings() {
+  return apiRequest<{ wallDays: number }>("/api/v1/admin/prayers/settings", { token: getToken() });
+}
+
+export async function savePrayerSettings(wallDays: number) {
+  return apiRequest<{ wallDays: number; message: string }>("/api/v1/admin/prayers/settings", {
+    method: "PUT",
+    token: getToken(),
+    body: { wallDays }
   });
 }

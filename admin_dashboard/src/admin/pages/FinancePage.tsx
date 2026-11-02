@@ -15,7 +15,7 @@ export function FinancePage() {
       <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Finance & Funds</h1><p className="muted">Funds, cash and cheque entries, refunds and yearly giving statements.</p></div></header>
       <div className="tabs" style={{ display: "flex", gap: 4, marginBottom: 16 }}>
         {(["funds","transaction","kiosks","refunds","statements"] as const).map(t => (
-          <button key={t} className={`btn compact ${tab===t?"primary":""}`} onClick={() => setTab(t)}>{t === "funds" ? "Chart of Accounts" : t === "transaction" ? "Manual Entry" : t === "kiosks" ? "POS & Kiosks" : t === "refunds" ? "Refunds" : "Donor Statements"}</button>
+          <button key={t} className={`btn compact ${tab===t?"primary":""}`} onClick={() => setTab(t)}>{t === "funds" ? "Chart of Accounts" : t === "transaction" ? "Manual Entry" : t === "kiosks" ? "POS devices" : t === "refunds" ? "Refunds" : "Donor Statements"}</button>
         ))}
       </div>
       {tab === "funds" && <FundsTab token={token} />}
@@ -85,13 +85,13 @@ function KiosksTab({ token }: { token: string | null }) {
   const { showToast } = useAdminFeedback();
   async function load() { setLoading(true); try { const r = await apiRequest<{ kiosks: Kiosk[] }>("/api/v1/admin/sa/kiosks", { token }); setKiosks(r.kiosks || []); } catch (e: any) { setError(e.message); } setLoading(false); }
   useEffect(() => { void load(); }, []);
-  async function pair() { try { await apiRequest("/api/v1/admin/sa/kiosks", { method: "POST", token, body: { name, location: loc, serialNumber: serial } }); showToast({ title: "Paired", message: "Kiosk paired", tone: "success" }); setName(""); setLoc(""); setSerial(""); void load(); } catch (e: any) { setError(e.message); } }
+  async function pair() { try { await apiRequest("/api/v1/admin/sa/kiosks", { method: "POST", token, body: { name, location: loc, serialNumber: serial } }); showToast({ title: "Paired", message: "POS device paired", tone: "success" }); setName(""); setLoc(""); setSerial(""); void load(); } catch (e: any) { setError(e.message); } }
   async function toggleLock(k: Kiosk) { try { await apiRequest(`/api/v1/admin/sa/kiosks/${k.id}/lock`, { method: "PATCH", token, body: { locked: !k.locked } }); void load(); } catch (e: any) { setError(e.message); } }
   async function unbind(k: Kiosk) { try { await apiRequest(`/api/v1/admin/sa/kiosks/${k.id}`, { method: "DELETE", token }); void load(); } catch (e: any) { setError(e.message); } }
   return (<div>
     {error && <div className="alert alert-error">{error}</div>}
     <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-      <h3>Pair New Kiosk</h3>
+      <h3>Pair new POS device</h3>
       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
         <input className="input" placeholder="Name" value={name} onChange={e => setName(e.target.value)} style={{ flex: 1 }} />
         <input className="input" placeholder="Location" value={loc} onChange={e => setLoc(e.target.value)} style={{ flex: 1 }} />

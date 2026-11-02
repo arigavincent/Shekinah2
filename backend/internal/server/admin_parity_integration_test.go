@@ -64,7 +64,7 @@ func TestAdminParityIncomeClassificationRolesAndServeHistory(t *testing.T) {
 	}
 	login := req("POST", "/auth/login", map[string]string{"email": "vincent@example.com", "password": "password123"}, "", 200)
 	admin := req("PATCH", "/auth/password", map[string]string{"currentPassword": "password123", "newPassword": "ParityAdmin123!"}, login["token"].(string), 200)["token"].(string)
-	reg := req("POST", "/auth/register", map[string]string{"name": "Parity Staff", "email": "parity@example.invalid", "password": "ParityMember123!"}, "", 201)
+	reg := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Parity Staff", "email": "parity@example.invalid", "password": "ParityMember123!"}, "", 201)
 	member, id := reg["token"].(string), reg["user"].(map[string]any)["id"].(string)
 	req("GET", "/admin/giving/analytics", nil, member, 403)
 	req("PATCH", "/admin/members/"+id+"/permissions", map[string]any{"permissions": []string{"finance:manage", "live:moderate"}}, admin, 200)
@@ -165,7 +165,7 @@ func TestAdminParityIncomeClassificationRolesAndServeHistory(t *testing.T) {
 			t.Fatal("finance receipt is not a PDF")
 		}
 	}
-	other := req("POST", "/auth/register", map[string]string{"name": "Other payer", "email": "receipt-other@example.invalid", "password": "OtherReceipt123!"}, "", 201)["token"].(string)
+	other := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Other payer", "email": "receipt-other@example.invalid", "password": "OtherReceipt123!"}, "", 201)["token"].(string)
 	assertStatus(t, app, "GET", "/api/v1/giving/transactions/finance-print-qa/receipt.pdf", nil, other, 403)
 	assertStatus(t, app, "GET", "/api/v1/admin/giving/transactions/finance-print-qa/receipt.pdf", nil, other, 403)
 	assertStatus(t, app, "GET", "/api/v1/admin/giving/transactions/pending/receipt.pdf", nil, member, 409)

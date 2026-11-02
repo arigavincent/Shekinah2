@@ -68,7 +68,7 @@ func TestHandoffAttendanceServePlansBranchesAndReset(t *testing.T) {
 	request("GET", "/auth/me", nil, login["token"].(string), 401)
 	const memberEmail = "handoff.member.with.a.long.email@example.invalid"
 	const memberPassword = "HandoffMember123!"
-	registered := object(request("POST", "/auth/register", map[string]string{"name": "Handoff Member", "email": memberEmail, "password": memberPassword}, "", 201))
+	registered := object(request("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Handoff Member", "email": memberEmail, "password": memberPassword}, "", 201))
 	member := registered["token"].(string)
 	memberID := registered["user"].(map[string]any)["id"].(string)
 	t.Run("payments cannot be read or settled by strangers", func(t *testing.T) {
@@ -80,7 +80,7 @@ func TestHandoffAttendanceServePlansBranchesAndReset(t *testing.T) {
 		request("GET", "/giving/transactions/"+id+"/invoice.pdf", nil, "", 401)
 		request("GET", "/giving/transactions/"+id, nil, member, 200)
 		request("GET", "/giving/transactions/"+id, nil, admin, 200)
-		other := object(request("POST", "/auth/register", map[string]string{"name": "Other Member", "email": "other@example.invalid", "password": "OtherPassword123!"}, "", 201))["token"].(string)
+		other := object(request("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Other Member", "email": "other@example.invalid", "password": "OtherPassword123!"}, "", 201))["token"].(string)
 		request("GET", "/giving/transactions/"+id, nil, other, 403)
 		request("GET", "/giving/card/mock-complete/"+id, nil, "", 404)
 		request("GET", "/giving/card/return?tx_ref="+id+"&status=successful&transaction_id=123", nil, "", 503)

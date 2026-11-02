@@ -519,8 +519,9 @@ func (r Repository) Prayers(ctx context.Context) ([]Prayer, error) {
 			is_public
 		FROM prayers
 		WHERE is_public = TRUE
-		  AND status IN ('reviewed', 'prayed_for', 'contacted')
-		ORDER BY created_at DESC
+		  AND status IN ('reviewed', 'prayed_for', 'contacted', 'answered')
+		  AND (pinned OR shown_from > now() - make_interval(days => COALESCE((SELECT NULLIF(value,'')::int FROM app_settings WHERE key = 'prayer_wall_days'), 30)))
+		ORDER BY pinned DESC, shown_from DESC
 	`
 
 	rows, err := r.db.Query(ctx, query)

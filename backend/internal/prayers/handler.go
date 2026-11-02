@@ -15,7 +15,8 @@ import (
 )
 
 type Handler struct {
-	db *pgxpool.Pool
+	db     *pgxpool.Pool
+	remind Reminder
 }
 
 type CreatePrayerRequest struct {
@@ -34,6 +35,11 @@ type Prayer struct {
 	Category string `json:"category"`
 	IsPublic bool   `json:"isPublic"`
 	Status   string `json:"status"`
+	Pinned   bool   `json:"pinned"`
+	// Only on the member's own list: whether it is on the wall now, and until when.
+	OnWall    *bool  `json:"onWall,omitempty"`
+	LeavesOn  string `json:"leavesOn,omitempty"`
+	LeavesISO string `json:"leavesAt,omitempty"`
 }
 
 func NewHandler(db *pgxpool.Pool) Handler {
@@ -116,13 +122,15 @@ func (h Handler) ListPublic(c *gin.Context) {
 	rows, err := h.db.Query(
 		c.Request.Context(),
 		`
-			SELECT id, name, text, created_at, count, category, is_public, status
+			SELECT id, name, text, created_at, count, category, is_public, status, pinned
 			FROM prayers
 			WHERE is_public = TRUE
 			  AND status <> 'hidden'
-			ORDER BY created_at DESC
+			  AND `+onWall("$1")+`
+			ORDER BY pinned DESC, shown_from DESC
 			LIMIT 100
 		`,
+		h.wallDays(c.Request.Context()),
 	)
 	if err != nil {
 		httpx.Error(c, http.StatusInternalServerError, "prayer_list_failed", "failed to load prayer requests")
@@ -145,6 +153,7 @@ func (h Handler) ListPublic(c *gin.Context) {
 			&item.Category,
 			&item.IsPublic,
 			&item.Status,
+			&item.Pinned,
 		); err != nil {
 			httpx.Error(c, http.StatusInternalServerError, "prayer_list_failed", "failed to load prayer requests")
 			return
@@ -174,7 +183,7 @@ func (h Handler) ListMine(c *gin.Context) {
 	rows, err := h.db.Query(
 		c.Request.Context(),
 		`
-			SELECT id, name, text, created_at, count, category, is_public, status
+			SELECT id, name, text, created_at, count, category, is_public, status, pinned, shown_from
 			FROM prayers
 			WHERE owner_user_id = $1
 			ORDER BY created_at DESC
@@ -190,9 +199,14 @@ func (h Handler) ListMine(c *gin.Context) {
 
 	items := make([]Prayer, 0)
 
+	days := h.wallDays(c.Request.Context())
+	nairobi, _ := time.LoadLocation("Africa/Nairobi")
+	if nairobi == nil {
+		nairobi = time.UTC
+	}
 	for rows.Next() {
 		var item Prayer
-		var createdAt time.Time
+		var createdAt, shownFrom time.Time
 
 		if err := rows.Scan(
 			&item.ID,
@@ -203,12 +217,21 @@ func (h Handler) ListMine(c *gin.Context) {
 			&item.Category,
 			&item.IsPublic,
 			&item.Status,
+			&item.Pinned,
+			&shownFrom,
 		); err != nil {
 			httpx.Error(c, http.StatusInternalServerError, "prayer_list_failed", "failed to load your prayer requests")
 			return
 		}
 
 		item.Date = formatPrayerDate(createdAt)
+		leaves := shownFrom.AddDate(0, 0, days)
+		on := item.IsPublic && item.Status != "hidden" && (item.Pinned || leaves.After(time.Now()))
+		item.OnWall = &on
+		if !item.Pinned {
+			item.LeavesOn = leaves.In(nairobi).Format("2 January 2006")
+			item.LeavesISO = leaves.UTC().Format(time.RFC3339)
+		}
 		items = append(items, item)
 	}
 

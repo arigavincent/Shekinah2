@@ -108,10 +108,10 @@ export function MembersPage() {
       {loading ? <div className="loading-spinner" /> : (
         <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 1fr" : "1fr", gap: 16 }}>
           <div className="card" style={{ maxHeight: "70vh", overflow: "auto" }}>
-            <table className="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+            <table className="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody>
               {filtered.map(m => (
                 <tr key={m.id} onClick={() => selectMember(m)} style={{ cursor: "pointer", background: selected?.id === m.id ? "var(--surface-hover)" : undefined }}>
-                  <td>{m.name}</td><td>{m.email}</td><td><span className="badge">{({ super_admin: "Super admin", admin: "Admin", member: "Member" } as Record<string, string>)[m.role] || m.role}</span></td>
+                  <td>{m.name}</td><td>{m.email}</td><td>{m.phone || <span className="muted">Not added</span>}</td><td><span className="badge">{({ super_admin: "Super admin", admin: "Admin", member: "Member" } as Record<string, string>)[m.role] || m.role}</span></td>
                   <td>{m.isActive === false ? <span className="badge danger">Inactive</span> : <span className="badge success">Active</span>}</td>
                   <td style={{ display: "flex", gap: 4 }}>
                     <button className="btn-icon" title="Toggle suspend" onClick={e => { e.stopPropagation(); suspend(m); }}>{m.isActive === false ? <UserCheck size={14} /> : <UserX size={14} />}</button>
@@ -178,12 +178,12 @@ function AddAccount({ token, onCreated }: { token: string | null; onCreated: () 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
         <label>Full name<input className="input" value={form.name} onChange={set("name")} /></label>
         <label>Email<input className="input" type="email" value={form.email} onChange={set("email")} /></label>
-        <label>Phone<input className="input" value={form.phone} onChange={set("phone")} /></label>
+        <label>Phone<input className="input" type="tel" placeholder="0712 345 678" value={form.phone} onChange={set("phone")} /></label>
         <label>Role<select className="input" value={form.role} onChange={set("role")}>{ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
         <label>Membership<select className="input" value={form.membershipStatus} onChange={set("membershipStatus")}>{STATUSES.map((v) => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}</select></label>
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-        <button className="btn primary" onClick={create} disabled={busy || !form.name.trim() || !form.email.includes("@")}>{busy ? "Creating…" : "Create account"}</button>
+        <button className="btn primary" onClick={create} disabled={busy || !form.name.trim() || !form.email.includes("@") || form.phone.replace(/\D/g, "").length < 9}>{busy ? "Creating…" : "Create account"}</button>
         <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
       </div>
     </>)}

@@ -45,7 +45,7 @@ func TestFamiliesTargetedMessagesKeyRotationAndEventControls(t *testing.T) {
 		t.Fatal(err)
 	}
 	member := func(name, email string) (string, string) {
-		r := req("POST", "/auth/register", map[string]string{"name": name, "email": email, "password": "MemberPass123!"}, "", 201)
+		r := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": name, "email": email, "password": "MemberPass123!"}, "", 201)
 		return r["token"].(string), r["user"].(map[string]any)["id"].(string)
 	}
 	choirTok, choirID := member("Choir Member", "choir@example.invalid")

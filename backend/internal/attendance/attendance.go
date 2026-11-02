@@ -129,7 +129,7 @@ func (h Handler) records(c *gin.Context) ([]Record, string, string, error) {
 	}
 	occasion := strings.TrimSpace(c.Query("occasion"))
 	rows, err := h.db.Query(c.Request.Context(), `
-		SELECT a.id, u.name, u.email, COALESCE((SELECT g.phone FROM giving_transactions g WHERE g.user_id = a.user_id AND g.phone <> '' ORDER BY g.created_at DESC LIMIT 1), ''),
+		SELECT a.id, u.name, u.email, COALESCE(NULLIF(u.phone, ''), (SELECT g.phone FROM giving_transactions g WHERE g.user_id = a.user_id AND g.phone <> '' ORDER BY g.created_at DESC LIMIT 1), ''),
 			a.occasion, to_char(a.occasion_date, 'YYYY-MM-DD'), a.method, COALESCE(s.name, ''), a.created_at
 		FROM attendance a JOIN users u ON u.id = a.user_id LEFT JOIN users s ON s.id = a.checked_in_by
 		WHERE a.occasion_date = $1 AND ($2 = '' OR a.occasion = $2) ORDER BY a.created_at`, date, occasion)
@@ -227,11 +227,11 @@ func (h Handler) PDF(c *gin.Context) {
 	pdf.CellFormat(0, 6, tr(fmt.Sprintf("%s  ·  %d present", d.Format("Monday 2 January 2006"), len(list))), "", 1, "L", false, 0, "")
 	pdf.Ln(8)
 
-	widths := []float64{10, 52, 62, 26, 32}
-	head := []string{"#", "Name", "Email", "Time", "Recorded by"}
+	widths := []float64{9, 42, 50, 30, 21, 30}
+	head := []string{"#", "Name", "Email", "Phone", "Time", "Recorded by"}
 	if occasion == "" {
-		widths = []float64{9, 44, 52, 32, 18, 27}
-		head = []string{"#", "Name", "Email", "Occasion", "Time", "Recorded by"}
+		widths = []float64{8, 36, 44, 28, 26, 16, 24}
+		head = []string{"#", "Name", "Email", "Phone", "Occasion", "Time", "Recorded by"}
 	}
 	header := func() {
 		pdf.SetFont("Helvetica", "B", 9)
@@ -245,9 +245,9 @@ func (h Handler) PDF(c *gin.Context) {
 	header()
 	pdf.SetFont("Helvetica", "", 9)
 	for i, r := range list {
-		cells := []string{fmt.Sprint(i + 1), r.Name, r.Email, r.CreatedAt.In(nairobi).Format("3:04 PM"), r.By}
+		cells := []string{fmt.Sprint(i + 1), r.Name, r.Email, r.Phone, r.CreatedAt.In(nairobi).Format("3:04 PM"), r.By}
 		if occasion == "" {
-			cells = []string{fmt.Sprint(i + 1), r.Name, r.Email, r.Occasion, r.CreatedAt.In(nairobi).Format("3:04 PM"), r.By}
+			cells = []string{fmt.Sprint(i + 1), r.Name, r.Email, r.Phone, r.Occasion, r.CreatedAt.In(nairobi).Format("3:04 PM"), r.By}
 		}
 		// Keep complete names and contact details. Size the whole row for its
 		// tallest wrapped cell so text never overlaps the following record.

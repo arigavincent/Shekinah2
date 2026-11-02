@@ -10,7 +10,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class Member(val id: String = "", val name: String = "", val email: String = "", val role: String = "member", val createdAt: String = "", val passwordResetRequired: Boolean = false)
+data class Member(val id: String = "", val name: String = "", val email: String = "", val phone: String = "", val role: String = "member", val createdAt: String = "", val passwordResetRequired: Boolean = false)
 
 // The signed-in member. The token is kept on the phone (sealed with the
 // Android Keystore) so members stay signed in between visits.
@@ -89,9 +89,24 @@ class Session(private val context: Context) {
         save(token, Api.decode(res["user"]))
     }
 
-    suspend fun register(name: String, email: String, password: String) {
-        val res = Api.post("/auth/register", mapOf("name" to name.trim(), "email" to email.trim(), "password" to password))
+    suspend fun register(name: String, email: String, phone: String, password: String) {
+        val res = Api.post("/auth/register", mapOf("name" to name.trim(), "email" to email.trim(), "phone" to phone.trim(), "password" to password))
         save(Api.decode<String>(res["token"]), Api.decode(res["user"]))
+        profileChecked = true
+    }
+
+    // True once the profile has been confirmed with the server this visit, so
+    // the "add your phone number" step isn't shown from an old saved copy.
+    var profileChecked by mutableStateOf(false)
+        private set
+
+    // Members must have a phone number (check-ins and attendance carry it).
+    val needsPhone get() = profileChecked && member != null && member!!.phone.isBlank()
+
+    suspend fun updatePhone(phone: String) {
+        val res = Api.patch("/auth/phone", mapOf("phone" to phone.trim()))
+        member = Api.decode(res["user"])
+        prefs.edit().putString("member",Api.json.encodeToString(Member.serializer(),member!!)).apply()
     }
 
     suspend fun requestReset(email: String) { Api.post("/auth/password-reset/request", mapOf("email" to email.trim())) }
@@ -113,6 +128,7 @@ class Session(private val context: Context) {
             member = Api.decode(res["user"])
             prefs.edit().putString("member",Api.json.encodeToString(Member.serializer(),member!!)).apply()
             Accounts.activate(context,member!!.id)
+            profileChecked = true
             loadPermissions()
         } catch (e: ApiException) {
             if (e.status == 401) signOut()

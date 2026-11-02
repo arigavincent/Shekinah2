@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import {
+  getPrayerSettings,
   listPrayers,
+  pinPrayer,
+  savePrayerSettings,
   updatePrayer,
   type AdminPrayer
 } from "../api/adminPrayersApi";
@@ -15,8 +18,19 @@ const STATUS_OPTIONS = [
   { value: "reviewed", label: "Reviewed" },
   { value: "prayed_for", label: "Prayed For" },
   { value: "contacted", label: "Contacted" },
+  { value: "answered", label: "Answered" },
   { value: "hidden", label: "Hidden" }
 ];
+
+// Whether a request is on the public wall now, and until when.
+function wallLabel(prayer: AdminPrayer, wallDays: number) {
+  if (!prayer.isPublic || prayer.status === "hidden") return "Not on the wall";
+  if (prayer.pinned) return "Pinned to the wall";
+  if (!prayer.shownFrom) return "";
+  const end = new Date(new Date(prayer.shownFrom).getTime() + wallDays * 86400000);
+  if (end.getTime() < Date.now()) return "Off the wall";
+  return `On the wall until ${end.toLocaleDateString("en-KE", { day: "numeric", month: "short", timeZone: "Africa/Nairobi" })}`;
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "-";
@@ -33,7 +47,7 @@ function statusLabel(status: string) {
 
 function statusTone(status: string): "success" | "warning" | "neutral" | "danger" {
   if (status === "hidden") return "danger";
-  if (status === "prayed_for" || status === "contacted") return "success";
+  if (status === "prayed_for" || status === "contacted" || status === "answered") return "success";
   if (status === "reviewed") return "warning";
   return "neutral";
 }
@@ -61,6 +75,9 @@ export function PrayersPage() {
   const [error, setError] = useState("");
   const [draftStatus, setDraftStatus] = useState("new");
   const [draftAdminNote, setDraftAdminNote] = useState("");
+  const [wallDays, setWallDays] = useState(30);
+  const [wallDaysDraft, setWallDaysDraft] = useState("30");
+  const [savingDays, setSavingDays] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -136,7 +153,47 @@ export function PrayersPage() {
 
   useEffect(() => {
     load();
+    getPrayerSettings()
+      .then(response => {
+        setWallDays(response.wallDays);
+        setWallDaysDraft(String(response.wallDays));
+      })
+      .catch(() => undefined);
   }, []);
+
+  async function saveDays() {
+    const days = Number(wallDaysDraft);
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      setError("Choose between 1 and 365 days.");
+      return;
+    }
+    setSavingDays(true);
+    try {
+      await savePrayerSettings(days);
+      setWallDays(days);
+      showToast({ title: "Prayer wall updated", message: `Requests now stay on the wall for ${days} days.`, tone: "success" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the setting");
+    } finally {
+      setSavingDays(false);
+    }
+  }
+
+  async function togglePin(prayer: AdminPrayer) {
+    try {
+      const response = await pinPrayer(prayer.id, !prayer.pinned);
+      setPrayers(current =>
+        current.map(item =>
+          item.id === prayer.id
+            ? { ...item, pinned: response.pinned, shownFrom: response.pinned ? item.shownFrom : new Date().toISOString() }
+            : item
+        )
+      );
+      showToast({ title: response.message, message: prayer.name || "Prayer request", tone: "success" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not pin the request");
+    }
+  }
 
   function handleSelect(event: ChangeEvent<HTMLSelectElement>) {
     setScope(event.target.value);
@@ -187,6 +244,24 @@ export function PrayersPage() {
       </header>
 
       {error ? <InlineAlert title="Prayer queue could not be updated" message={error} /> : null}
+
+      <section className="list-card" style={{ marginBottom: 18 }}>
+        <div className="section-title-row">
+          <h2>Prayer Wall</h2>
+        </div>
+        <p className="muted">
+          Public requests leave the Prayer Wall after this many days to make room for new ones. Members are reminded two days before and can keep theirs up or mark it answered. Pinned requests stay. Requests are deleted a year after leaving the wall.
+        </p>
+        <div className="filters-row" style={{ alignItems: "flex-end" }}>
+          <label style={{ maxWidth: 220 }}>
+            Days on the wall
+            <input type="number" min={1} max={365} value={wallDaysDraft} onChange={event => setWallDaysDraft(event.target.value)} />
+          </label>
+          <button type="button" onClick={saveDays} disabled={savingDays || wallDaysDraft === String(wallDays)}>
+            {savingDays ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </section>
 
       <section className="content-grid">
         <section className="list-card">
@@ -282,6 +357,7 @@ export function PrayersPage() {
                         <span className={`status-pill ${statusTone(prayer.status)}`}>
                           {statusLabel(prayer.status)}
                         </span>
+                        {prayer.pinned ? <span className="status-pill success">Pinned</span> : null}
                       </div>
 
                       <p style={{ marginTop: 8 }}>{summaryText(prayer)}</p>
@@ -376,7 +452,18 @@ export function PrayersPage() {
                     <p className="small-muted">Last Reviewed</p>
                     <strong>{formatDate(selectedPrayer.reviewedAt)}</strong>
                   </div>
+
+                  <div>
+                    <p className="small-muted">Prayer Wall</p>
+                    <strong>{wallLabel(selectedPrayer, wallDays)}</strong>
+                  </div>
                 </div>
+
+                {selectedPrayer.isPublic && selectedPrayer.status !== "hidden" ? (
+                  <button type="button" className="secondary compact" style={{ justifySelf: "start" }} onClick={() => togglePin(selectedPrayer)}>
+                    {selectedPrayer.pinned ? "Unpin from the wall" : "Pin to the wall"}
+                  </button>
+                ) : null}
               </div>
 
               <label>

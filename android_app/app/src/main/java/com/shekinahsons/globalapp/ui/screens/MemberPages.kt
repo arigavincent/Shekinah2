@@ -133,12 +133,13 @@ private fun Empty(text: String) {
 // ---------------- Prayer requests ----------------
 
 @Serializable
-data class Prayer(val id: String = "", val name: String = "", val text: String = "", val date: String = "", val count: Int = 0, val category: String = "", val isPublic: Boolean = true, val status: String = "")
+data class Prayer(val id: String = "", val name: String = "", val text: String = "", val date: String = "", val count: Int = 0, val category: String = "", val isPublic: Boolean = true, val status: String = "",
+    val pinned: Boolean = false, val onWall: Boolean? = null, val leavesOn: String = "")
 
 private val prayerTopics = listOf("Healing", "Family", "Finances", "Salvation", "Guidance", "Breakthrough", "Thanksgiving", "Other")
 
 @Composable
-fun PrayerPage(session: Session, onSignIn: () -> Unit) {
+fun PrayerPage(session: Session, onSignIn: () -> Unit, openTestimonies: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf("Prayer Wall") }
     val wall = remember { mutableStateListOf<Prayer>() }
@@ -158,7 +159,10 @@ fun PrayerPage(session: Session, onSignIn: () -> Unit) {
             "Mine" -> {
                 if (session.member == null) item { SignInCard("Sign in to see the requests you have shared.", onSignIn) }
                 else if (mine.isEmpty()) item { Empty("You haven't shared a prayer request yet.") }
-                else items(mine, key = { it.id }) { PrayerCard(it, showStatus = true) {} }
+                else items(mine, key = { it.id }) { p ->
+                    PrayerCard(p, showStatus = true) {}
+                    MyPrayerActions(p, onChanged = { reload++ }, openTestimonies = openTestimonies)
+                }
             }
             else -> {
                 if (wall.isEmpty()) item { Empty("No public prayer requests yet. Be the first to share one.") }
@@ -214,7 +218,9 @@ private fun PrayerCard(p: Prayer, showStatus: Boolean, onPray: () -> Unit) {
                 Text(p.name.ifBlank { "Member" }, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Brand.White)
                 Text(listOf(p.category, prettyDate(p.date)).filter { it.isNotBlank() }.joinToString(" · "), style = Type.Meta, color = Brand.Text2)
             }
-            if (showStatus && p.status.isNotBlank()) Text(p.status.replaceFirstChar { it.uppercase() }, color = Brand.GoldLight, fontSize = 12.sp, modifier = Modifier.glass().padding(horizontal = 10.dp, vertical = 4.dp))
+            if (p.pinned && !showStatus) Text("\uD83D\uDCCC Pinned", color = Brand.GoldLight, fontSize = 12.sp, modifier = Modifier.glass().padding(horizontal = 10.dp, vertical = 4.dp))
+            else if (p.status == "answered") Text("Answered \uD83D\uDE4C", color = Color(0xFF7BE0A0), fontSize = 12.sp, modifier = Modifier.glass().padding(horizontal = 10.dp, vertical = 4.dp))
+            else if (showStatus && p.status.isNotBlank()) Text(prayerStatusLabel(p.status), color = Brand.GoldLight, fontSize = 12.sp, modifier = Modifier.glass().padding(horizontal = 10.dp, vertical = 4.dp))
         }
         Spacer(Modifier.height(10.dp))
         Text(p.text, style = Type.Body, color = Brand.White)
@@ -243,6 +249,47 @@ private fun PrayerCard(p: Prayer, showStatus: Boolean, onPray: () -> Unit) {
             }
         }
     }
+}
+
+private fun prayerStatusLabel(status: String) = when (status) {
+    "new" -> "Received"; "reviewed" -> "Seen by the team"; "prayed_for" -> "Prayed for"; "contacted" -> "Team contacted you"; "hidden" -> "Private"
+    else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
+
+// Under each of the member's own requests: how long it stays on the wall,
+// "Keep it up" for another period, and "It's answered".
+@Composable
+private fun MyPrayerActions(p: Prayer, onChanged: () -> Unit, openTestimonies: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var busy by remember(p.id) { mutableStateOf(false) }
+    var praise by remember(p.id) { mutableStateOf(false) }
+    if (!p.isPublic || p.status == "hidden") return
+    Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
+        val note = when {
+            p.pinned -> "Pinned to the prayer wall by the pastoral team."
+            p.onWall == true && p.leavesOn.isNotBlank() -> "On the prayer wall until ${p.leavesOn}."
+            p.onWall == false -> "No longer on the prayer wall. The pastoral team still has it."
+            else -> ""
+        }
+        if (note.isNotBlank()) Text(note, style = Type.Meta, color = Brand.Text2)
+        if (p.status != "answered") Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!p.pinned) Text("Keep it up", color = Brand.Black, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient).clickable(enabled = !busy) {
+                    scope.launch { busy = true; runCatching { Api.post("/prayer-requests/${p.id}/keep") }.onSuccess { onChanged() }; busy = false }
+                }.padding(horizontal = 14.dp, vertical = 8.dp))
+            Text("It's answered \uD83D\uDE4C", color = Brand.White, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                modifier = Modifier.clip(RoundedCornerShape(50)).glass().clickable(enabled = !busy) {
+                    scope.launch { busy = true; runCatching { Api.post("/prayer-requests/${p.id}/answered") }.onSuccess { praise = true; onChanged() }; busy = false }
+                }.padding(horizontal = 14.dp, vertical = 8.dp))
+        }
+    }
+    if (praise) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { praise = false }, containerColor = Color(0xFF1C1C20),
+        title = { Text("Praise God! \uD83D\uDE4C", color = Brand.White) },
+        text = { Text("Would you like to share what God has done as a testimony? It encourages the whole family.", color = Brand.Text2) },
+        confirmButton = { androidx.compose.material3.TextButton({ praise = false; openTestimonies() }) { Text("Share a testimony", color = Brand.Gold) } },
+        dismissButton = { androidx.compose.material3.TextButton({ praise = false }) { Text("Not now", color = Brand.Text2) } },
+    )
 }
 
 // ---------------- Testimonies ----------------

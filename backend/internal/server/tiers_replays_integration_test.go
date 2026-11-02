@@ -41,8 +41,8 @@ func TestTicketTiersAndReplayAdmin(t *testing.T) {
 	}
 	login := req("POST", "/auth/login", map[string]string{"email": "vincent@example.com", "password": "password123"}, "", 200)
 	admin := req("PATCH", "/auth/password", map[string]string{"currentPassword": "password123", "newPassword": "TiersAdmin123!"}, login["token"].(string), 200)["token"].(string)
-	a := req("POST", "/auth/register", map[string]string{"name": "Member A", "email": "a@example.invalid", "password": "MemberA123!"}, "", 201)["token"].(string)
-	b := req("POST", "/auth/register", map[string]string{"name": "Member B", "email": "b@example.invalid", "password": "MemberB123!"}, "", 201)["token"].(string)
+	a := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Member A", "email": "a@example.invalid", "password": "MemberA123!"}, "", 201)["token"].(string)
+	b := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Member B", "email": "b@example.invalid", "password": "MemberB123!"}, "", 201)["token"].(string)
 
 	ev := req("POST", "/admin/events", map[string]any{"title": "Gala", "eventDate": "2030-01-01", "eventTime": "6:00 PM", "location": "Hall", "description": "x"}, admin, 201)
 	id := ev["event"].(map[string]any)["id"].(string)

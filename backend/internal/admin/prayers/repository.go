@@ -33,7 +33,9 @@ func (r Repository) List(ctx context.Context) ([]Prayer, error) {
 			admin_note,
 			created_at,
 			updated_at,
-			reviewed_at
+			reviewed_at,
+			pinned,
+			shown_from
 		FROM prayers
 		ORDER BY created_at DESC
 	`
@@ -75,7 +77,9 @@ func (r Repository) FindByID(ctx context.Context, id string) (Prayer, error) {
 			admin_note,
 			created_at,
 			updated_at,
-			reviewed_at
+			reviewed_at,
+			pinned,
+			shown_from
 		FROM prayers
 		WHERE id = $1
 		LIMIT 1
@@ -115,7 +119,9 @@ func (r Repository) Update(ctx context.Context, command Command) (Prayer, error)
 			admin_note,
 			created_at,
 			updated_at,
-			reviewed_at
+			reviewed_at,
+			pinned,
+			shown_from
 	`
 
 	item, err := scanPrayer(
@@ -160,6 +166,8 @@ func scanPrayer(row prayerScanner) (Prayer, error) {
 		&item.CreatedAt,
 		&item.UpdatedAt,
 		&item.ReviewedAt,
+		&item.Pinned,
+		&item.ShownFrom,
 	); err != nil {
 		return Prayer{}, err
 	}

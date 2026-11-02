@@ -143,6 +143,11 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "Name and a valid email are required")
 		return
 	}
+	phone, perr := auth.NormalizePhone(req.Phone)
+	if perr != nil {
+		fail(c, http.StatusBadRequest, "Add a valid phone number, e.g. 0712 345 678")
+		return
+	}
 	ctx := c.Request.Context()
 	role, status := cmpOr(req.Role, "member"), cmpOr(req.MembershipStatus, "member")
 	if !slices.Contains(roles, role) || !slices.Contains(statuses, status) {
@@ -175,7 +180,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	var id string
 	err = h.db.QueryRow(ctx, `INSERT INTO users(name,email,password_hash,role,membership_status,phone,permissions,password_reset_required)
-		VALUES($1,$2,$3,$4,$5,$6,$7,TRUE) RETURNING id::text`, strings.TrimSpace(req.Name), email, string(hash), role, status, strings.TrimSpace(req.Phone), perms).Scan(&id)
+		VALUES($1,$2,$3,$4,$5,$6,$7,TRUE) RETURNING id::text`, strings.TrimSpace(req.Name), email, string(hash), role, status, phone, perms).Scan(&id)
 	if uniqueViolation(err) {
 		fail(c, http.StatusConflict, "An account with this email already exists")
 		return
@@ -232,6 +237,17 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	if me, _ := auth.UserIDFromContext(c); me == id && req.Role != nil && *req.Role != "super_admin" {
 		fail(c, http.StatusBadRequest, "You cannot remove your own super admin role")
 		return
+	}
+	if req.Phone != nil && strings.TrimSpace(*req.Phone) == "" {
+		req.Phone = nil // left blank: keep what is saved
+	}
+	if req.Phone != nil {
+		phone, perr := auth.NormalizePhone(*req.Phone)
+		if perr != nil {
+			fail(c, http.StatusBadRequest, "Enter a valid phone number, e.g. 0712 345 678")
+			return
+		}
+		req.Phone = &phone
 	}
 	ctx := c.Request.Context()
 	tx, err := h.db.Begin(ctx)
@@ -699,7 +715,7 @@ func (h *Handler) GenerateDonorStatement(c *gin.Context) {
 func (h *Handler) ListKiosks(c *gin.Context) {
 	kiosks, err := h.rows(c.Request.Context(), `SELECT id,name,location,serial_number AS "serialNumber",code AS "pairingCode",is_locked AS locked,paired_at AS "pairedAt",last_ping_at AS "lastPingAt" FROM giving_kiosks ORDER BY paired_at DESC`)
 	if err != nil {
-		fail(c, http.StatusInternalServerError, "Could not load kiosks")
+		fail(c, http.StatusInternalServerError, "Could not load POS devices")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"kiosks": kiosks})
@@ -712,7 +728,7 @@ func (h *Handler) PairKiosk(c *gin.Context) {
 		SerialNumber string `json:"serialNumber"`
 	}
 	if c.ShouldBindJSON(&req) != nil || strings.TrimSpace(req.Name) == "" {
-		fail(c, http.StatusBadRequest, "Name the kiosk")
+		fail(c, http.StatusBadRequest, "Name the POS device")
 		return
 	}
 	b := make([]byte, 4)
@@ -720,11 +736,11 @@ func (h *Handler) PairKiosk(c *gin.Context) {
 	code := fmt.Sprintf("%06d", (uint32(b[0])<<24|uint32(b[1])<<16|uint32(b[2])<<8|uint32(b[3]))%1_000_000)
 	id := randomID("kiosk")
 	if _, err := h.db.Exec(c.Request.Context(), `INSERT INTO giving_kiosks(id,name,code,location,serial_number) VALUES($1,$2,$3,$4,$5)`, id, strings.TrimSpace(req.Name), code, strings.TrimSpace(req.Location), strings.TrimSpace(req.SerialNumber)); err != nil {
-		fail(c, http.StatusInternalServerError, "Could not register the kiosk")
+		fail(c, http.StatusInternalServerError, "Could not register the POS device")
 		return
 	}
-	h.audit(c, "KIOSK_ADDED", "Registered kiosk "+strings.TrimSpace(req.Name), id)
-	c.JSON(http.StatusCreated, gin.H{"id": id, "pairingCode": code, "message": "Kiosk registered"})
+	h.audit(c, "KIOSK_ADDED", "Registered POS device "+strings.TrimSpace(req.Name), id)
+	c.JSON(http.StatusCreated, gin.H{"id": id, "pairingCode": code, "message": "POS device registered"})
 }
 
 func (h *Handler) ToggleKioskLock(c *gin.Context) {
@@ -732,26 +748,26 @@ func (h *Handler) ToggleKioskLock(c *gin.Context) {
 		Locked *bool `json:"locked"`
 	}
 	if c.ShouldBindJSON(&req) != nil || req.Locked == nil {
-		fail(c, http.StatusBadRequest, "Say whether to lock the kiosk")
+		fail(c, http.StatusBadRequest, "Say whether to lock the POS device")
 		return
 	}
 	tag, err := h.db.Exec(c.Request.Context(), `UPDATE giving_kiosks SET is_locked=$2 WHERE id=$1`, c.Param("id"), *req.Locked)
 	if err != nil || tag.RowsAffected() == 0 {
-		fail(c, http.StatusNotFound, "Kiosk not found")
+		fail(c, http.StatusNotFound, "POS device not found")
 		return
 	}
-	h.audit(c, "KIOSK_LOCK", fmt.Sprintf("Kiosk locked=%v", *req.Locked), c.Param("id"))
-	c.JSON(http.StatusOK, gin.H{"message": "Kiosk updated"})
+	h.audit(c, "KIOSK_LOCK", fmt.Sprintf("POS device locked=%v", *req.Locked), c.Param("id"))
+	c.JSON(http.StatusOK, gin.H{"message": "POS device updated"})
 }
 
 func (h *Handler) UnbindKiosk(c *gin.Context) {
 	tag, err := h.db.Exec(c.Request.Context(), `DELETE FROM giving_kiosks WHERE id=$1`, c.Param("id"))
 	if err != nil || tag.RowsAffected() == 0 {
-		fail(c, http.StatusNotFound, "Kiosk not found")
+		fail(c, http.StatusNotFound, "POS device not found")
 		return
 	}
-	h.audit(c, "KIOSK_REMOVED", "Removed kiosk", c.Param("id"))
-	c.JSON(http.StatusOK, gin.H{"message": "Kiosk removed"})
+	h.audit(c, "KIOSK_REMOVED", "Removed POS device", c.Param("id"))
+	c.JSON(http.StatusOK, gin.H{"message": "POS device removed"})
 }
 
 // ---------------------------------------------------------------------------

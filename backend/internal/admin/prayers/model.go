@@ -15,6 +15,9 @@ type Prayer struct {
 	CreatedAt  time.Time  `json:"createdAt"`
 	UpdatedAt  time.Time  `json:"updatedAt"`
 	ReviewedAt *time.Time `json:"reviewedAt,omitempty"`
+	Pinned     bool       `json:"pinned"`
+	// When its current period on the wall began (it leaves after the set number of days).
+	ShownFrom time.Time `json:"shownFrom"`
 }
 
 type UpdateRequest struct {

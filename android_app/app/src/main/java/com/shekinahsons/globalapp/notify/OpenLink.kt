@@ -18,6 +18,6 @@ object OpenLink {
         val uri=intent.data
         if(uri!=null && (uri.scheme!="shekinah" || uri.host!="open"))return
         val screen=uri?.getQueryParameter("screen") ?: intent.getStringExtra("open") ?: intent.getStringExtra("category") ?: return
-        if(screen in listOf("live","sermons","devotion","events","plans","library","updates","notifications")) pending=Target(screen,uri?.getQueryParameter("id") ?: intent.getStringExtra("id").orEmpty())
+        if(screen in listOf("live","sermons","devotion","events","plans","library","updates","notifications","prayer")) pending=Target(screen,uri?.getQueryParameter("id") ?: intent.getStringExtra("id").orEmpty())
     }
 }

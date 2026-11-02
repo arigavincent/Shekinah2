@@ -31,6 +31,8 @@ func (h Handler) Register(c *gin.Context) {
 		switch {
 		case errors.Is(err, ErrInvalidInput):
 			httpx.Error(c, http.StatusBadRequest, "invalid_input", fmt.Sprintf("name, valid email, and password of at least %d characters are required", h.service.MinPasswordLength(c.Request.Context())))
+		case errors.Is(err, ErrInvalidPhone):
+			httpx.Error(c, http.StatusBadRequest, "invalid_phone", "Enter a valid phone number, e.g. 0712 345 678")
 		case errors.Is(err, ErrEmailTaken):
 			httpx.Error(c, http.StatusConflict, "email_taken", "email is already registered")
 		default:

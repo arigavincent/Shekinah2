@@ -110,6 +110,7 @@ class MainActivity : ComponentActivity() {
                     onDispose { com.shekinahsons.globalapp.data.Api.onSecuritySignal = null }
                 }
                 if (session.member?.passwordResetRequired == true) com.shekinahsons.globalapp.ui.screens.AccountPage(session)
+                else if (session.needsPhone) com.shekinahsons.globalapp.ui.screens.PhoneRequiredPage(session)
                 else if (adminMode && session.hasStaffTools) com.shekinahsons.globalapp.admin.StaffConsole(
                     session,
                     openApp = { adminMode = false },
@@ -166,6 +167,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
             "plans" -> { com.shekinahsons.globalapp.notify.OpenLink.planId=target.id; nav.push(Route.Page("ReadingPlans")) }
             "library" -> { com.shekinahsons.globalapp.notify.OpenLink.bookId=target.id; nav.push(Route.Page("Library")) }
             "updates" -> nav.push(Route.Page("Updates"))
+            "prayer" -> nav.push(Route.Page("Prayer"))
             "security" -> nav.push(Route.Page("Security"))
             else -> nav.push(Route.Page("Notifications"))
         }
@@ -239,6 +241,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                     r.page, content, library, session, openVideo, openAudio,
                     openProfile = { nav.push(Route.Page("Profile")) },
                     openReference = openReference,
+                    openPage = { nav.push(Route.Page(it)) },
                 ) { nav.back() }
             }
           }

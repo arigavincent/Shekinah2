@@ -6,6 +6,7 @@ type Record = {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   occasion: string;
   date: string;
   method: string;
@@ -249,7 +250,7 @@ export function CheckInPage() {
                 <tr key={r.id}>
                   <td>
                     <strong>{r.name}</strong>
-                    <p className="cell-note">{r.email}</p>
+                    <p className="cell-note">{r.email}{r.phone ? ` · ${r.phone}` : ""}</p>
                   </td>
                   <td>{r.occasion}</td>
                   <td>{r.method}</td>

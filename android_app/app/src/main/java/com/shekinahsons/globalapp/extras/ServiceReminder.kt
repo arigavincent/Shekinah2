@@ -19,20 +19,32 @@ object ServiceReminder {
     private val pattern = Regex("""(sun|mon|tue|wed|thu|fri|sat)[a-z]*[ ,]+(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m""", RegexOption.IGNORE_CASE)
     private const val EARLY_MS = 15 * 60_000L
 
-    fun nextStart(text: String, now: Long = System.currentTimeMillis()): Long? {
-        val m = pattern.find(text) ?: return null
-        val day = days.indexOfFirst { it.startsWith(m.groupValues[1].lowercase()) }
-        var hour = m.groupValues[2].toInt() % 12
-        if (m.groupValues[4].equals("p", true)) hour += 12
-        val minute = m.groupValues[3].toIntOrNull() ?: 0
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = now
-            set(Calendar.HOUR_OF_DAY, hour); set(Calendar.MINUTE, minute); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-            val ahead = (day + 1 - get(Calendar.DAY_OF_WEEK) + 7) % 7
-            add(Calendar.DAY_OF_YEAR, ahead)
-            if (timeInMillis <= now) add(Calendar.DAY_OF_YEAR, 7)
-        }
-        return cal.timeInMillis
+    // Several services can be listed, e.g. "Sunday, 7:00 AM; Sunday, 10:00 AM;
+    // Wednesday, 6:00 PM". Times are Nairobi time, whatever the phone's zone.
+    private val nairobi = java.time.ZoneId.of("Africa/Nairobi")
+
+    fun nextStart(text: String, now: Long = System.currentTimeMillis()): Long? = next(text, now)?.first
+
+    // The soonest upcoming service and how it was written ("Sunday, 10:00 AM").
+    fun next(text: String, now: Long = System.currentTimeMillis()): Pair<Long, String>? =
+        pattern.findAll(text).mapNotNull { m ->
+            val day = days.indexOfFirst { it.startsWith(m.groupValues[1].lowercase()) }
+            if (day < 0) return@mapNotNull null
+            var hour = m.groupValues[2].toInt() % 12
+            if (m.groupValues[4].equals("p", true)) hour += 12
+            val minute = m.groupValues[3].toIntOrNull() ?: 0
+            val dow = java.time.DayOfWeek.of(if (day == 0) 7 else day)
+            val nowZ = java.time.Instant.ofEpochMilli(now).atZone(nairobi)
+            var at = nowZ.with(java.time.temporal.TemporalAdjusters.nextOrSame(dow)).withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+            if (!at.isAfter(nowZ)) at = at.plusWeeks(1)
+            val label = days[day].replaceFirstChar { it.uppercase() } + ", " + at.format(java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH))
+            at.toInstant().toEpochMilli() to label
+        }.minByOrNull { it.first }
+
+    // Days, hours, minutes and seconds left, for the ticking countdown.
+    fun parts(start: Long, now: Long = System.currentTimeMillis()): List<Long> {
+        val s = ((start - now) / 1000).coerceAtLeast(0)
+        return listOf(s / 86_400, s / 3600 % 24, s / 60 % 60, s % 60)
     }
 
     fun countdown(start: Long, now: Long = System.currentTimeMillis()): String {

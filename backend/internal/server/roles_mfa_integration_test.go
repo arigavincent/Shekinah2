@@ -59,7 +59,7 @@ func TestRoleDesignerTwoStepSignInAndIdleSignOut(t *testing.T) {
 	if _, err = db.Exec(ctx, `UPDATE users SET role='super_admin' WHERE email='vincent@example.com'`); err != nil {
 		t.Fatal(err)
 	}
-	reg := req("POST", "/auth/register", map[string]string{"name": "Media Lead", "email": "media.lead@example.invalid", "password": "MediaLead123!"}, "", 201)
+	reg := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Media Lead", "email": "media.lead@example.invalid", "password": "MediaLead123!"}, "", 201)
 	staff, staffID := reg["token"].(string), reg["user"].(map[string]any)["id"].(string)
 
 	// Roles: a role's permissions reach its holders and follow its edits.

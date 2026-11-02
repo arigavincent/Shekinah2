@@ -70,7 +70,7 @@ func TestSuperAdminToolsAccessSafetyAndEffects(t *testing.T) {
 	req("GET", "/admin/sa/groups", nil, admin, 200)
 
 	// Accounts: no shared default password; suspension signs the person out.
-	created := req("POST", "/admin/sa/users", map[string]any{"name": "New Usher", "email": "usher@example.invalid", "permissions": []string{"checkin:scan", "bogus"}}, admin, 201)
+	created := req("POST", "/admin/sa/users", map[string]any{"phone": "0733000000", "name": "New Usher", "email": "usher@example.invalid", "permissions": []string{"checkin:scan", "bogus"}}, admin, 201)
 	temp, _ := created["temporaryPassword"].(string)
 	if len(temp) < 12 || temp == "Shekinah2026!" {
 		t.Fatalf("expected a random temporary password, got %q", temp)
@@ -105,11 +105,11 @@ func TestSuperAdminToolsAccessSafetyAndEffects(t *testing.T) {
 
 	// Security policy applies to member sign-up.
 	req("PUT", "/admin/sa/system/security", map[string]any{"policies": map[string]int{"minPasswordLength": 14}}, admin, 200)
-	req("POST", "/auth/register", map[string]string{"name": "Short", "email": "short@example.invalid", "password": "Thirteen13!!!"}, "", 400)
+	req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Short", "email": "short@example.invalid", "password": "Thirteen13!!!"}, "", 400)
 	req("PUT", "/admin/sa/system/security", map[string]any{"policies": map[string]int{"minPasswordLength": 8}}, admin, 200)
 
 	// Feature switches are enforced for members and reported publicly.
-	reg := req("POST", "/auth/register", map[string]string{"name": "Member", "email": "member.sa@example.invalid", "password": "MemberPass123!"}, "", 201)
+	reg := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Member", "email": "member.sa@example.invalid", "password": "MemberPass123!"}, "", 201)
 	member, memberID := reg["token"].(string), reg["user"].(map[string]any)["id"].(string)
 	req("GET", "/community/messages", nil, member, 200)
 	req("PUT", "/admin/sa/system/modules", map[string]any{"modules": map[string]bool{"communityChat": false}}, admin, 200)
@@ -199,7 +199,7 @@ func TestSuperAdminToolsAccessSafetyAndEffects(t *testing.T) {
 	}
 
 	// Merging moves history; erasing keeps payments without personal details.
-	dup := req("POST", "/auth/register", map[string]string{"name": "Member Again", "email": "member.dup@example.invalid", "password": "MemberPass123!"}, "", 201)["user"].(map[string]any)["id"].(string)
+	dup := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Member Again", "email": "member.dup@example.invalid", "password": "MemberPass123!"}, "", 201)["user"].(map[string]any)["id"].(string)
 	if _, err = db.Exec(ctx, `INSERT INTO giving_transactions(id,user_id,amount,method,status,category,phone)VALUES('dup-gift',$1,300,'manual','success','Tithe','')`, dup); err != nil {
 		t.Fatal(err)
 	}

@@ -140,10 +140,11 @@ func (h Handler) Verify(c *gin.Context) {
 	var checkedInUserID string
 	var memberName string
 	var memberEmail string
+	var memberPhone string
 	err := h.db.QueryRow(
 		c.Request.Context(),
 		`
-			SELECT u.id::text, COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member'), u.email
+			SELECT u.id::text, COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member'), u.email, u.phone
 			FROM member_checkin_codes c
 			JOIN users u ON u.id = c.user_id
 			WHERE c.code = $1
@@ -152,7 +153,7 @@ func (h Handler) Verify(c *gin.Context) {
 			LIMIT 1
 		`,
 		code,
-	).Scan(&checkedInUserID, &memberName, &memberEmail)
+	).Scan(&checkedInUserID, &memberName, &memberEmail, &memberPhone)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Error(c, http.StatusNotFound, "checkin_code_not_found", "check-in code not found or expired")
@@ -224,6 +225,7 @@ func (h Handler) Verify(c *gin.Context) {
 		"userId":           checkedInUserID,
 		"name":             memberName,
 		"email":            memberEmail,
+		"phone":            memberPhone,
 		"checkedIn":        true,
 		"alreadyCheckedIn": alreadyCheckedIn,
 	})
@@ -238,6 +240,7 @@ func (h Handler) Recent(c *gin.Context) {
 				e.title,
 				COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member'),
 				u.email,
+				u.phone,
 				ch.source,
 				ch.notes,
 				ch.created_at,
@@ -257,10 +260,10 @@ func (h Handler) Recent(c *gin.Context) {
 
 	items := make([]gin.H, 0)
 	for rows.Next() {
-		var id, eventTitle, name, email, source, notes string
+		var id, eventTitle, name, email, phone, source, notes string
 		var createdAt time.Time
 		var updatedAt time.Time
-		if err := rows.Scan(&id, &eventTitle, &name, &email, &source, &notes, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&id, &eventTitle, &name, &email, &phone, &source, &notes, &createdAt, &updatedAt); err != nil {
 			httpx.Error(c, http.StatusInternalServerError, "checkins_failed", "failed to load event check-ins")
 			return
 		}
@@ -270,6 +273,7 @@ func (h Handler) Recent(c *gin.Context) {
 			"eventTitle": eventTitle,
 			"name":       name,
 			"email":      email,
+			"phone":      phone,
 			"source":     source,
 			"notes":      notes,
 			"createdAt":  createdAt.UTC().Format(time.RFC3339),

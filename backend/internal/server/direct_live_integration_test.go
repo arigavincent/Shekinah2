@@ -72,7 +72,7 @@ func TestDirectLivePermissionsOrderingReplayAndRecovery(t *testing.T) {
 	}
 	login := req("POST", "/auth/login", map[string]string{"email": "vincent@example.com", "password": "password123"}, "", 200)
 	admin := req("PATCH", "/auth/password", map[string]string{"currentPassword": "password123", "newPassword": "DirectBroadcast123!"}, login["token"].(string), 200)["token"].(string)
-	member := req("POST", "/auth/register", map[string]string{"name": "Viewer", "email": "direct-viewer@example.invalid", "password": "DirectViewer123!"}, "", 201)
+	member := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Viewer", "email": "direct-viewer@example.invalid", "password": "DirectViewer123!"}, "", 201)
 	token := member["token"].(string)
 	uid := member["user"].(map[string]any)["id"].(string)
 	live := req("POST", "/live/start", map[string]any{"title": "Direct paid test", "price": 200, "transport": "r2", "format": "mpegts"}, admin, 201)

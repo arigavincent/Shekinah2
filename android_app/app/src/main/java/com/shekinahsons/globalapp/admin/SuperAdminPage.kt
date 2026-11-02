@@ -99,7 +99,7 @@ internal fun SuperAdminPage() {
         "roles" to "Roles",
         "groups" to "Groups",
         "attendance" to "Attendance",
-        "kiosks" to "Kiosks",
+        "kiosks" to "POS",
         "templates" to "Comm Templates",
         "apikeys" to "API Keys",
         "webhooks" to "Webhooks",
@@ -460,12 +460,12 @@ internal fun SaKiosksPane() {
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("POS & Kiosks", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text("POS devices", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Text("+ Pair", color = Brand.Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showPair = true })
         }
         ErrorNote(error)
         if (loading) CircularProgressIndicator(color = Brand.Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        if (!loading && list.isEmpty()) Empty("No kiosks paired yet.")
+        if (!loading && list.isEmpty()) Empty("No POS devices paired yet.")
         list.forEach { k ->
             Row(
                 Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.9f).padding(14.dp),
@@ -500,10 +500,10 @@ internal fun SaKiosksPane() {
             AlertDialog(
                 onDismissRequest = { showPair = false },
                 containerColor = Color(0xFF1A1A1E),
-                title = { Text("Pair New Kiosk", color = Brand.White) },
+                title = { Text("Pair new POS device", color = Brand.White) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Field("KIOSK NAME", kioskName, { kioskName = it })
+                        Field("POS NAME", kioskName, { kioskName = it })
                         Field("LOCATION", kioskLoc, { kioskLoc = it })
                         Field("SERIAL NUMBER", kioskSerial, { kioskSerial = it })
                     }
@@ -880,7 +880,7 @@ internal fun SaModulesPane() {
         "volunteerScheduling" to "Volunteer Scheduling",
         "livestream" to "Livestream",
         "communityChat" to "Community Chat",
-        "attendanceKiosk" to "Attendance Kiosk",
+        "attendanceKiosk" to "Attendance POS",
         "taxStatements" to "Tax Statements",
     )
 

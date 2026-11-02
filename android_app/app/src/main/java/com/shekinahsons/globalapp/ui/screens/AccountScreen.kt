@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -177,6 +178,7 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
     var mode by remember { mutableStateOf(Mode.SignIn) }
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var needCode by remember { mutableStateOf(false) }
@@ -238,11 +240,13 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
                         Spacer(Modifier.height(12.dp))
                         Field("EMAIL", email, { email = it }, hint = "you@example.com", keyboard = KeyboardType.Email)
                         Spacer(Modifier.height(12.dp))
+                        Field("PHONE NUMBER", phone, { phone = it.take(20) }, hint = "0712 345 678", keyboard = KeyboardType.Phone)
+                        Spacer(Modifier.height(12.dp))
                         Field("PASSWORD", password, { password = it }, hint = "At least 8 characters", password = true)
                         ErrorNote(error)
                         Spacer(Modifier.height(18.dp))
-                        GoldButton("Create account", busy = busy, enabled = name.trim().length >= 2 && email.contains("@") && password.length >= 8) {
-                            run { session.register(name, email, password); onDone?.invoke() }
+                        GoldButton("Create account", busy = busy, enabled = name.trim().length >= 2 && email.contains("@") && phone.count(Char::isDigit) >= 9 && password.length >= 8) {
+                            run { session.register(name, email, phone, password); onDone?.invoke() }
                         }
                         Text("Your real name is shown with what you share, so the family knows who is speaking.",
                             style = Type.Meta, color = Brand.Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
@@ -276,5 +280,36 @@ private fun SignInFlow(session: Session, onDone: (() -> Unit)?) {
                 }
             }
         }
+    }
+}
+
+
+// Shown once to members who joined before a phone number was required.
+@Composable
+fun PhoneRequiredPage(session: Session) {
+    val scope = rememberCoroutineScope()
+    var phone by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxSize().background(Brand.Black).statusBarsPadding().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 22.dp, vertical = 28.dp)) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(painterResource(R.drawable.dove_mark), null, Modifier.size(70.dp))
+            Spacer(Modifier.height(14.dp))
+            Text("Add your phone number", style = Type.Title, color = Brand.White, textAlign = TextAlign.Center)
+            Text("Hi ${session.firstName}, the church now keeps a phone number for every member. It is shown on your check-ins and attendance so the church can reach you.",
+                style = Type.Body, color = Brand.Text2, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp, bottom = 22.dp))
+        }
+        Field("PHONE NUMBER", phone, { phone = it.take(20) }, hint = "0712 345 678", keyboard = KeyboardType.Phone)
+        ErrorNote(error)
+        Spacer(Modifier.height(18.dp))
+        GoldButton("Save and continue", busy = busy, enabled = phone.count(Char::isDigit) >= 9) {
+            scope.launch {
+                busy = true; error = null
+                runCatching { session.updatePhone(phone) }.onFailure { error = it.message }
+                busy = false
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        GhostButton("Sign out") { session.signOut() }
     }
 }

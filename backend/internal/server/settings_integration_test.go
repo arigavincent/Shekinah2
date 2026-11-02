@@ -47,7 +47,7 @@ func TestAdminRuntimeSMTPAndProductionSettings(t *testing.T) {
 	}
 	login := req("POST", "/auth/login", map[string]string{"email": "vincent@example.com", "password": "password123"}, "", 200)
 	admin := req("PATCH", "/auth/password", map[string]string{"currentPassword": "password123", "newPassword": "SettingsAdmin123!"}, login["token"].(string), 200)["token"].(string)
-	reg := req("POST", "/auth/register", map[string]string{"name": "Settings Member", "email": "settings.member@example.invalid", "password": "SettingsMember123!"}, "", 201)
+	reg := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Settings Member", "email": "settings.member@example.invalid", "password": "SettingsMember123!"}, "", 201)
 	member := reg["token"].(string)
 	id := reg["user"].(map[string]any)["id"].(string)
 	req("GET", "/admin/settings/smtp", nil, "", 401)

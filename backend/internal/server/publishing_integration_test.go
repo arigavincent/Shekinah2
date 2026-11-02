@@ -71,7 +71,7 @@ func TestPublishingRecoverySchedulingPermissionsAndReplayCatalogue(t *testing.T)
 	login := req("POST", "/auth/login", map[string]string{"email": "vincent@example.com", "password": "password123"}, "", 200)
 	admin := req("PATCH", "/auth/password", map[string]string{"currentPassword": "password123", "newPassword": "PublisherAdmin123!"}, login["token"].(string), 200)["token"].(string)
 	register := func(email string) (string, string) {
-		r := req("POST", "/auth/register", map[string]string{"name": "Publishing QA", "email": email, "password": "PublisherMember123!"}, "", 201)
+		r := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Publishing QA", "email": email, "password": "PublisherMember123!"}, "", 201)
 		return r["token"].(string), r["user"].(map[string]any)["id"].(string)
 	}
 	staff, staffID := register("publisher@example.invalid")

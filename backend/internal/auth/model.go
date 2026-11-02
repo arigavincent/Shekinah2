@@ -12,6 +12,7 @@ type User struct {
 	PasswordResetRequired bool
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
+	Phone                 string
 }
 
 type PasswordResetToken struct {
@@ -29,6 +30,7 @@ type PublicUser struct {
 	ID                    string `json:"id"`
 	Name                  string `json:"name"`
 	Email                 string `json:"email"`
+	Phone                 string `json:"phone"`
 	Role                  string `json:"role"`
 	IsActive              bool   `json:"isActive"`
 	PasswordResetRequired bool   `json:"passwordResetRequired"`
@@ -39,6 +41,7 @@ type RegisterRequest struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	Phone    string `json:"phone"`
 }
 
 type LoginRequest struct {
@@ -75,6 +78,7 @@ func ToPublicUser(user User) PublicUser {
 		ID:                    user.ID,
 		Name:                  user.Name,
 		Email:                 user.Email,
+		Phone:                 user.Phone,
 		Role:                  user.Role,
 		IsActive:              user.IsActive,
 		PasswordResetRequired: user.PasswordResetRequired,

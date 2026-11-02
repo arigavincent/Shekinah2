@@ -125,7 +125,7 @@ func TestProtectedOperationalIntegrationsAndPaymentCallbacks(t *testing.T) {
 	}
 	login := req("POST", "/auth/login", map[string]string{"email": "vincent@example.com", "password": "password123"}, "", 200)
 	admin := req("PATCH", "/auth/password", map[string]string{"currentPassword": "password123", "newPassword": "ProviderAdmin123!"}, login["token"].(string), 200)["token"].(string)
-	reg := req("POST", "/auth/register", map[string]string{"name": "Provider Member", "email": "provider.member@example.invalid", "password": "ProviderMember123!"}, "", 201)
+	reg := req("POST", "/auth/register", map[string]string{"phone": "0712345678", "name": "Provider Member", "email": "provider.member@example.invalid", "password": "ProviderMember123!"}, "", 201)
 	member := reg["token"].(string)
 	req("GET", "/admin/settings/integrations", nil, "", 401)
 	req("GET", "/admin/settings/integrations", nil, member, 403)

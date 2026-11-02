@@ -52,12 +52,18 @@ func (s Service) Register(ctx context.Context, req RegisterRequest) (AuthRespons
 		return AuthResponse{}, ErrInvalidInput
 	}
 
+	// A phone number is required: check-ins and attendance lists carry it.
+	phone, err := NormalizePhone(req.Phone)
+	if err != nil {
+		return AuthResponse{}, ErrInvalidPhone
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return AuthResponse{}, fmt.Errorf("hash password: %w", err)
 	}
 
-	user, err := s.repository.CreateUser(ctx, name, email, string(hash))
+	user, err := s.repository.CreateUser(ctx, name, email, string(hash), phone)
 	if err != nil {
 		return AuthResponse{}, err
 	}
