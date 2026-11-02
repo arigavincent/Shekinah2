@@ -233,8 +233,8 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
                     Tab.Devotions -> DevotionsScreen(content) { nav.push(Route.DevotionRead(it)) }
                     Tab.Live -> com.shekinahsons.globalapp.live.LiveTab(content, session, openGoLive = { nav.push(Route.GoLive) }, openProfile = { nav.push(Route.Page("Profile")) })
                 }
-                is Route.Video -> VideoPlayerScreen(r.sermon, r.queue, library, onOpen = { nav.back(); nav.push(Route.Video(it, r.queue)) }, onBack = { nav.back() })
-                is Route.Audio -> AudioPlayerScreen(r.sermon, r.queue, audio) { nav.back() }
+                is Route.Video -> VideoPlayerScreen(r.sermon, r.queue, library, onOpen = { nav.back(); nav.push(Route.Video(it, r.queue)) }, openReference = openReference, onBack = { nav.back() })
+                is Route.Audio -> AudioPlayerScreen(r.sermon, r.queue, audio, openReference) { nav.back() }
                 is Route.DevotionRead -> DevotionReader(r.devotion) { nav.back() }
                 Route.GoLive -> com.shekinahsons.globalapp.live.GoLiveScreen(session) { nav.back(); refresh() }
                 is Route.Page -> MenuPage(

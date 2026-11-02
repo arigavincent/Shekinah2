@@ -62,6 +62,8 @@ data class Sermon(
     val duration: String = "",
     val description: String = "",
     val mediaUrl: String = "",
+    // Set when the sermon is a YouTube link: it plays in YouTube's player.
+    val youtubeId: String = "",
 )
 
 @Serializable

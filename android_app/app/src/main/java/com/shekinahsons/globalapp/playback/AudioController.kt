@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
@@ -33,6 +34,9 @@ class AudioController(
     var isBuffering by mutableStateOf(false); private set
     var position by mutableLongStateOf(0L); private set
     var duration by mutableLongStateOf(0L); private set
+    var shuffle by mutableStateOf(false); private set
+    // Player.REPEAT_MODE_OFF, _ALL (the whole queue) or _ONE (this sermon).
+    var repeat by mutableIntStateOf(Player.REPEAT_MODE_OFF); private set
     private var queue: List<Sermon> = emptyList()
 
     fun connect() {
@@ -56,6 +60,8 @@ class AudioController(
         isBuffering = c.playbackState == Player.STATE_BUFFERING
         position = c.currentPosition.coerceAtLeast(0)
         duration = c.duration.takeIf { it > 0 } ?: 0
+        shuffle = c.shuffleModeEnabled
+        repeat = c.repeatMode
         if (queue.isNotEmpty()) current = queue.getOrNull(c.currentMediaItemIndex) ?: current
         // Save progress every few seconds while playing, and on pause.
         val now = System.currentTimeMillis()
@@ -93,6 +99,13 @@ class AudioController(
     fun forward30() = controller?.seekForward()
     fun next() = controller?.seekToNextMediaItem()
     fun previous() = controller?.seekToPreviousMediaItem()
+    fun toggleShuffle() { controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled; shuffle = it.shuffleModeEnabled } }
+    fun cycleRepeat() {
+        controller?.let {
+            it.repeatMode = when (it.repeatMode) { Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL; Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF }
+            repeat = it.repeatMode
+        }
+    }
 }
 
 private fun Sermon.toMediaItem(uri: String) = MediaItem.Builder()

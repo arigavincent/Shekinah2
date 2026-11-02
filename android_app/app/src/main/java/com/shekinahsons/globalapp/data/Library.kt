@@ -35,7 +35,8 @@ class Library(private val context: Context) {
         VaultFiles.has(context,s.id) -> VaultFiles.uri(s.id)
         else -> s.mediaUrl
     }
-    fun download(s: Sermon) { remember(s); if(s.mediaUrl.isNotBlank() && !isDownloaded(s)) Downloads.start(context,vaultId(s),s.mediaUrl,if(s.id.startsWith("replay-")) Api.token else null) }
+    // YouTube sermons can only be watched in YouTube's player, never saved.
+    fun download(s: Sermon) { remember(s); if(s.mediaUrl.isNotBlank() && s.youtubeId.isBlank() && !isDownloaded(s)) Downloads.start(context,vaultId(s),s.mediaUrl,if(s.id.startsWith("replay-")) Api.token else null) }
     fun pause(s: Sermon) = Downloads.pause(context,vaultId(s))
     fun cancel(s: Sermon) { scope.launch { Downloads.cancel(context,vaultId(s)) } }
     fun delete(s: Sermon) { scope.launch { Downloads.cancel(context,vaultId(s)); VaultFiles.delete(context,s.id); version++ } }

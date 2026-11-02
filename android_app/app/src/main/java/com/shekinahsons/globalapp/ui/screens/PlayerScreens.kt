@@ -5,6 +5,9 @@ import android.content.pm.ActivityInfo
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +29,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Forward30
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.Notes
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -68,6 +75,7 @@ import androidx.media3.ui.PlayerView
 import com.shekinahsons.globalapp.data.Sermon
 import com.shekinahsons.globalapp.playback.AudioController
 import com.shekinahsons.globalapp.ui.components.AmbientGlow
+import com.shekinahsons.globalapp.ui.components.glass
 import com.shekinahsons.globalapp.ui.components.AudioCover
 import com.shekinahsons.globalapp.ui.components.Breathing
 import com.shekinahsons.globalapp.ui.components.ColorGlow
@@ -89,7 +97,7 @@ private fun clock(ms: Long): String {
 }
 
 @Composable
-fun AudioPlayerScreen(sermon: Sermon, queue: List<Sermon>, audio: AudioController, onBack: () -> Unit) {
+fun AudioPlayerScreen(sermon: Sermon, queue: List<Sermon>, audio: AudioController, openReference: (String) -> Unit = {}, onBack: () -> Unit) {
     LaunchedEffect(sermon.id) { audio.play(sermon, queue) }
     LaunchedEffect(Unit) { while (true) { audio.tick(); delay(500) } }
     val now = audio.current ?: sermon
@@ -138,8 +146,37 @@ fun AudioPlayerScreen(sermon: Sermon, queue: List<Sermon>, audio: AudioControlle
                     RoundIcon(Icons.Rounded.Forward30, "Forward 30 seconds", 30) { audio.forward30() }
                     RoundIcon(Icons.Rounded.SkipNext, "Next", 26) { audio.next() }
                 }
+                Spacer(Modifier.height(10.dp))
+                // Shuffle, repeat, playlists and notes.
+                var notesOpen by remember { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Shuffle, if (audio.shuffle) "Shuffle on" else "Shuffle off", tint = if (audio.shuffle) Brand.Gold else Brand.Text2,
+                        modifier = Modifier.size(44.dp).clip(CircleShape).clickable { audio.toggleShuffle() }.padding(10.dp))
+                    AddToPlaylistChip(now)
+                    Row(Modifier.clip(RoundedCornerShape(50)).glass().clickable { notesOpen = true }.padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Notes, null, tint = Brand.GoldLight, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp)); Text("Notes", color = Brand.White, fontSize = 13.sp)
+                    }
+                    Icon(if (audio.repeat == androidx.media3.common.Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                        when (audio.repeat) { androidx.media3.common.Player.REPEAT_MODE_ALL -> "Repeat all"; androidx.media3.common.Player.REPEAT_MODE_ONE -> "Repeat this sermon"; else -> "Repeat off" },
+                        tint = if (audio.repeat != androidx.media3.common.Player.REPEAT_MODE_OFF) Brand.Gold else Brand.Text2,
+                        modifier = Modifier.size(44.dp).clip(CircleShape).clickable { audio.cycleRepeat() }.padding(10.dp))
+                }
+                if (notesOpen) NotesSheet(now, openReference) { notesOpen = false }
             }
             Spacer(Modifier.weight(0.7f))
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun NotesSheet(sermon: Sermon, openReference: (String) -> Unit, close: () -> Unit) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = close, containerColor = Color(0xFF16161A)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
+            Text(sermon.title, style = Type.Title, color = Brand.White, modifier = Modifier.padding(horizontal = 20.dp))
+            SermonNotesSection(sermon) { ref -> close(); openReference(ref) }
+            if (sermon.description.isBlank()) Text("Notes appear here when the church adds them to this sermon.", style = Type.Body, color = Brand.Text2, modifier = Modifier.padding(20.dp))
         }
     }
 }

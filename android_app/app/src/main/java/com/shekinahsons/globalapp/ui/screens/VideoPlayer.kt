@@ -129,7 +129,11 @@ private fun clockOf(ms: Long): String {
 // fill-the-screen, mini player, reconnecting on weak networks, and the next
 // sermon counting down when one ends.
 @Composable
-fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onOpen: (Sermon) -> Unit, onBack: () -> Unit) {
+fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onOpen: (Sermon) -> Unit, openReference: (String) -> Unit = {}, onBack: () -> Unit) {
+    if (sermon.youtubeId.isNotBlank()) {
+        YouTubeSermonScreen(sermon, queue, library, openReference, onOpen, onBack)
+        return
+    }
     if (sermon.replayId.isNotBlank()) {
         com.shekinahsons.globalapp.live.ReplaySermon(sermon, library, onBack)
         return
@@ -428,6 +432,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
                     ActionChip(Icons.Rounded.PictureInPictureAlt, "Mini player") { enterPip(activity) }
                     ActionChip(Icons.Rounded.Fullscreen, "Full screen") { fullscreen = true }
                     ActionChip(if (saved) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder, if (saved) "Saved" else "Save", saved) { library.toggleSaved(sermon.id) }
+                    AddToPlaylistChip(sermon)
                     ActionChip(if (done) Icons.Rounded.DownloadDone else Icons.Outlined.DownloadForOffline, if (busy) "Downloading ${((library.downloading[sermon.id] ?: 0f) * 100).toInt()}%" else if (done) "Downloaded" else "Download", done) {
                         if (!busy && !done) library.download(sermon)
                     }
@@ -438,9 +443,7 @@ fun VideoPlayerScreen(sermon: Sermon, queue: List<Sermon>, library: Library, onO
                     }
                 }
             }
-            if (sermon.description.isNotBlank()) {
-                item { Text(sermon.description, style = Type.Body, color = Brand.Text2, modifier = Modifier.padding(horizontal = 20.dp)) }
-            }
+            item { SermonNotesSection(sermon, openReference) }
             if (upNext.isNotEmpty()) {
                 item { Text("Up next", style = Type.Title, color = Brand.White, modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 10.dp)) }
                 items(upNext, key = { it.id }) { s -> SermonRow(s) { onOpen(s) } }

@@ -9,6 +9,8 @@ import { Upload } from "tus-js-client";
 
 import {
   createSermon,
+  getSermonNotes,
+  saveSermonNotes,
   deleteSermon,
   getPodcastSettings,
   getStorageStatus,
@@ -29,6 +31,7 @@ import {
 } from "../api/adminSermonsApi";
 import { uploadMedia, type MediaKind } from "../api/adminMediaApi";
 import { ServiceRecordings } from "../components/ServiceRecordings";
+import { ChurchPlaylists } from "../components/ChurchPlaylists";
 import { BatchUploadDialog, type BatchField } from "../components/BatchUploadDialog";
 import { SermonCategoriesCard } from "../components/SermonCategoriesCard";
 import { InlineAlert } from "../components/InlineAlert";
@@ -127,6 +130,7 @@ export function SermonsPage() {
   const [sermons, setSermons] = useState<Sermon[]>([]);
   const [form, setForm] = useState<SermonPayload>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [notes, setNotes] = useState("");
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "video" | "audio">("all");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
@@ -499,6 +503,7 @@ export function SermonsPage() {
 
   function resetForm() {
     setEditingId(null);
+    setNotes("");
     setForm(makeEmptyForm());
   }
 
@@ -635,6 +640,8 @@ export function SermonsPage() {
 
   function startEdit(sermon: Sermon) {
     setEditingId(sermon.id);
+    setNotes("");
+    getSermonNotes(sermon.id).then(r => setNotes(r.notes || "")).catch(() => undefined);
     setForm({
       type: sermon.type,
       externalId: sermon.externalId || "",isPublished:sermon.isPublished,notifyOnPublish:sermon.notifyOnPublish,
@@ -690,7 +697,7 @@ export function SermonsPage() {
     if (!isValidAssetReference(form.thumbnailUrl)) {
       return "Thumbnail must be an uploaded file path or a valid http(s) URL.";
     }
-    if (!form.description.trim()) return "Description is required.";
+    if (!form.description.trim()) return "Overview is required.";
 
     const mediaUrl = form.mediaUrl.trim().toLowerCase();
     if (!mediaUrl) return "Media URL is required. Upload audio/video or paste a YouTube/direct media URL.";
@@ -793,13 +800,16 @@ export function SermonsPage() {
     setError("");
 
     try {
+      let savedId = editingId;
       if (editingId) {
         await updateSermon(editingId, form);
       } else {
-        await createSermon(form);
+        savedId = (await createSermon(form)).sermon.id;
       }
+      if (savedId && (notes.trim() || editingId)) await saveSermonNotes(savedId, notes);
 
       resetForm();
+      setNotes("");
       await load();
       showToast({
         title: editingId ? "Sermon updated" : "Sermon created",
@@ -1050,9 +1060,12 @@ export function SermonsPage() {
             <input
               value={form.mediaUrl}
               onChange={event => updateField("mediaUrl", event.target.value)}
-              placeholder="/uploads/media/file.mp4, /uploads/media/file.mp3, or https://..."
+              placeholder="/uploads/media/file.mp4, /uploads/media/file.mp3, https://... or a YouTube link"
             />
           </label>
+          {/youtu\.?be/i.test(form.mediaUrl) ? (
+            <p className="small-muted">YouTube link: members watch it in YouTube's player inside the app, with its YouTube thumbnail unless you upload a cover. YouTube sermons can't be downloaded for offline listening.</p>
+          ) : null}
 
           <p className="small-muted">To upload new audio or video files, use Single upload or Batch upload above. This editor accepts links to existing media.</p>
 
@@ -1092,12 +1105,22 @@ export function SermonsPage() {
           ) : null}
 
           <label>
-            Description
+            Overview
             <textarea
               value={form.description}
               onChange={event => updateField("description", event.target.value)}
-              placeholder="Short sermon description"
+              placeholder="A short overview of the message"
               rows={5}
+            />
+          </label>
+
+          <label>
+            Sermon notes
+            <textarea
+              value={notes}
+              onChange={event => setNotes(event.target.value)}
+              placeholder={"Key points and scriptures, shown under the player.\nStart a line with - for a bullet.\nBible references like John 3:16 become tappable in the app."}
+              rows={8}
             />
           </label>
 
@@ -1577,6 +1600,7 @@ export function SermonsPage() {
         </div>
       ) : null}
 
+      <ChurchPlaylists />
       <ServiceRecordings />
     </main>
   );

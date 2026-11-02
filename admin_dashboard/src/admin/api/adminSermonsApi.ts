@@ -252,3 +252,15 @@ export function deleteSermonCategory(id: string) {
     token: adminToken()
   });
 }
+
+export function getSermonNotes(id: string) {
+  return apiRequest<{ notes: string }>(`/api/v1/sermons/${encodeURIComponent(id)}/notes`, { token: adminToken() });
+}
+
+export function saveSermonNotes(id: string, notes: string) {
+  return apiRequest<{ notes: string }>(`/api/v1/admin/sermons/${encodeURIComponent(id)}/notes`, {
+    method: "PUT",
+    token: adminToken(),
+    body: { notes }
+  });
+}

@@ -89,7 +89,7 @@ import com.shekinahsons.globalapp.ui.theme.Brand
 import com.shekinahsons.globalapp.ui.theme.Inter
 import com.shekinahsons.globalapp.ui.theme.Type
 
-private val tabs = listOf("Video", "Audio", "Categories", "Recaps")
+private val tabs = listOf("Video", "Audio", "Playlists", "Categories", "Recaps")
 private enum class Sort(val label: String) { Newest("Newest first"), Oldest("Oldest first"), Title("Title A–Z") }
 private enum class Shelf { All, Saved, Downloaded }
 
@@ -136,7 +136,7 @@ fun SermonsScreen(
         }
         UnderlineTabs(tab) { tab = it; if (it != "Video") category = null }
 
-        val searchable = tab != "Categories"
+        val searchable = tab != "Categories" && tab != "Playlists"
         if (searchable) {
             SearchBox(query, if (tab == "Video") "Search videos..." else if (tab == "Audio") "Search all sermons..." else "Search recaps...", sort, onSort = { sort = it }) { query = it }
         }
@@ -167,6 +167,7 @@ fun SermonsScreen(
                     }
                 }
                 "Categories" -> CategoriesGrid(content) { name -> category = name; tab = "Video" }
+                "Playlists" -> PlaylistsTab(content, library, openVideo, openAudio, NavBarHeight + 110.dp)
                 "Recaps" -> {
                     val list = content.clips.filter { query.isBlank() || it.title.contains(query, true) }
                     LazyVerticalGrid(
@@ -207,10 +208,10 @@ private fun UnderlineTabs(selected: String, onSelect: (String) -> Unit) {
                 val on = t == selected
                 val bar by animateDpAsState(if (on) 28.dp else 0.dp, label = "bar")
                 Column(
-                    Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSelect(t) }.padding(horizontal = 8.dp, vertical = 10.dp),
+                    Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSelect(t) }.padding(horizontal = 5.dp, vertical = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(t, color = if (on) Brand.Gold else Brand.Text2, fontFamily = Inter, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, fontSize = 15.sp)
+                    Text(t, color = if (on) Brand.Gold else Brand.Text2, fontFamily = Inter, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, fontSize = 14.sp, maxLines = 1)
                     Spacer(Modifier.height(8.dp))
                     Box(Modifier.width(bar).height(3.dp).background(Brand.GoldGradient, RoundedCornerShape(2.dp)))
                 }

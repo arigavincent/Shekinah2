@@ -64,6 +64,8 @@ type Sermon struct {
 	MediaURL    string `json:"mediaUrl,omitempty"`
 	Source      string `json:"source,omitempty"`
 	StreamUID   string `json:"streamUid,omitempty"`
+	// Set when the media link is a YouTube video: the app plays it in YouTube's player.
+	YouTubeID string `json:"youtubeId,omitempty"`
 }
 
 type Category struct {

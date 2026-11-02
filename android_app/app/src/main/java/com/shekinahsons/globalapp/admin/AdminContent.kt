@@ -22,7 +22,7 @@ import java.time.Instant
 private data class ContentField(val key:String,val label:String,val long:Boolean=false)
 private fun JsonObject.text(key:String)=(get(key) as? JsonPrimitive)?.content.orEmpty()
 private fun fields(kind:String):List<ContentField> = when(kind) {
- "sermons" -> listOf(ContentField("title","Title"),ContentField("speaker","Speaker"),ContentField("code","Sermon code"),ContentField("sermonDate","Date (YYYY-MM-DD)"),ContentField("publishedAt","Publish at (ISO date/time)"),ContentField("mediaUrl","Video or audio URL"),ContentField("thumbnailUrl","Cover image URL"),ContentField("duration","Duration"),ContentField("description","Description",true))
+ "sermons" -> listOf(ContentField("title","Title"),ContentField("speaker","Speaker"),ContentField("code","Sermon code"),ContentField("sermonDate","Date (YYYY-MM-DD)"),ContentField("publishedAt","Publish at (ISO date/time)"),ContentField("mediaUrl","Video or audio link (a YouTube link works too)"),ContentField("thumbnailUrl","Cover image URL"),ContentField("duration","Duration"),ContentField("description","Overview",true))
  "devotions" -> listOf(ContentField("title","Title"),ContentField("excerpt","Excerpt",true),ContentField("devotionDate","Date (YYYY-MM-DD)"),ContentField("publishedAt","Publish at (ISO date/time)"),ContentField("imageUrl","Image URL"),ContentField("body","Devotional body",true))
  "updates" -> listOf(ContentField("title","Title"),ContentField("excerpt","Message",true),ContentField("updateDate","Date (YYYY-MM-DD)"),ContentField("imageUrl","Image URL"))
  else -> listOf(ContentField("title","Title"),ContentField("description","Description",true),ContentField("imageUrl","Image URL"))
@@ -37,13 +37,13 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
  val endpoint=if(kind=="plans") "reading-plans" else kind
  val key=if(kind=="plans") "plans" else kind
  LaunchedEffect(kind,tick){runCatching{(Api.get("/admin/$endpoint")[key] as? JsonArray)?.map{it.jsonObject}.orEmpty()}.onSuccess{records=it;error=null}.onFailure{error=it.message};if(kind=="sermons") runCatching{(Api.get("/admin/sermon-categories")["categories"] as? JsonArray)?.map{it.jsonObject}.orEmpty()}.onSuccess{categories=it}}
- fun begin(item:JsonObject){edit=item;values.clear();fields(kind).forEach{values[it.key]=item.text(it.key)};values["type"]=item.text("type").ifBlank{"video"};values["categoryId"]=item.text("categoryId");values["isActive"]=item.text("isActive").ifBlank{"true"};values["isPublished"]=item.text("isPublished").ifBlank{"true"};values["notifyOnPublish"]=item.text("notifyOnPublish").ifBlank{"false"};days.clear();days.addAll((item["days"] as? JsonArray)?.map{it.jsonObject}.orEmpty());if(item.text("id").isBlank()){values["publishedAt"]=Instant.now().toString();values["${if(kind=="devotions")"devotion" else if(kind=="updates")"update" else "sermon"}Date"]=LocalDate.now(java.time.ZoneId.of("Africa/Nairobi")).toString()}}
+ fun begin(item:JsonObject){edit=item;values.clear();fields(kind).forEach{values[it.key]=item.text(it.key)};values["type"]=item.text("type").ifBlank{"video"};values["categoryId"]=item.text("categoryId");values["isActive"]=item.text("isActive").ifBlank{"true"};values["isPublished"]=item.text("isPublished").ifBlank{"true"};values["notifyOnPublish"]=item.text("notifyOnPublish").ifBlank{"false"};days.clear();days.addAll((item["days"] as? JsonArray)?.map{it.jsonObject}.orEmpty());if(kind=="sermons"){values["notes"]="";if(item.text("id").isNotBlank())scope.launch{runCatching{Api.get("/sermons/${item.text("id")}/notes")["notes"]?.jsonPrimitive?.content.orEmpty()}.onSuccess{values["notes"]=it}}};if(item.text("id").isBlank()){values["publishedAt"]=Instant.now().toString();values["${if(kind=="devotions")"devotion" else if(kind=="updates")"update" else "sermon"}Date"]=LocalDate.now(java.time.ZoneId.of("Africa/Nairobi")).toString()}}
  Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
   ErrorNote(error)
   if(edit==null){if(kind=="sermons")BatchPublishingPane("sermons")
  GoldButton("Add ${when(kind){"plans"->"reading plan";"updates"->"update";"devotions"->"devotion";else->"sermon"}} "){begin(JsonObject(emptyMap()))}
    records.forEach{item->Column(Modifier.fillMaxWidth().glass().clickable{begin(item)}.padding(16.dp)){Text(item.text("title"),style=Type.CardTitle,color=Brand.White);Text("Edit",style=Type.Meta,color=Brand.Gold)}}
-   if(kind=="sermons")AdminReplaysPane()
+   if(kind=="sermons"){AdminPlaylistsPane();AdminReplaysPane()}
   } else {
    Text(if(edit!!.text("id").isBlank())"New content" else "Edit content",style=Type.Title,color=Brand.White)
    fields(kind).forEach{field->when{
@@ -61,6 +61,8 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
     else->Field(field.label.uppercase(),values[field.key].orEmpty(),{values[field.key]=it},singleLine=!field.long,minHeight=if(field.long)120.dp else 52.dp)
    }}
    if(kind=="sermons") {
+    if(values["mediaUrl"].orEmpty().contains("youtu"))Text("YouTube link: members watch it in YouTube's player inside the app. It can't be downloaded for offline.",style=Type.Meta,color=Brand.GoldLight)
+    Field("SERMON NOTES",values["notes"].orEmpty(),{values["notes"]=it},hint="Key points and scriptures. Start a line with - for a bullet. Bible references like John 3:16 become tappable.",singleLine=false,minHeight=160.dp)
     ToggleRow("Publish on release","",values["isPublished"]=="true"){values["isPublished"]=it.toString()}
     ToggleRow("Notify members","Keep off for backlog imports",values["notifyOnPublish"]=="true"){values["notifyOnPublish"]=it.toString()}
     Row(horizontalArrangement=Arrangement.spacedBy(16.dp)){listOf("video","audio").forEach{type->Text(type.uppercase(),color=if(values["type"]==type)Brand.Gold else Brand.Text2,modifier=Modifier.clickable{values["type"]=type}.padding(10.dp))}}
@@ -81,7 +83,12 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
     val body=values.mapValues{it.value as Any}.toMutableMap()
     if(kind=="plans"){body["isActive"]=values["isActive"]=="true";body["days"]=days.toList();body["durationDays"]=days.size}
     if(kind=="sermons"){body["source"]=edit!!.text("source").ifBlank{"manual"};body["status"]=edit!!.text("status").ifBlank{"ready"};body["isLive"]=false;body["isPublished"]=values["isPublished"]=="true";body["notifyOnPublish"]=values["notifyOnPublish"]=="true"}
-    runCatching{val id=edit!!.text("id");if(id.isBlank())Api.post("/admin/$endpoint",body) else Api.patch("/admin/$endpoint/$id",body)}.onSuccess{edit=null;tick++}.onFailure{error=it.message};busy=false
+    val notes=body.remove("notes") as? String
+    runCatching{
+     val id=edit!!.text("id")
+     val saved=if(id.isBlank())Api.post("/admin/$endpoint",body) else Api.patch("/admin/$endpoint/$id",body)
+     if(kind=="sermons"&&notes!=null){val sid=id.ifBlank{(saved["sermon"] as? JsonObject)?.text("id").orEmpty()};if(sid.isNotBlank())Api.put("/admin/sermons/$sid/notes",mapOf("notes" to notes))}
+    }.onSuccess{edit=null;tick++}.onFailure{error=it.message};busy=false
    }}
    GhostButton("Cancel"){edit=null;error=null}
    if(edit!!.text("id").isNotBlank()) GhostButton("Delete"){confirm=true}

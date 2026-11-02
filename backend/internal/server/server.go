@@ -35,10 +35,12 @@ import (
 	"github.com/ariga/shekinah-backend/internal/notifications"
 	"github.com/ariga/shekinah-backend/internal/overview"
 	"github.com/ariga/shekinah-backend/internal/permissions"
+	"github.com/ariga/shekinah-backend/internal/playlists"
 	"github.com/ariga/shekinah-backend/internal/prayers"
 	"github.com/ariga/shekinah-backend/internal/privatechat"
 	"github.com/ariga/shekinah-backend/internal/readingplans"
 	"github.com/ariga/shekinah-backend/internal/sermonmedia"
+	"github.com/ariga/shekinah-backend/internal/sermonnotes"
 	"github.com/ariga/shekinah-backend/internal/serve"
 	"github.com/ariga/shekinah-backend/internal/settings"
 	"github.com/ariga/shekinah-backend/internal/testimonies"
@@ -141,6 +143,8 @@ func newRouter(cfg config.Config, db *pgxpool.Pool, background context.Context) 
 	adminMediaHandler := adminmedia.NewHandler().WithIntegrations(providers)
 	givingHandler := giving.NewHandler(db, cfg.JWTSecret).WithProviderClient(cfg.ProviderHTTPClient)
 	notificationHandler := notifications.NewHandler(db).WithIntegrations(providers)
+	sermonNotes := sermonnotes.NewHandler(db)
+	playlistHandler := playlists.NewHandler(db)
 	prayerHandler := prayers.NewHandler(db).WithReminder(func(ctx context.Context, userID, title, body string, data map[string]interface{}) {
 		_, _ = notificationHandler.Notify(ctx, notifications.BroadcastRequest{Title: title, Body: body, Category: "general", Data: data,
 			UserIDs: []string{userID}, AudienceLabel: "Prayer request owner", SentBy: "Prayer wall"})
@@ -183,6 +187,11 @@ func newRouter(cfg config.Config, db *pgxpool.Pool, background context.Context) 
 	{
 		api.GET("/healthz", health.HandleHealthz(cfg, db))
 		api.GET("/home", contentHandler.Home)
+		api.GET("/sermons/:id/notes", sermonNotes.Get)
+		api.GET("/playlists", auth.OptionalAuth(authService), playlistHandler.List)
+		api.POST("/playlists", auth.RequireAuth(authService), playlistHandler.Create)
+		api.PATCH("/playlists/:id", auth.RequireAuth(authService), playlistHandler.Update)
+		api.DELETE("/playlists/:id", auth.RequireAuth(authService), playlistHandler.Delete)
 		api.POST("/giving/mpesa/stk-push", auth.RequireAuth(authService), givingHandler.STKPush)
 		api.POST("/giving/mpesa/callback", givingHandler.Callback)
 		api.POST("/giving/card/checkout", auth.RequireAuth(authService), givingHandler.CardCheckout)
@@ -325,6 +334,11 @@ func newRouter(cfg config.Config, db *pgxpool.Pool, background context.Context) 
 			adminGroup.PATCH("/settings/serve", settingsHandler.AdminUpdateServe)
 
 			adminGroup.GET("/sermons", adminSermonHandler.List)
+			adminGroup.PUT("/sermons/:id/notes", sermonNotes.Save)
+			adminGroup.GET("/playlists", playlistHandler.ListOfficial)
+			adminGroup.POST("/playlists", playlistHandler.CreateOfficial)
+			adminGroup.PATCH("/playlists/:id", playlistHandler.UpdateOfficial)
+			adminGroup.DELETE("/playlists/:id", playlistHandler.DeleteOfficial)
 			adminGroup.POST("/sermons", adminSermonHandler.Create)
 			adminGroup.POST("/sermons/import/preview", adminSermonHandler.PreviewImport)
 			adminGroup.POST("/sermons/import", adminSermonHandler.Import)

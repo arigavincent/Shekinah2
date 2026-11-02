@@ -29,6 +29,14 @@ func (h Handler) Home(c *gin.Context) {
 
 	// Sermons without an uploaded cover get the bright automatic one.
 	for i, s := range response.Sermons {
+		if id := YouTubeID(s.MediaURL); id != "" {
+			response.Sermons[i].YouTubeID = id
+			response.Sermons[i].Type = "video"
+			if strings.TrimSpace(s.Thumbnail) == "" {
+				response.Sermons[i].Thumbnail = "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg"
+			}
+			continue
+		}
 		if strings.TrimSpace(s.Thumbnail) == "" && !strings.HasPrefix(s.ID, "replay-") {
 			sum := sha1.Sum([]byte(s.Title + "|" + s.Speaker + "|" + s.Type))
 			response.Sermons[i].Thumbnail = baseURL(c) + "/api/v1/covers/sermons/" + url.PathEscape(s.ID) + ".jpg?v=" + hex.EncodeToString(sum[:4])
