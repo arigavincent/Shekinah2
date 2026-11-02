@@ -18,7 +18,7 @@ import (
 // GET /admin/replays
 func (h *Handler) AdminReplays(c *gin.Context) {
 	rows, err := h.db.Query(c.Request.Context(), `SELECT l.id, l.title, a.description, l.price, l.started_at, a.status, a.thumbnail_url, a.thumbnail_custom,
-			ROUND(COALESCE((SELECT SUM(s.duration) FROM live_segments s WHERE s.session_id=l.id AND s.ready AND s.sequence>=0),0))::int
+			GREATEST(a.duration_seconds, ROUND(COALESCE((SELECT SUM(s.duration) FROM live_segments s WHERE s.session_id=l.id AND s.ready AND s.sequence>=0),0))::int)
 		FROM live_sessions l JOIN live_archives a ON a.session_id=l.id WHERE l.status='ended' ORDER BY l.started_at DESC NULLS LAST LIMIT 300`)
 	if err != nil {
 		c.JSON(500, gin.H{"message": "Could not load recordings"})

@@ -370,27 +370,34 @@ private fun LinkedText(text: String, bible: com.shekinahsons.globalapp.bible.Bib
 
 // ---------------- YouTube sermons ----------------
 
-// Plays a YouTube video with YouTube's own player, inside the app.
+// Plays a YouTube video with YouTube's own player, inside the app. The embed
+// page is loaded directly with a referrer: YouTube refuses embeds that don't
+// say where they are shown (error 152/153).
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun YouTubePlayer(videoId: String, modifier: Modifier = Modifier) {
-    val html = """
-        <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{position:absolute;inset:0;width:100%;height:100%;border:0}</style></head>
-        <body><iframe src="https://www.youtube.com/embed/$videoId?playsinline=1&autoplay=1&rel=0&modestbranding=1&origin=https://shekinah-sons-global.onrender.com"
-        allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></body></html>
-    """.trimIndent()
+    val origin = "https://" + android.net.Uri.parse(com.shekinahsons.globalapp.BuildConfig.API_BASE).host
+    val url = "https://www.youtube.com/embed/$videoId?playsinline=1&autoplay=1&rel=0&modestbranding=1&enablejsapi=1&origin=" + android.net.Uri.encode(origin)
     AndroidView(
         factory = { ctx ->
             WebView(ctx).apply {
+                layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.mediaPlaybackRequiresUserGesture = false
+                settings.loadWithOverviewMode = true
+                settings.useWideViewPort = true
                 webChromeClient = WebChromeClient()
-                webViewClient = WebViewClient()
+                webViewClient = object : WebViewClient() {
+                    override fun onReceivedError(view: WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {
+                        if (request.isForMainFrame) android.util.Log.w("ShekinahYouTube", "load error ${error.errorCode}: ${error.description}")
+                    }
+                    override fun onReceivedHttpError(view: WebView, request: android.webkit.WebResourceRequest, response: android.webkit.WebResourceResponse) {
+                        if (request.isForMainFrame) android.util.Log.w("ShekinahYouTube", "http ${response.statusCode}")
+                    }
+                }
                 setBackgroundColor(android.graphics.Color.BLACK)
-                // A real web address as the page's origin: YouTube refuses embeds without one.
-                loadDataWithBaseURL("https://shekinah-sons-global.onrender.com/", html, "text/html", "utf-8", null)
+                loadUrl(url, mapOf("Referer" to "$origin/"))
             }
         },
         onRelease = { it.stopLoading(); it.loadUrl("about:blank"); it.destroy() },

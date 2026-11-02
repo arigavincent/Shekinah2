@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -173,6 +174,12 @@ func (h *Handler) archive(ctx context.Context, id string) (int64, string, error)
 	info, err := os.Stat(merged)
 	if err != nil {
 		return 0, "", err
+	}
+	// Keep the recording's length for the Sermons list.
+	if out, perr := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", merged).Output(); perr == nil {
+		if secs, cerr := strconv.ParseFloat(strings.TrimSpace(string(out)), 64); cerr == nil && secs > 0 {
+			_, _ = h.db.Exec(ctx, `UPDATE live_archives SET duration_seconds=$2 WHERE session_id=$1`, id, int(math.Round(secs)))
+		}
 	}
 	_ = os.Chmod(merged, 0600)
 	sealed := merged + ".sealed"

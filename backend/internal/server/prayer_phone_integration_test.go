@@ -134,3 +134,42 @@ func TestPhoneRequiredAndPrayerWallExpiry(t *testing.T) {
 		t.Fatalf("old request not deleted")
 	}
 }
+
+func TestMembersDeleteTheirOwnAccount(t *testing.T) {
+	base := os.Getenv("TEST_DATABASE_URL")
+	if base == "" {
+		t.Skip("set TEST_DATABASE_URL")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	db, err := pgxpool.New(ctx, createTempDatabase(t, ctx, base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err = database.RunMigrations(ctx, db, "../../migrations"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NOTIFICATIONS_DELIVERY_ENABLED", "false")
+	gin.SetMode(gin.TestMode)
+	app := server.New(config.Config{AppEnv: "test", JWTSecret: "self-delete-fixture"}, db)
+	req := func(method, path string, body any, token string, status int) map[string]any {
+		raw := assertStatus(t, app, method, "/api/v1"+path, body, token, status)
+		var out map[string]any
+		_ = json.Unmarshal([]byte(raw), &out)
+		return out
+	}
+	tok := req("POST", "/auth/register", map[string]string{"name": "Leaving Member", "email": "leaving@example.invalid", "phone": "0712345678", "password": "LeavingPass123!"}, "", 201)["token"].(string)
+	req("POST", "/prayer-requests", map[string]any{"category": "Healing", "text": "Please pray for my family.", "isPublic": true}, tok, 201)
+	req("POST", "/playlists", map[string]any{"name": "Mine"}, tok, 201)
+	req("POST", "/auth/delete-account", map[string]string{"password": "wrong"}, tok, 401)
+	req("POST", "/auth/delete-account", map[string]string{}, tok, 400)
+	req("POST", "/auth/delete-account", map[string]string{"password": "LeavingPass123!"}, "", 401)
+	req("POST", "/auth/delete-account", map[string]string{"password": "LeavingPass123!"}, tok, 200)
+	var users, prayers, lists int
+	_ = db.QueryRow(ctx, `SELECT (SELECT COUNT(*) FROM users WHERE email='leaving@example.invalid'), (SELECT COUNT(*) FROM prayers WHERE text='Please pray for my family.'), (SELECT COUNT(*) FROM playlists WHERE name='Mine')`).Scan(&users, &prayers, &lists)
+	if users+prayers+lists != 0 {
+		t.Fatalf("left behind: users %d prayers %d playlists %d", users, prayers, lists)
+	}
+	req("POST", "/auth/login", map[string]string{"email": "leaving@example.invalid", "password": "LeavingPass123!"}, "", 401)
+}

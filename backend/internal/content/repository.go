@@ -156,7 +156,7 @@ func (r Repository) Sermons(ctx context.Context) ([]Sermon, error) {
             COALESCE(NULLIF(a.description,''),'Recorded service'),
             '/api/v1/live/replays/'||l.id||'/file','', 'r2_replay',l.id,l.id,a.status,l.price,(l.started_at AT TIME ZONE 'Africa/Nairobi')::date::text
         FROM live_sessions l JOIN live_archives a ON a.session_id=l.id
-        CROSS JOIN LATERAL (SELECT ROUND(COALESCE(SUM(s.duration),0))::int AS secs FROM live_segments s WHERE s.session_id=l.id AND s.ready AND s.sequence>=0) d
+        CROSS JOIN LATERAL (SELECT GREATEST(a.duration_seconds, ROUND(COALESCE(SUM(s.duration),0))::int) AS secs FROM live_segments s WHERE s.session_id=l.id AND s.ready AND s.sequence>=0) d
         WHERE l.status='ended'
         ORDER BY sort_date DESC
 	`

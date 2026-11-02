@@ -1323,3 +1323,37 @@ func newAPIKey() string {
 	_, _ = rand.Read(b)
 	return "sk_live_" + hex.EncodeToString(b)
 }
+
+// DeleteOwnAccount: a member deletes their own account from the app or the
+// website (required by app stores). The password confirms it is them. Their
+// profile, prayer requests, testimonies, chat messages, playlists and devices
+// go; payments stay in the church's accounts without the payer's details.
+func (h *Handler) DeleteOwnAccount(c *gin.Context) {
+	id, ok := auth.UserIDFromContext(c)
+	if !ok {
+		fail(c, http.StatusUnauthorized, "Sign in first")
+		return
+	}
+	var req struct {
+		Password string `json:"password"`
+	}
+	if c.ShouldBindJSON(&req) != nil || req.Password == "" {
+		fail(c, http.StatusBadRequest, "Enter your password to confirm")
+		return
+	}
+	ctx := c.Request.Context()
+	var hash string
+	if h.db.QueryRow(ctx, `SELECT password_hash FROM users WHERE id=$1`, id).Scan(&hash) != nil ||
+		bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)) != nil {
+		fail(c, http.StatusUnauthorized, "That password is not right")
+		return
+	}
+	_, _ = h.db.Exec(ctx, `DELETE FROM prayers WHERE owner_user_id=$1`, id)
+	if err := h.erase(ctx, id); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.audit(c, "ACCOUNT_SELF_DELETED", "A member deleted their own account", id)
+	webhooks.Emit("user.deleted", map[string]any{"id": id, "mode": "self"})
+	c.JSON(http.StatusOK, gin.H{"message": "Your account and personal data have been deleted."})
+}
