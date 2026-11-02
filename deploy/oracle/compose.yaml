@@ -1,0 +1,170 @@
+# Shekinah Sons Global: the whole system on one server.
+#
+#   caddy     HTTPS for every address (free certificates, renewed automatically)
+#   app       the API and the web admin (one image, built from this repository)
+#   postgres  the database
+#   storage   sermons, books, covers and recordings (SeaweedFS, S3-compatible)
+#   mediamtx  the live video server (cameras, OBS, phones in; app and web out)
+#   backup    every night: database dump, and a copy of all storage to Cloudflare R2
+#
+# Start:   docker compose --env-file .env up -d --build
+# Logs:    docker compose logs -f app
+# Update:  git pull && docker compose --env-file .env up -d --build app
+name: shekinah
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      MEDIA_DOMAIN: ${MEDIA_DOMAIN}
+      HLS_DOMAIN: ${HLS_DOMAIN}
+      WEBRTC_DOMAIN: ${WEBRTC_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+    depends_on: [app, storage, mediamtx]
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shekinah
+      POSTGRES_USER: shekinah
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shekinah -d shekinah"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # S3-compatible storage (SeaweedFS). Anyone may read files by address, as on
+  # R2 (sermons, covers; books and recordings are encrypted); only the app may
+  # list, write or delete.
+  storage:
+    image: chrislusf/seaweedfs:3.97
+    restart: unless-stopped
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        cat > /etc/s3.json <<JSON
+        {"identities":[
+          {"name":"anonymous","actions":["Read"]},
+          {"name":"shekinah","credentials":[{"accessKey":"$${STORAGE_ACCESS_KEY}","secretKey":"$${STORAGE_SECRET_KEY}"}],
+           "actions":["Admin","Read","List","Tagging","Write"]}]}
+        JSON
+        exec weed server -dir=/data -ip=storage -ip.bind=0.0.0.0 -volume.max=0 -master.volumeSizeLimitMB=1024 \
+          -s3 -s3.port=8333 -s3.config=/etc/s3.json
+    environment:
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY}
+    volumes:
+      - ./data/storage:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Creates the bucket once.
+  storage-init:
+    image: chrislusf/seaweedfs:3.97
+    depends_on:
+      storage: { condition: service_healthy }
+    restart: "no"
+    entrypoint: /bin/sh
+    command: ["-c", "sleep 3; echo 's3.bucket.create -name ${STORAGE_BUCKET}' | weed shell -master=storage:9333 -filer=storage:8888"]
+
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      storage: { condition: service_healthy }
+    env_file: app.env
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgres://shekinah:${POSTGRES_PASSWORD}@postgres:5432/shekinah?sslmode=disable
+      HTTP_ADDR: 0.0.0.0:3000
+      BACKEND_API_BASE_URL: http://127.0.0.1:3000
+      PUBLIC_BASE_URL: https://${APP_DOMAIN}
+      ALLOWED_ORIGINS: https://${APP_DOMAIN}
+      # Storage: SeaweedFS on this server, reached at its public address so phones
+      # can upload straight to it.
+      R2_ENDPOINT: https://${MEDIA_DOMAIN}
+      R2_BUCKET: ${STORAGE_BUCKET}
+      R2_SERMONS_BUCKET: ${STORAGE_BUCKET}
+      R2_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY}
+      R2_SECRET_ACCESS_KEY: ${STORAGE_SECRET_KEY}
+      R2_PUBLIC_BASE_URL: https://${MEDIA_DOMAIN}/${STORAGE_BUCKET}
+      R2_SERMONS_PUBLIC_BASE_URL: https://${MEDIA_DOMAIN}/${STORAGE_BUCKET}
+      # Live: the video server on this machine.
+      LIVE_TRANSPORT: mediamtx
+      LIVE_RTMP_URL: rtmp://${LIVE_HOST}:1935
+      LIVE_HLS_URL: https://${HLS_DOMAIN}
+      LIVE_WHIP_URL: https://${WEBRTC_DOMAIN}
+      LIVE_MEDIAMTX_API: http://mediamtx:9997
+      LIVE_RECORDINGS_DIR: /recordings
+      LIVE_INTERNAL_SECRET: ${LIVE_INTERNAL_SECRET}
+    # Reach the storage address through this machine's own HTTPS (Caddy).
+    extra_hosts:
+      - "${MEDIA_DOMAIN}:host-gateway"
+    volumes:
+      - ./data/recordings:/recordings
+      - ./data/uploads:/app/backend/uploads
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.21.2-ffmpeg
+    restart: unless-stopped
+    # Same user as the app, so the app can file the recordings it makes.
+    user: "1000:1000"
+    environment:
+      SHEKINAH_API: http://app:3000
+      LIVE_INTERNAL_SECRET: ${LIVE_INTERNAL_SECRET}
+      MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_IP}
+    ports:
+      - "1935:1935"          # RTMP in: phones, OBS, cameras, video switchers
+      - "8189:8189/udp"      # WebRTC
+      - "8189:8189/tcp"
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - ./mediamtx/forward.sh:/forward.sh:ro
+      - ./data/recordings:/recordings
+
+  backup:
+    build: ./backup
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      TZ: Africa/Nairobi
+      PGHOST: postgres
+      PGUSER: shekinah
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: shekinah
+      STORAGE_BUCKET: ${STORAGE_BUCKET}
+      RCLONE_CONFIG_LOCAL_TYPE: s3
+      RCLONE_CONFIG_LOCAL_PROVIDER: SeaweedFS
+      RCLONE_CONFIG_LOCAL_ENDPOINT: http://storage:8333
+      RCLONE_CONFIG_LOCAL_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY}
+      RCLONE_CONFIG_LOCAL_SECRET_ACCESS_KEY: ${STORAGE_SECRET_KEY}
+      RCLONE_CONFIG_CLOUD_TYPE: s3
+      RCLONE_CONFIG_CLOUD_PROVIDER: Cloudflare
+      RCLONE_CONFIG_CLOUD_ENDPOINT: ${BACKUP_R2_ENDPOINT}
+      RCLONE_CONFIG_CLOUD_ACCESS_KEY_ID: ${BACKUP_R2_ACCESS_KEY_ID}
+      RCLONE_CONFIG_CLOUD_SECRET_ACCESS_KEY: ${BACKUP_R2_SECRET_ACCESS_KEY}
+      BACKUP_R2_BUCKET: ${BACKUP_R2_BUCKET}
+      BACKUP_HOUR: ${BACKUP_HOUR:-2}
+    volumes:
+      - ./data/backups:/backups

@@ -1,0 +1,35 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# The app: the API goes straight to Go; everything else is the web admin.
+{$APP_DOMAIN} {
+	encode gzip zstd
+	@api path /api/*
+	handle @api {
+		reverse_proxy app:3000 {
+			flush_interval -1
+		}
+	}
+	handle {
+		reverse_proxy app:10000
+	}
+}
+
+# Storage (S3-compatible). Phones upload here with signed links and the app
+# reads published files from here. Keep this name "DNS only" in Cloudflare:
+# its proxy limits uploads to 100 MB.
+{$MEDIA_DOMAIN} {
+	reverse_proxy storage:8333 {
+		flush_interval -1
+	}
+}
+
+# Live video for viewers: low-latency HLS and WebRTC.
+{$HLS_DOMAIN} {
+	reverse_proxy mediamtx:8888
+}
+
+{$WEBRTC_DOMAIN} {
+	reverse_proxy mediamtx:8889
+}

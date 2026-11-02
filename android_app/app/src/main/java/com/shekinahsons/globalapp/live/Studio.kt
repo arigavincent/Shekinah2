@@ -129,6 +129,7 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
     var title by remember { mutableStateOf("Sunday Service") }
     var hd by remember { mutableStateOf(true) }
     var paid by remember { mutableStateOf(false) }
+    var membersOnly by remember { mutableStateOf(false) }
     var price by remember { mutableStateOf("") }
     var confirmEnd by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -331,9 +332,11 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pill("Free for everyone", !paid) { paid = false }
-                    Pill("Paid live", paid) { paid = true }
+                    Pill("Everyone", !paid && !membersOnly) { paid = false; membersOnly = false }
+                    Pill("Members only", !paid && membersOnly) { paid = false; membersOnly = true }
+                    Pill("Paid", paid) { paid = true; membersOnly = false }
                 }
+                if (membersOnly && !paid) Text("Only people signed in to the app can watch.", style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 6.dp))
                 if (paid) {
                     Spacer(Modifier.height(8.dp))
                     Field("PRICE (KSH)", price, { price = it.filter(Char::isDigit).take(7) }, hint = "e.g. 200", keyboard = androidx.compose.ui.text.input.KeyboardType.Number)
@@ -347,7 +350,7 @@ fun GoLiveScreen(session: Session, onClose: () -> Unit) {
                         .background(Brush.horizontalGradient(listOf(Color(0xFFFF5A4E), Color(0xFFD7263D))))
                         .clickable(enabled = granted && state != "connecting" && (!paid || (price.toIntOrNull() ?: 0) > 0)) {
                             scope.launch {
-                                runCatching { Api.post("/live/start", mapOf("title" to title, "price" to (if (paid) price.toIntOrNull() ?: 0 else 0), "transport" to "r2", "format" to "mpegts")) }
+                                runCatching { Api.post("/live/start", mapOf("title" to title, "price" to (if (paid) price.toIntOrNull() ?: 0 else 0), "membersOnly" to (membersOnly && !paid), "format" to "mpegts")) }
                                     .onSuccess { res ->
                                         val url = (res["publishUrl"] as kotlinx.serialization.json.JsonPrimitive).content
                                         // The stream keeps the shape the phone is held in now.

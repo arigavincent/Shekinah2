@@ -138,6 +138,8 @@ data class LiveSession(
     val startedAt: String? = null, val playbackUrl: String = "", val viewers: Int = 0,
     // A paid live: access is true once this member has paid (or is staff).
     val price: Int = 0, val access: Boolean = true,
+    // Only signed-in members may watch.
+    val membersOnly: Boolean = false,
 )
 
 // The current live session as this member sees it (price and access),
@@ -251,7 +253,7 @@ fun HomeLivePreview(content: HomeContent, session: Session, onOpen: () -> Unit) 
     val url = content.live.playbackHlsUrl
     if (url.isBlank()) return
     val live = rememberLiveSession(true, session)
-    if (live != null && live.price > 0 && !live.access) { LockedLive(live, Modifier.padding(horizontal = 16.dp).padding(top = 22.dp), onOpen); return }
+    if (live != null && !live.access) { LockedLive(live, Modifier.padding(horizontal = 16.dp).padding(top = 22.dp), onOpen); return }
     val player = rememberLivePlayer(url, muted = true)
     val glow = Breathing()
     val shape = RoundedCornerShape(20.dp)
@@ -299,6 +301,7 @@ fun LiveTab(content: HomeContent, session: Session, openGoLive: () -> Unit, open
             ) { paying = false }
         }
         live.price > 0 && !live.access -> LivePaywall(live, session, openProfile) { paying = true }
+        !live.access -> MembersOnlyLive(live, openProfile)
         else -> LiveWatch(content, session, openProfile)
     }
 }
@@ -322,6 +325,23 @@ private fun LivePaywall(live: LiveSession, session: Session, openProfile: () -> 
     }
 }
 
+// A members-only live, seen while signed out.
+@Composable
+private fun MembersOnlyLive(live: LiveSession, openProfile: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(Brand.Black)) {
+        TopBar()
+        Column(Modifier.padding(horizontal = 20.dp)) {
+            LockedLive(live, Modifier, onClick = null)
+            Spacer(Modifier.height(20.dp))
+            Text(live.title, style = Type.Display, color = Brand.White)
+            Spacer(Modifier.height(10.dp))
+            Text("This service is for members of the Shekinah family. Sign in, or create a free account, to watch it with the live chat.", style = Type.Body, color = Brand.Text2)
+            Spacer(Modifier.height(20.dp))
+            GoldButton("Sign in to watch", onClick = openProfile)
+        }
+    }
+}
+
 @Composable
 private fun LockedLive(live: LiveSession, modifier: Modifier, onClick: (() -> Unit)?) {
     val glow = Breathing()
@@ -336,12 +356,12 @@ private fun LockedLive(live: LiveSession, modifier: Modifier, onClick: (() -> Un
             LiveBadgeRow(live.viewers, Modifier.align(Alignment.TopStart).padding(12.dp))
             Row(Modifier.align(Alignment.TopEnd).padding(12.dp).clip(RoundedCornerShape(50)).background(Brand.GoldGradient).padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.Lock, null, tint = Brand.Black, modifier = Modifier.size(14.dp))
-                Text(" ${money(live.price)}", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                Text(if (live.price > 0) " ${money(live.price)}" else " Members", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
             }
             if (onClick != null) Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(live.title, style = Type.Title, color = Color.White, maxLines = 1)
-                    Text("Paid live \u00B7 tap to get access", style = Type.Meta, color = Color(0xCCFFFFFF))
+                    Text(if (live.price > 0) "Paid live \u00B7 tap to get access" else "Members only \u00B7 sign in to watch", style = Type.Meta, color = Color(0xCCFFFFFF))
                 }
                 Text("Watch", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp,
                     modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient).padding(horizontal = 18.dp, vertical = 9.dp))

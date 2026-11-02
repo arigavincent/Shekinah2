@@ -265,7 +265,7 @@ func directIV(sequence int) []byte {
 }
 func (h *Handler) DirectKey(c *gin.Context) {
 	var s Session
-	if h.db.QueryRow(c.Request.Context(), `SELECT id,price FROM live_sessions WHERE id=$1 AND transport='r2'`, c.Param("id")).Scan(&s.ID, &s.Price) != nil {
+	if h.db.QueryRow(c.Request.Context(), `SELECT id,price,members_only FROM live_sessions WHERE id=$1 AND transport='r2'`, c.Param("id")).Scan(&s.ID, &s.Price, &s.MembersOnly) != nil {
 		c.Status(404)
 		return
 	}
@@ -327,7 +327,7 @@ func (h *Handler) DirectPlaylist(c *gin.Context) {
 	ctx := c.Request.Context()
 	var s Session
 	var format string
-	if h.db.QueryRow(ctx, `SELECT id,price,status,segment_format FROM live_sessions WHERE id=$1 AND transport='r2'`, c.Param("id")).Scan(&s.ID, &s.Price, &s.Status, &format) != nil {
+	if h.db.QueryRow(ctx, `SELECT id,price,status,segment_format,members_only FROM live_sessions WHERE id=$1 AND transport='r2'`, c.Param("id")).Scan(&s.ID, &s.Price, &s.Status, &format, &s.MembersOnly) != nil {
 		c.Status(404)
 		return
 	}

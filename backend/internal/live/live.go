@@ -94,6 +94,8 @@ type Session struct {
 	// A paid live: viewers need access (paid, or staff) to watch.
 	Price  int  `json:"price"`
 	Access bool `json:"access"`
+	// Only signed-in members may watch (in the app and from the video server).
+	MembersOnly bool `json:"membersOnly"`
 }
 
 func (h *Handler) playbackURL() string { return h.hlsBase + "/" + path + "/index.m3u8" }
@@ -102,15 +104,18 @@ func (h *Handler) current(ctx context.Context) (*Session, string, string, error)
 	var s Session
 	var key, broadcasterID string
 	err := h.db.QueryRow(ctx, `
-		SELECT l.id, l.title, l.status, COALESCE(u.name, ''), l.started_at, l.created_at, l.stream_key, COALESCE(l.broadcaster_id::text, ''), l.price
+		SELECT l.id, l.title, l.status, COALESCE(u.name, ''), l.started_at, l.created_at, l.stream_key, COALESCE(l.broadcaster_id::text, ''), l.price, l.members_only
 		FROM live_sessions l LEFT JOIN users u ON u.id = l.broadcaster_id
 		WHERE l.status IN ('starting', 'live') ORDER BY l.created_at DESC LIMIT 1
-	`).Scan(&s.ID, &s.Title, &s.Status, &s.Broadcaster, &s.StartedAt, &s.CreatedAt, &key, &broadcasterID, &s.Price)
+	`).Scan(&s.ID, &s.Title, &s.Status, &s.Broadcaster, &s.StartedAt, &s.CreatedAt, &key, &broadcasterID, &s.Price, &s.MembersOnly)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, "", "", nil
 	}
 	if err != nil {
 		return nil, "", "", err
+	}
+	if s.Broadcaster == "" && strings.HasPrefix(key, "cam-") {
+		s.Broadcaster = "The studio camera"
 	}
 	s.PlaybackURL = h.playbackURL()
 	var transport string
@@ -132,10 +137,11 @@ func randomKey() string {
 func (h *Handler) Start(c *gin.Context) {
 	userID, _ := auth.UserIDFromContext(c)
 	var req struct {
-		Title     string `json:"title"`
-		Price     int    `json:"price"`
-		Transport string `json:"transport"`
-		Format    string `json:"format"`
+		Title       string `json:"title"`
+		Price       int    `json:"price"`
+		Transport   string `json:"transport"`
+		Format      string `json:"format"`
+		MembersOnly bool   `json:"membersOnly"`
 	}
 	if c.ShouldBindJSON(&req) != nil {
 		c.JSON(400, gin.H{"message": "Check the broadcast title and price"})
@@ -202,7 +208,7 @@ func (h *Handler) Start(c *gin.Context) {
 	}
 	// Each new live starts with chat on.
 	_, _ = h.db.Exec(ctx, `UPDATE app_settings SET value = (value::jsonb || '{"chatOff": false}'::jsonb)::text WHERE key = 'live_chat'`)
-	if _, err := h.db.Exec(ctx, `INSERT INTO live_sessions (id, title, broadcaster_id, stream_key, price, recording_expected,transport,segment_format) VALUES ($1, $2, $3, $4, $5, TRUE,$6,$7)`, id, title, userID, key, req.Price, req.Transport, req.Format); err != nil {
+	if _, err := h.db.Exec(ctx, `INSERT INTO live_sessions (id, title, broadcaster_id, stream_key, price, recording_expected,transport,segment_format,members_only) VALUES ($1, $2, $3, $4, $5, TRUE,$6,$7,$8)`, id, title, userID, key, req.Price, req.Transport, req.Format, req.MembersOnly); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not start the live"})
 		return
 	}
@@ -279,6 +285,7 @@ func (h *Handler) end(ctx context.Context) {
 	if env("LIVE_TRANSPORT", "mediamtx") == "r2" {
 		return
 	}
+	defer h.resetRecordingPath(ctx)
 	// Drop both native RTMP and browser WebRTC publishers so recordings can finalize.
 	for _, endpoint := range []string{"/v3/rtmp/conns", "/v3/webrtc/sessions"} {
 		if req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.apiBase+endpoint+"/list", nil); err == nil {
@@ -322,7 +329,7 @@ func (h *Handler) Current(c *gin.Context) {
 // (confirmed by finance) and to staff.
 func (h *Handler) canWatch(ctx context.Context, s *Session, userID string) bool {
 	if s.Price <= 0 {
-		return true
+		return !s.MembersOnly || userID != ""
 	}
 	if userID == "" {
 		return false
@@ -375,6 +382,11 @@ func (h *Handler) MediaMTXAuth(c *gin.Context) {
 		c.Status(http.StatusUnauthorized)
 		return
 	}
+	// The server's own YouTube forwarder reads the stream with an internal secret.
+	if internalRequest(req.Query) {
+		c.Status(http.StatusOK)
+		return
+	}
 	if req.Action == "read" || req.Action == "playback" {
 		// A paid live's picture only goes to those allowed to watch it. The
 		// app sends the member's sign-in token with every request.
@@ -395,6 +407,11 @@ func (h *Handler) MediaMTXAuth(c *gin.Context) {
 			key = strings.TrimPrefix(part, "key=")
 		}
 	}
+	// A camera, OBS or video switcher with the studio key: starts the service.
+	if req.Path == path && h.cameraPublish(c.Request.Context(), key) {
+		c.Status(http.StatusOK)
+		return
+	}
 	_, current, _, err := h.current(c.Request.Context())
 	if err != nil || req.Path != path || key == "" || current == "" || key != current {
 		c.Status(http.StatusUnauthorized)
@@ -408,7 +425,7 @@ func (h *Handler) readAllowed(ctx context.Context, token, query string) bool {
 	if err != nil || session == nil {
 		return false
 	}
-	if session.Price <= 0 {
+	if session.Price <= 0 && !session.MembersOnly {
 		return true
 	}
 	if token == "" {

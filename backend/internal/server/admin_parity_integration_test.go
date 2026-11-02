@@ -211,12 +211,12 @@ func TestAdminParityIncomeClassificationRolesAndServeHistory(t *testing.T) {
 		t.Fatal("unsafe CSV or private payment details leaked")
 	}
 	// Overview must never call tickets or live sales book sales.
-	_, err = db.Exec(ctx, `UPDATE giving_transactions SET created_at=NOW() WHERE id IN ('gift','book','event','live')`)
+	_, err = db.Exec(ctx, `UPDATE giving_transactions SET created_at=NOW() WHERE id IN ('gift','book','event','live','replay','foreign','next-day')`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	o := req("GET", "/admin/overview", nil, admin, 200)
-	// The second donation/replay/foreign book remain in the same calendar month.
+	// All dated now, so they fall in this month whatever the date the test runs.
 	if o["givenThisMonth"] != float64(1099) || o["bookSalesMonth"] != float64(2) {
 		t.Fatalf("overview misclassified income: %v", o)
 	}

@@ -69,7 +69,13 @@ function AdminRouteEffects() {
  */
 export default function AdminApp() {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    // react-router numbers the history entry the first time it renders; doing
+    // it here instead keeps that out of render (the page's own router listens).
+    const state = window.history.state as { idx?: number } | null;
+    if (state?.idx == null) window.history.replaceState({ ...(state || {}), idx: 0 }, "");
+    setMounted(true);
+  }, []);
   if (!mounted) {
     return (
       <main className="auth-page">

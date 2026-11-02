@@ -50,6 +50,8 @@ func (c Checker) StaffRoute() gin.HandlerFunc {
 			permission = ContentManage
 		case strings.HasPrefix(path, "community"), strings.HasPrefix(path, "testimonies"):
 			permission = CommunityModerate
+		case strings.HasPrefix(path, "live/"):
+			permission = LiveBroadcast
 		case strings.HasPrefix(path, "checkins"):
 			permission = CheckinScan
 		case path == "giving/details" && ctx.Request.Method != "GET":

@@ -1,0 +1,63 @@
+# Shekinah live video server (MediaMTX).
+#
+# Who sends video:
+#   - the Shekinah app (phones), with the key of the service it started;
+#   - cameras, OBS and video switchers (e.g. ATEM Mini), with the studio key
+#     from the admin's Live page:  rtmp://<server>:1935/church?key=<studio key>
+# Who watches:
+#   - the app and website, by low-latency HLS (a couple of seconds behind) or
+#     WebRTC (about a second behind). Members-only and paid services are
+#     checked with the backend on every request.
+# The backend decides everything through authHTTPAddress below.
+logLevel: info
+
+authMethod: http
+# "app" is the backend's name inside the Docker network (compose.yaml).
+authHTTPAddress: http://app:3000/api/v1/live/mediamtx-auth
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
+
+api: true
+apiAddress: :9997
+
+rtmp: true
+rtmpAddress: :1935
+
+hls: true
+hlsAddress: :8888
+hlsAllowOrigins: ["*"]
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsAlwaysRemux: true
+
+webrtc: true
+webrtcAddress: :8889
+webrtcAllowOrigins: ["*"]
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+# The server's public address is added by compose (MTX_WEBRTCADDITIONALHOSTS),
+# so phones and browsers can reach WebRTC.
+webrtcAdditionalHosts: []
+
+rtsp: false
+srt: false
+moq: false
+
+paths:
+  church:
+    source: publisher
+    overridePublisher: false
+    record: true
+    recordPath: /recordings/unassigned/%path/%Y-%m-%d_%H-%M-%S-%f
+    recordFormat: fmp4
+    recordPartDuration: 1s
+    recordSegmentDuration: 10m
+    # Only the backend's archive worker removes segments, after saving them.
+    recordDeleteAfter: 0s
+    # Send the service on to YouTube when that's switched on in the admin.
+    runOnAvailable: sh /forward.sh
+    runOnAvailableRestart: yes

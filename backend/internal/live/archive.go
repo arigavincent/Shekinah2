@@ -142,6 +142,10 @@ func (h *Handler) archive(ctx context.Context, id string) (int64, string, error)
 		return 0, "", err
 	}
 	files, err := filepath.Glob(filepath.Join(archiveDir(), id, path, "*.mp4"))
+	if err == nil && len(files) == 0 {
+		h.claimCameraRecording(ctx, id)
+		files, err = filepath.Glob(filepath.Join(archiveDir(), id, path, "*.mp4"))
+	}
 	if err != nil || len(files) == 0 {
 		return 0, "", fmt.Errorf("waiting for recording segments")
 	}
@@ -260,7 +264,7 @@ func openArchive(src, dst string, key [32]byte) error {
 }
 func (h *Handler) Replays(c *gin.Context) {
 	user, _ := auth.UserIDFromContext(c)
-	rows, err := h.db.Query(c.Request.Context(), `SELECT l.id,l.title,l.price,l.started_at,a.status,a.error FROM live_sessions l JOIN live_archives a ON a.session_id=l.id ORDER BY l.started_at DESC LIMIT 100`)
+	rows, err := h.db.Query(c.Request.Context(), `SELECT l.id,l.title,l.price,l.started_at,a.status,a.error,l.members_only FROM live_sessions l JOIN live_archives a ON a.session_id=l.id ORDER BY l.started_at DESC LIMIT 100`)
 	if err != nil {
 		c.JSON(500, gin.H{"message": "Could not load replays"})
 		return
@@ -270,9 +274,9 @@ func (h *Handler) Replays(c *gin.Context) {
 	for rows.Next() {
 		var s Session
 		var status, message string
-		_ = rows.Scan(&s.ID, &s.Title, &s.Price, &s.StartedAt, &status, &message)
+		_ = rows.Scan(&s.ID, &s.Title, &s.Price, &s.StartedAt, &status, &message, &s.MembersOnly)
 		access := h.canWatch(c.Request.Context(), &s, user)
-		item := gin.H{"id": s.ID, "title": s.Title, "price": s.Price, "date": s.StartedAt, "status": status, "access": access, "mediaUrl": "/api/v1/live/replays/" + s.ID + "/file"}
+		item := gin.H{"id": s.ID, "title": s.Title, "price": s.Price, "membersOnly": s.MembersOnly, "date": s.StartedAt, "status": status, "access": access, "mediaUrl": "/api/v1/live/replays/" + s.ID + "/file"}
 		var direct bool
 		_ = h.db.QueryRow(c.Request.Context(), `SELECT transport='r2' FROM live_sessions WHERE id=$1`, s.ID).Scan(&direct)
 		if direct {
@@ -289,7 +293,7 @@ func (h *Handler) Replay(c *gin.Context) {
 	ctx := c.Request.Context()
 	var s Session
 	var key string
-	err := h.db.QueryRow(ctx, `SELECT l.id,l.price,a.object_key FROM live_sessions l JOIN live_archives a ON a.session_id=l.id WHERE l.id=$1 AND a.status='ready'`, c.Param("id")).Scan(&s.ID, &s.Price, &key)
+	err := h.db.QueryRow(ctx, `SELECT l.id,l.price,l.members_only,a.object_key FROM live_sessions l JOIN live_archives a ON a.session_id=l.id WHERE l.id=$1 AND a.status='ready'`, c.Param("id")).Scan(&s.ID, &s.Price, &s.MembersOnly, &key)
 	if err != nil {
 		c.JSON(404, gin.H{"message": "Recording is not ready"})
 		return
