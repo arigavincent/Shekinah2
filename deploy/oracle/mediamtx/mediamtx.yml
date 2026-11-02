@@ -11,6 +11,11 @@
 # The backend decides everything through authHTTPAddress below.
 logLevel: info
 
+# Venues often stream over slow mobile links: allow a slow handshake and gaps
+# before giving up on a camera (the default 10 s drops OBS on 4G).
+readTimeout: 30s
+writeTimeout: 30s
+
 authMethod: http
 # "app" is the backend's name inside the Docker network (compose.yaml).
 authHTTPAddress: http://app:3000/api/v1/live/mediamtx-auth
