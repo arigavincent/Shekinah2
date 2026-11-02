@@ -32,6 +32,8 @@ class Session(private val context: Context) {
     val canScan get() = "checkin:scan" in permissions
     // Admins (by their role in the database) get the admin console.
     val isAdmin get() = member?.role == "admin" || member?.role == "super_admin"
+    // Only the super admin sees Super Admin tools (the server refuses everyone else).
+    val isSuperAdmin get() = member?.role == "super_admin"
 
     private suspend fun loadPermissions() {
         runCatching { Api.decode<List<String>>(Api.get("/permissions/me")["permissions"]) }.onSuccess {

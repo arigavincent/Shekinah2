@@ -193,11 +193,11 @@ fun AdminConsole(session: Session, openApp: () -> Unit, openLive: () -> Unit) {
                     Section.Team -> TeamPage()
                     Section.Books -> LibraryScreen(session, openProfile = {}, onBack = { section = Section.Overview }, bottomInset = 76.dp,onFullScreen={bookFullScreen=it})
                     Section.More -> MorePage()
-                    Section.SuperAdmin -> SuperAdminPage()
+                    Section.SuperAdmin -> if (session.isSuperAdmin) SuperAdminPage() else OverviewPage(session, go = { section = it }, goLive = { goLive = true }, openLive = openLive, openGate = { gate = true })
                 }
             }
         }
-        if(!bookFullScreen) SectionBar(section, Modifier.align(Alignment.BottomCenter)) { section = it }
+        if(!bookFullScreen) SectionBar(section, Modifier.align(Alignment.BottomCenter), session.isSuperAdmin) { section = it }
     }
 }
 
@@ -223,13 +223,13 @@ private fun Header(session: Session, openApp: () -> Unit) {
 }
 
 @Composable
-private fun SectionBar(current: Section, modifier: Modifier, select: (Section) -> Unit) {
+private fun SectionBar(current: Section, modifier: Modifier, superAdmin: Boolean, select: (Section) -> Unit) {
     Row(
         modifier.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth()
             .lifted(RoundedCornerShape(28.dp), 20.dp).clip(RoundedCornerShape(28.dp)).background(Color(0xF0151517))
             .border(1.dp, Brand.Line, RoundedCornerShape(28.dp)).padding(6.dp),
     ) {
-        Section.entries.forEach { s ->
+        Section.entries.filter { superAdmin || it != Section.SuperAdmin }.forEach { s ->
             val on = s == current
             Column(
                 Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(if (on) Brand.GoldGradient else SolidColor(Color.Transparent))
@@ -294,7 +294,7 @@ private fun OverviewPage(session: Session, go: (Section) -> Unit, goLive: () -> 
                     item { Quick("Gate check-in", Icons.Rounded.QrCodeScanner, onClick = openGate) }
                     item { Quick("Events & registrations", Icons.Rounded.Groups) { go(Section.More) } }
                     item { Quick("Send notification", Icons.Rounded.Campaign) { go(Section.More) } }
-                    item { Quick("SA Governance", Icons.Rounded.AdminPanelSettings) { go(Section.SuperAdmin) } }
+                    if (session.isSuperAdmin) item { Quick("SA Governance", Icons.Rounded.AdminPanelSettings) { go(Section.SuperAdmin) } }
                     item { Quick("Publish a book", Icons.AutoMirrored.Rounded.MenuBook) { go(Section.Books) } }
                     item { Quick("Give permissions", Icons.Rounded.Groups) { go(Section.Team) } }
                 }
