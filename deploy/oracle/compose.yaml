@@ -82,7 +82,19 @@ services:
       storage: { condition: service_healthy }
     restart: "no"
     entrypoint: /bin/sh
-    command: ["-c", "sleep 3; echo 's3.bucket.create -name ${STORAGE_BUCKET}' | weed shell -master=storage:9333 -filer=storage:8888"]
+    # The filer can take a little while after "healthy" on first boot, so keep
+    # trying until the bucket is confirmed (a silent miss breaks every upload).
+    command:
+      - -c
+      - |
+        for i in $$(seq 1 60); do
+          echo "s3.bucket.create -name ${STORAGE_BUCKET}" | weed shell -master=storage:9333 -filer=storage:8888 >/dev/null 2>&1
+          if echo "s3.bucket.list" | weed shell -master=storage:9333 -filer=storage:8888 2>/dev/null | grep -q "${STORAGE_BUCKET}"; then
+            echo "bucket ${STORAGE_BUCKET} ready"; exit 0
+          fi
+          sleep 3
+        done
+        echo "could not create bucket ${STORAGE_BUCKET}"; exit 1
 
   app:
     build:
