@@ -13,9 +13,9 @@ export function FinancePage() {
   return (
     <div className="admin-page">
       <header className="page-header"><div><p className="eyebrow">Super Admin</p><h1>Finance & Funds</h1><p className="muted">Funds, cash and cheque entries, refunds and yearly giving statements.</p></div></header>
-      <div className="tabs" style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+      <div className="segmented-control" role="tablist" aria-label="Sections">
         {(["funds","transaction","kiosks","refunds","statements"] as const).map(t => (
-          <button key={t} className={`btn compact ${tab===t?"primary":""}`} onClick={() => setTab(t)}>{t === "funds" ? "Chart of Accounts" : t === "transaction" ? "Manual Entry" : t === "kiosks" ? "POS devices" : t === "refunds" ? "Refunds" : "Donor Statements"}</button>
+          <button key={t} type="button" aria-pressed={tab === t} onClick={() => setTab(t)}>{t === "funds" ? "Chart of Accounts" : t === "transaction" ? "Manual Entry" : t === "kiosks" ? "POS devices" : t === "refunds" ? "Refunds" : "Donor Statements"}</button>
         ))}
       </div>
       {tab === "funds" && <FundsTab token={token} />}
