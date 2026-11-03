@@ -1,3 +1,4 @@
+import { SaHubPage } from "./pages/SaHubPage";
 import { FamiliesPage } from "./pages/FamiliesPage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { RolesPage } from "./pages/RolesPage";
@@ -109,6 +110,7 @@ export default function App() {
         <Route path="account-security" element={<AccountSecurityPage />} />
 
         {/* Super Admin routes */}
+        <Route path="sa" element={<SuperAdminRoute><SaHubPage /></SuperAdminRoute>} />
         <Route path="sa/members" element={<SuperAdminRoute><MembersPage /></SuperAdminRoute>} />
         <Route path="sa/roles" element={<SuperAdminRoute><RolesPage /></SuperAdminRoute>} />
         <Route path="sa/families" element={<SuperAdminRoute><FamiliesPage /></SuperAdminRoute>} />

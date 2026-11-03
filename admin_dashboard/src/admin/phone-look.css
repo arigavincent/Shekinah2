@@ -1,0 +1,153 @@
+/* The phone app's look on the web: black with a warm gold glow, gradient
+   cards with hairline borders, gold pill buttons, tinted stat tiles and
+   badges, rounded inputs, and table rows that read like the app's list rows.
+   Applies to the Shekinah palette (the default). */
+
+:root[data-palette="shekinah"] {
+  --kit-gold-grad: linear-gradient(135deg, #f5de8a 0%, #d4af37 48%, #a8861f 100%);
+  --kit-card: linear-gradient(135deg, #1b1a1f, #131316);
+  --kit-border: rgba(255, 255, 255, 0.08);
+  --kit-green: #4ade80;
+  --kit-red: #ff6b6b;
+  --kit-blue: #6ea8ff;
+  --kit-violet: #b79cff;
+  --radius-card: 22px;
+}
+:root[data-palette="shekinah"][data-theme="dark"] body,
+:root[data-palette="shekinah"][data-theme="dark"] .admin-shell {
+  background:
+    radial-gradient(ellipse 70rem 26rem at 30% -8%, rgba(212, 175, 55, 0.16), transparent 70%),
+    #000;
+}
+
+/* Sidebar: like the phone's menu */
+:root[data-palette="shekinah"][data-theme="dark"] .sidebar { background: #08080a; border-right: 1px solid var(--kit-border); }
+:root[data-palette="shekinah"][data-theme="dark"] .brand-mark { background: none; box-shadow: none; width: 40px; height: 40px; }
+:root[data-palette="shekinah"][data-theme="dark"] .brand-mark img { width: 40px; height: 40px; display: block; }
+:root[data-palette="shekinah"][data-theme="dark"] .brand-text strong { font-family: "Cinzel", Georgia, serif; letter-spacing: .06em; color: #f0d27a; }
+:root[data-palette="shekinah"][data-theme="dark"] .brand-text span { letter-spacing: .22em; text-transform: uppercase; font-size: .62rem; color: var(--text-soft); }
+:root[data-palette="shekinah"][data-theme="dark"] .nav-group-label { color: #d4af37; letter-spacing: .14em; font-size: .66rem; }
+:root[data-palette="shekinah"][data-theme="dark"] .nav-link { border-radius: 14px; border: 1px solid transparent; transition: background .15s, color .15s; }
+:root[data-palette="shekinah"][data-theme="dark"] .nav-link:hover { background: rgba(255, 255, 255, 0.05); }
+:root[data-palette="shekinah"][data-theme="dark"] .nav-link.active { background: var(--kit-gold-grad); color: #080808; border-color: transparent; font-weight: 700; box-shadow: 0 6px 18px rgba(212, 175, 55, .25); }
+:root[data-palette="shekinah"][data-theme="dark"] .nav-link.active .nav-link-icon { color: #080808; }
+:root[data-palette="shekinah"][data-theme="dark"] .sidebar-user { background: var(--kit-card); border: 1px solid var(--kit-border); border-radius: 18px; }
+:root[data-palette="shekinah"][data-theme="dark"] .sidebar-user-avatar { background: var(--kit-gold-grad); color: #080808; }
+
+/* Headings and small labels */
+:root[data-palette="shekinah"][data-theme="dark"] .eyebrow { color: #d4af37; letter-spacing: .14em; font-weight: 700; }
+:root[data-palette="shekinah"][data-theme="dark"] .muted, :root[data-palette="shekinah"][data-theme="dark"] .small-muted { color: #a9a9b2; }
+:root[data-palette="shekinah"][data-theme="dark"] a.text-link, :root[data-palette="shekinah"][data-theme="dark"] .text-link { color: #f0d27a; font-weight: 600; }
+
+/* Cards */
+:root[data-palette="shekinah"][data-theme="dark"] .card,
+:root[data-palette="shekinah"][data-theme="dark"] .list-card,
+:root[data-palette="shekinah"][data-theme="dark"] .editor-card,
+:root[data-palette="shekinah"][data-theme="dark"] .media-preview-card,
+:root[data-palette="shekinah"][data-theme="dark"] .integration-card {
+  background: var(--kit-card);
+  border: 1px solid var(--kit-border);
+  border-radius: var(--radius-card);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .35);
+}
+
+/* Stat tiles: tinted like the phone's stats strip */
+:root[data-palette="shekinah"][data-theme="dark"] .stat-card {
+  border-radius: 20px;
+  border: 1px solid color-mix(in oklab, var(--tile, #d4af37) 30%, transparent);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--tile, #d4af37) 16%, transparent), rgba(255, 255, 255, .03));
+}
+:root[data-palette="shekinah"][data-theme="dark"] .stats-grid > :nth-child(5n+1) { --tile: #d4af37; }
+:root[data-palette="shekinah"][data-theme="dark"] .stats-grid > :nth-child(5n+2) { --tile: var(--kit-blue); }
+:root[data-palette="shekinah"][data-theme="dark"] .stats-grid > :nth-child(5n+3) { --tile: var(--kit-green); }
+:root[data-palette="shekinah"][data-theme="dark"] .stats-grid > :nth-child(5n+4) { --tile: var(--kit-violet); }
+:root[data-palette="shekinah"][data-theme="dark"] .stats-grid > :nth-child(5n+5) { --tile: var(--kit-red); }
+
+/* Buttons: gold pills, glassy secondary, red danger */
+:root[data-palette="shekinah"][data-theme="dark"] button:not(.nav-link):not(.sidebar-collapse-btn):not(.theme-toggle-float):not(.sidebar-toggle-float):not(.sidebar-backdrop):not([role="tab"]),
+:root[data-palette="shekinah"][data-theme="dark"] .btn {
+  border-radius: 999px;
+}
+:root[data-palette="shekinah"][data-theme="dark"] button.primary, :root[data-palette="shekinah"][data-theme="dark"] .btn.primary,
+:root[data-palette="shekinah"][data-theme="dark"] button[type="submit"]:not(.secondary):not(.danger) {
+  background: var(--kit-gold-grad); color: #080808; border: none; font-weight: 700;
+  box-shadow: 0 8px 20px rgba(212, 175, 55, .22);
+}
+:root[data-palette="shekinah"][data-theme="dark"] button.secondary, :root[data-palette="shekinah"][data-theme="dark"] .btn.secondary {
+  background: rgba(255, 255, 255, .07); color: #fff; border: 1px solid rgba(255, 255, 255, .12); box-shadow: none;
+}
+:root[data-palette="shekinah"][data-theme="dark"] button.secondary:hover { background: rgba(255, 255, 255, .12); }
+:root[data-palette="shekinah"][data-theme="dark"] button.danger, :root[data-palette="shekinah"][data-theme="dark"] .btn.danger {
+  background: rgba(255, 107, 107, .12); color: var(--kit-red); border: 1px solid rgba(255, 107, 107, .35); box-shadow: none;
+}
+
+/* Inputs */
+:root[data-palette="shekinah"][data-theme="dark"] input:not([type=checkbox]):not([type=radio]):not([type=range]),
+:root[data-palette="shekinah"][data-theme="dark"] select,
+:root[data-palette="shekinah"][data-theme="dark"] textarea {
+  background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .10); border-radius: 16px; color: #fff;
+}
+:root[data-palette="shekinah"][data-theme="dark"] input:focus, :root[data-palette="shekinah"][data-theme="dark"] select:focus, :root[data-palette="shekinah"][data-theme="dark"] textarea:focus {
+  border-color: #d4af37; box-shadow: 0 0 0 3px rgba(212, 175, 55, .18); outline: none;
+}
+:root[data-palette="shekinah"][data-theme="dark"] label > span:first-child, :root[data-palette="shekinah"][data-theme="dark"] .field-label {
+  color: #d4af37; letter-spacing: .1em; text-transform: uppercase; font-size: .7rem; font-weight: 700;
+}
+
+/* Filter pills / segmented controls */
+:root[data-palette="shekinah"][data-theme="dark"] .segmented-control { background: none; border: none; padding: 0; gap: 8px; flex-wrap: wrap; }
+:root[data-palette="shekinah"][data-theme="dark"] .segmented-control button {
+  background: rgba(255, 255, 255, .07); color: #fff; border: 1px solid transparent; border-radius: 999px; box-shadow: none; font-weight: 600;
+}
+:root[data-palette="shekinah"][data-theme="dark"] .segmented-control button[aria-pressed="true"],
+:root[data-palette="shekinah"][data-theme="dark"] .segmented-control button[aria-selected="true"],
+:root[data-palette="shekinah"][data-theme="dark"] .segmented-control button.active {
+  background: var(--kit-gold-grad); color: #080808;
+}
+
+/* Badges and chips */
+:root[data-palette="shekinah"][data-theme="dark"] .badge, :root[data-palette="shekinah"][data-theme="dark"] .status-chip, :root[data-palette="shekinah"][data-theme="dark"] .count-pill {
+  border-radius: 999px; font-size: .68rem; letter-spacing: .06em; font-weight: 700; text-transform: uppercase;
+  background: rgba(255, 255, 255, .08); color: #d7d7dc; border: none; padding: .22rem .6rem;
+}
+:root[data-palette="shekinah"][data-theme="dark"] .status-chip.success, :root[data-palette="shekinah"][data-theme="dark"] .badge.success { background: rgba(74, 222, 128, .14); color: var(--kit-green); }
+:root[data-palette="shekinah"][data-theme="dark"] .status-chip.danger, :root[data-palette="shekinah"][data-theme="dark"] .badge.danger { background: rgba(255, 107, 107, .14); color: var(--kit-red); }
+:root[data-palette="shekinah"][data-theme="dark"] .status-chip.info, :root[data-palette="shekinah"][data-theme="dark"] .badge.info { background: rgba(110, 168, 255, .14); color: var(--kit-blue); }
+:root[data-palette="shekinah"][data-theme="dark"] .status-chip.warning, :root[data-palette="shekinah"][data-theme="dark"] .badge.warning { background: rgba(212, 175, 55, .16); color: #f0d27a; }
+
+/* Tables read like the app's list rows */
+:root[data-palette="shekinah"][data-theme="dark"] .data-table { border-collapse: separate; border-spacing: 0 8px; }
+:root[data-palette="shekinah"][data-theme="dark"] .data-table thead th { color: #d4af37; font-size: .66rem; letter-spacing: .12em; border: none; background: none; }
+:root[data-palette="shekinah"][data-theme="dark"] .data-table tbody td { background: #161619; border-top: 1px solid var(--kit-border); border-bottom: 1px solid var(--kit-border); }
+:root[data-palette="shekinah"][data-theme="dark"] .data-table tbody td:first-child { border-left: 1px solid var(--kit-border); border-radius: 16px 0 0 16px; }
+:root[data-palette="shekinah"][data-theme="dark"] .data-table tbody td:last-child { border-right: 1px solid var(--kit-border); border-radius: 0 16px 16px 0; }
+:root[data-palette="shekinah"][data-theme="dark"] .data-table tbody tr:hover td { background: #1f1e24; }
+
+/* Rows used in lists */
+:root[data-palette="shekinah"][data-theme="dark"] .item-row, :root[data-palette="shekinah"][data-theme="dark"] .sermon-row {
+  background: var(--kit-card); border: 1px solid var(--kit-border); border-radius: 18px;
+}
+
+/* Alerts */
+:root[data-palette="shekinah"][data-theme="dark"] .alert { border-radius: 16px; }
+
+/* Shared pieces for redesigned pages */
+.kit-avatar { width: 40px; height: 40px; border-radius: 50%; display: inline-grid; place-items: center; font-weight: 700; color: #fff; font-size: .85rem; flex: none; }
+.kit-person { display: flex; align-items: center; gap: .75rem; }
+.kit-person strong { display: block; color: #fff; }
+.kit-person small { color: #a9a9b2; }
+.kit-icon-tile { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; flex: none; background: color-mix(in oklab, var(--tile, #d4af37) 16%, transparent); color: var(--tile, #d4af37); }
+.kit-hub { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.kit-hub-group { margin: 22px 0 10px; color: #d4af37; font-size: .7rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.kit-hub-card {
+  display: flex; flex-direction: column; gap: 10px; min-height: 132px; padding: 16px; border-radius: 20px; text-decoration: none;
+  background: var(--kit-card, #151518); border: 1px solid color-mix(in oklab, var(--tile, #d4af37) 30%, rgba(255,255,255,.06));
+  transition: transform .15s, box-shadow .15s;
+}
+.kit-hub-card:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(0, 0, 0, .45); }
+.kit-hub-card strong { color: #fff; font-size: 1rem; margin-top: auto; }
+.kit-hub-card span { color: #a9a9b2; font-size: .82rem; }
+
+/* Action cells styled as flex boxes would break the row's rounded border. */
+:root[data-palette="shekinah"][data-theme="dark"] .data-table tbody td[style*="flex"] { display: table-cell !important; white-space: nowrap; }
+:root[data-palette="shekinah"][data-theme="dark"] .data-table tbody td[style*="flex"] > * { margin-right: 4px; vertical-align: middle; }

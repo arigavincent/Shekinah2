@@ -37,43 +37,54 @@ import {
 import { clearSession, getUser, getToken } from "../auth/session";
 import {apiRequest} from "../api/client";
 import { useAdminTheme } from "../theme";
+import dove from "../assets/dove.png";
 
 type NavItem = { label: string; to: string; icon: LucideIcon };
 type NavSection = { label: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
   {
-    label: "Content",
+    label: "Home",
     items: [
       { label: "Overview", to: "/", icon: LayoutDashboard },
-      { label: "Sermons", to: "/sermons", icon: Mic2 },
-      { label: "Library", to: "/library", icon: BookOpen },
-      { label: "Devotions", to: "/devotions", icon: Sunrise },
-      { label: "Reading Plans", to: "/reading-plans", icon: CalendarRange },
-      { label: "Events", to: "/events", icon: CalendarDays },
-      { label: "Updates", to: "/updates", icon: Megaphone },
-      { label: "Branches", to: "/branches", icon: Building2 }
-    ]
-  },
-  {
-    label: "Care",
-    items: [
-      { label: "Prayer", to: "/prayers", icon: HandHeart },
-      { label: "Chat", to: "/community", icon: MessagesSquare },
-      { label: "Testimonies", to: "/testimonies", icon: Sparkles }
-    ]
-  },
-  {
-    label: "Operations",
-    items: [
       { label: "Live", to: "/live", icon: Radio },
       { label: "Check-In", to: "/checkins", icon: ClipboardCheck },
-      { label: "Payments", to: "/giving", icon: Wallet },
-      { label: "Monetization", to: "/monetization", icon: Wallet },
-      { label: "Notifications", to: "/notifications", icon: BellRing },
-      {label:"Settings",to:"/settings",icon:ShieldCheck},
+    ]
+  },
+  {
+    label: "Content",
+    items: [
+      { label: "Sermons", to: "/sermons", icon: Mic2 },
+      { label: "Books", to: "/library", icon: BookOpen },
+      { label: "Devotions", to: "/devotions", icon: Sunrise },
+      { label: "Reading Plans", to: "/reading-plans", icon: CalendarRange },
+      { label: "Updates", to: "/updates", icon: Megaphone },
+    ]
+  },
+  {
+    label: "Church life",
+    items: [
+      { label: "Events", to: "/events", icon: CalendarDays },
       { label: "Serve Teams", to: "/serve-settings", icon: HandHeart },
-      { label: "Users", to: "/users", icon: ShieldCheck }
+      { label: "Branches", to: "/branches", icon: Building2 },
+      { label: "Ministry settings", to: "/settings", icon: ShieldCheck },
+    ]
+  },
+  {
+    label: "Care and community",
+    items: [
+      { label: "Prayer requests", to: "/prayers", icon: HandHeart },
+      { label: "Testimonies", to: "/testimonies", icon: Sparkles },
+      { label: "Community chat", to: "/community", icon: MessagesSquare },
+      { label: "Send notification", to: "/notifications", icon: BellRing },
+    ]
+  },
+  {
+    label: "Income",
+    items: [
+      { label: "Payments", to: "/giving", icon: Wallet },
+      { label: "Monetization", to: "/monetization", icon: DollarSign },
+      { label: "Users", to: "/users", icon: Users },
     ]
   },
   {
@@ -88,17 +99,13 @@ const navSections: NavSection[] = [
 const superAdminNavSection: NavSection = {
   label: "Super Admin",
   items: [
+    { label: "SA Tools", to: "/sa", icon: ShieldAlert },
     { label: "Members", to: "/sa/members", icon: Users },
     { label: "Roles", to: "/sa/roles", icon: BadgeCheck },
-    { label: "Families", to: "/sa/families", icon: Home },
-    { label: "Messages", to: "/sa/messages", icon: Send },
-    { label: "Finance & Funds", to: "/sa/finance", icon: DollarSign },
     { label: "Groups", to: "/sa/groups", icon: UsersRound },
     { label: "Attendance", to: "/sa/attendance", icon: CalendarCheck },
-    { label: "Comm Templates", to: "/sa/comm-templates", icon: MessageSquareText },
-    { label: "API Keys", to: "/sa/api-keys", icon: KeyRound },
-    { label: "Webhooks", to: "/sa/webhooks", icon: Webhook },
-    { label: "System & Governance", to: "/sa/system", icon: ShieldAlert },
+    { label: "Messages", to: "/sa/messages", icon: Send },
+    { label: "Finance & Funds", to: "/sa/finance", icon: DollarSign },
   ]
 };
 
@@ -114,7 +121,7 @@ export function AdminLayout() {
   const [permissions,setPermissions]=useState<string[]|null>(null);
   const scopes:Record<string,string>={"/sermons":"sermons:manage","/library":"books:publish","/events":"events:manage","/devotions":"content:manage","/updates":"content:manage","/reading-plans":"content:manage","/community":"community:moderate","/testimonies":"community:moderate","/giving":"finance:manage","/monetization":"finance:manage","/checkins":"checkin:scan"};
   const isSuperAdmin = user?.role === "super_admin";
-  const allowed=(path:string)=>admin||(path==="/live"&&Boolean(permissions?.some(p=>["live:broadcast","live:moderate"].includes(p))))||path==="/appearance"||Boolean(scopes[path]&&permissions?.includes(scopes[path]))||path.startsWith("/sa/");
+  const allowed=(path:string)=>admin||(path==="/live"&&Boolean(permissions?.some(p=>["live:broadcast","live:moderate"].includes(p))))||path==="/appearance"||Boolean(scopes[path]&&permissions?.includes(scopes[path]))||path==="/sa"||path.startsWith("/sa/");
   const baseSections = navSections.map(s=>({...s,items:s.items.filter(i=>allowed(i.to))})).filter(s=>s.items.length);
   const visibleSections = isSuperAdmin ? [...baseSections, superAdminNavSection] : baseSections;
   useEffect(()=>{void apiRequest<{permissions:string[]}>("/api/v1/permissions/me",{token:getToken()}).then(r=>setPermissions(r.permissions)).catch(()=>setPermissions([]));},[user?.id]);
@@ -178,10 +185,10 @@ export function AdminLayout() {
       >
         <div className="sidebar-top-row">
           <div className="brand">
-            <div className="brand-mark" aria-hidden="true">S</div>
+            <div className="brand-mark" aria-hidden="true"><img src={dove} alt="" /></div>
             <div className="brand-text">
-              <strong>Shekinah</strong>
-              <span>Admin Console</span>
+              <strong>SHEKINAH</strong>
+              <span>Sons Global · Admin</span>
             </div>
           </div>
 
@@ -207,7 +214,7 @@ export function AdminLayout() {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end={item.to === "/"}
+                    end={item.to === "/" || item.to === "/sa"}
                     className={({ isActive }) =>
                       isActive ? "nav-link active" : "nav-link"
                     }

@@ -1,3 +1,4 @@
+import { Person } from "../components/kit/Kit";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../api/client";
 import { MemberSelect } from "../components/MemberSelect";
@@ -111,12 +112,12 @@ export function MembersPage() {
             <table className="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody>
               {filtered.map(m => (
                 <tr key={m.id} onClick={() => selectMember(m)} style={{ cursor: "pointer", background: selected?.id === m.id ? "var(--surface-hover)" : undefined }}>
-                  <td>{m.name}</td><td>{m.email}</td><td>{m.phone || <span className="muted">Not added</span>}</td><td><span className="badge">{({ super_admin: "Super admin", admin: "Admin", member: "Member" } as Record<string, string>)[m.role] || m.role}</span></td>
+                  <td><Person name={m.name || m.email} id={m.id} /></td><td>{m.email}</td><td>{m.phone || <span className="muted">Not added</span>}</td><td><span className="badge">{({ super_admin: "Super admin", admin: "Admin", member: "Member" } as Record<string, string>)[m.role] || m.role}</span></td>
                   <td>{m.isActive === false ? <span className="badge danger">Inactive</span> : <span className="badge success">Active</span>}</td>
-                  <td style={{ display: "flex", gap: 4 }}>
+                  <td><div style={{ display: "flex", gap: 4 }}>
                     <button className="btn-icon" title="Toggle suspend" onClick={e => { e.stopPropagation(); suspend(m); }}>{m.isActive === false ? <UserCheck size={14} /> : <UserX size={14} />}</button>
                     <button className="btn-icon danger" title="Soft delete" onClick={e => { e.stopPropagation(); deleteUser(m, "soft"); }}><Trash2 size={14} /></button>
-                  </td>
+                  </div></td>
                 </tr>
               ))}
             </tbody></table>

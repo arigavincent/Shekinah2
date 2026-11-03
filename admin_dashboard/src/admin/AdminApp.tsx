@@ -5,6 +5,7 @@ import App from "./App";
 import { AdminFeedbackProvider } from "./feedback/AdminFeedback";
 import { AdminThemeProvider } from "./theme";
 import "./style.css";
+import "./phone-look.css";
 
 type AdminErrorBoundaryState = {
   hasError: boolean;
