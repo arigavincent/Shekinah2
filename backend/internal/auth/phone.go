@@ -72,3 +72,56 @@ func (h Handler) UpdatePhone(c *gin.Context) {
 	}
 	httpx.OK(c, gin.H{"user": user})
 }
+
+type profileRequest struct {
+	Name  *string `json:"name"`
+	Phone *string `json:"phone"`
+}
+
+// UpdateProfile lets members correct their own name and phone number.
+func (h Handler) UpdateProfile(c *gin.Context) {
+	userID, ok := UserIDFromContext(c)
+	if !ok {
+		httpx.Error(c, http.StatusUnauthorized, "unauthorized", "authentication required")
+		return
+	}
+	var req profileRequest
+	if c.ShouldBindJSON(&req) != nil || (req.Name == nil && req.Phone == nil) {
+		httpx.Error(c, http.StatusBadRequest, "invalid_json", "send a name or a phone number")
+		return
+	}
+	var name, phone string
+	if req.Name != nil {
+		name = strings.Join(strings.Fields(*req.Name), " ")
+		if len([]rune(name)) < 2 || len([]rune(name)) > 80 {
+			httpx.Error(c, http.StatusBadRequest, "invalid_name", "Enter your name (2 to 80 characters)")
+			return
+		}
+	}
+	if req.Phone != nil {
+		var err error
+		if phone, err = NormalizePhone(*req.Phone); err != nil {
+			httpx.Error(c, http.StatusBadRequest, "invalid_phone", "Enter a valid phone number, e.g. 0712 345 678")
+			return
+		}
+	}
+	ctx := c.Request.Context()
+	if name != "" {
+		if err := h.service.repository.UpdateName(ctx, userID, name); err != nil {
+			httpx.Error(c, http.StatusInternalServerError, "profile_update_failed", "Could not save your details")
+			return
+		}
+	}
+	if phone != "" {
+		if err := h.service.repository.UpdatePhone(ctx, userID, phone); err != nil {
+			httpx.Error(c, http.StatusInternalServerError, "profile_update_failed", "Could not save your details")
+			return
+		}
+	}
+	user, err := h.service.Me(ctx, userID)
+	if err != nil {
+		httpx.Error(c, http.StatusInternalServerError, "me_failed", "failed to load user")
+		return
+	}
+	httpx.OK(c, gin.H{"user": user})
+}

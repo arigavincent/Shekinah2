@@ -296,3 +296,8 @@ func (r Repository) UpdatePhone(ctx context.Context, userID, phone string) error
 	_, err := r.db.Exec(ctx, `UPDATE users SET phone=$2, updated_at=NOW() WHERE id=$1`, userID, phone)
 	return err
 }
+
+func (r Repository) UpdateName(ctx context.Context, userID, name string) error {
+	_, err := r.db.Exec(ctx, `UPDATE users SET name=$2, updated_at=NOW() WHERE id=$1`, userID, name)
+	return err
+}
