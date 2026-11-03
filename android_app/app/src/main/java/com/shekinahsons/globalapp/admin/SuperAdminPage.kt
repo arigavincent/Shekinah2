@@ -625,6 +625,31 @@ private fun RecordServiceSheet(onDismiss: () -> Unit, save: suspend (String, Str
 
 // ─── Kiosks Pane ─────────────────────────────────────────────────────────────
 
+// A confirm step for anything that can't be undone easily.
+@Composable
+internal fun ConfirmDialog(title: String, body: String, action: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, containerColor = Color(0xFF1A1A1E),
+        title = { Text(title, color = Brand.White) }, text = { Text(body, color = Brand.Text2) },
+        confirmButton = { TextButton(onClick = { onDismiss(); onConfirm() }) { Text(action, color = KitRed) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Brand.Text2) } })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun KitSheet(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF16161A)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = Type.Title, color = Brand.White)
+            content()
+        }
+    }
+}
+
+@Composable
+internal fun SmallAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color = Brand.Text2, onClick: () -> Unit) {
+    Icon(icon, label, tint = tint, modifier = Modifier.size(36.dp).clip(CircleShape).background(tint.copy(alpha = 0.10f)).clickable(onClick = onClick).padding(8.dp))
+}
+
 @Composable
 internal fun SaKiosksPane() {
     val scope = rememberCoroutineScope()
@@ -632,90 +657,52 @@ internal fun SaKiosksPane() {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var showPair by remember { mutableStateOf(false) }
-    var kioskName by remember { mutableStateOf("") }
-    var kioskLoc by remember { mutableStateOf("") }
-    var kioskSerial by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
+    var unbinding by remember { mutableStateOf<SaKiosk?>(null) }
+    suspend fun reload() { runCatching { Api.decode<List<SaKiosk>>(Api.get("/admin/sa/kiosks")["kiosks"]) }.onSuccess { list.clear(); list.addAll(it) }.onFailure { error = it.message } }
+    LaunchedEffect(Unit) { reload(); loading = false }
 
-    LaunchedEffect(Unit) {
-        runCatching {
-            val resp = Api.get("/admin/sa/kiosks")
-            Api.decode<List<SaKiosk>>(resp["kiosks"])
-        }.onSuccess { list.addAll(it) }.onFailure { error = it.message }
-        loading = false
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("POS devices", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text("+ Pair", color = Brand.Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showPair = true })
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatStrip(listOf(Stat("${list.size}", "Devices"), Stat("${list.count { !it.locked }}", "Active", KitGreen), Stat("${list.count { it.locked }}", "Locked", KitRed)))
+        Text("Phones or tablets at the entrance or book table, set up for check-in and sales. Lock one if it goes missing.", style = Type.Meta, color = Brand.Text2)
+        SectionHeading("POS devices", "+ Pair a device") { showPair = true }
         ErrorNote(error)
-        if (loading) CircularProgressIndicator(color = Brand.Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        if (!loading && list.isEmpty()) Empty("No POS devices paired yet.")
+        if (loading) Loading()
+        if (!loading && list.isEmpty()) EmptyState(Icons.Rounded.PointOfSale, "No devices yet", "Pair the gate phone or the book-table tablet.")
         list.forEach { k ->
-            Row(
-                Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.9f).padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(k.name, color = Brand.White, fontWeight = FontWeight.SemiBold)
-                    Text(k.location, style = Type.Meta, color = Brand.Text2)
-                    Text("SN: ${k.serialNumber}", style = Type.Meta, color = Brand.Muted)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(if (k.locked) "Unlock" else "Lock", color = Brand.Gold, fontSize = 12.sp,
-                        modifier = Modifier.clickable {
-                            scope.launch {
-                                runCatching { Api.patch("/admin/sa/kiosks/${k.id}/lock", mapOf("locked" to !k.locked)) }
-                                    .onSuccess { val i = list.indexOfFirst { it.id == k.id }; if (i >= 0) list[i] = k.copy(locked = !k.locked) }
-                                    .onFailure { error = it.message }
-                            }
-                        })
-                    Text("Unbind", color = Color(0xFFFF6B6B), fontSize = 12.sp,
-                        modifier = Modifier.clickable {
-                            scope.launch {
-                                runCatching { Api.delete("/admin/sa/kiosks/${k.id}") }
-                                    .onSuccess { list.removeAll { it.id == k.id } }
-                                    .onFailure { error = it.message }
-                            }
-                        })
-                }
+            KitRow(k.name, line1 = k.location.ifBlank { "No location set" }, line2 = if (k.serialNumber.isNotBlank()) "Serial ${k.serialNumber}" else "",
+                leading = { IconTile(Icons.Rounded.PointOfSale, if (k.locked) KitRed else KitBlue) },
+                trailing = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Badge(if (k.locked) "LOCKED" else "ACTIVE", if (k.locked) KitRed else KitGreen)
+                    SmallAction(if (k.locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, if (k.locked) "Unlock" else "Lock", Brand.GoldLight) {
+                        scope.launch { runCatching { Api.patch("/admin/sa/kiosks/${k.id}/lock", mapOf("locked" to !k.locked)) }
+                            .onSuccess { val i = list.indexOfFirst { it.id == k.id }; if (i >= 0) list[i] = k.copy(locked = !k.locked) }.onFailure { error = it.message } }
+                    }
+                    SmallAction(Icons.Rounded.LinkOff, "Unpair", KitRed) { unbinding = k }
+                } })
+        }
+    }
+    if (showPair) {
+        var name by remember { mutableStateOf("") }; var loc by remember { mutableStateOf("") }; var serial by remember { mutableStateOf("") }; var busy by remember { mutableStateOf(false) }
+        KitSheet("Pair a device", { showPair = false }) {
+            Field("NAME", name, { name = it }, hint = "e.g. Main gate phone")
+            Field("WHERE IT IS", loc, { loc = it }, hint = "e.g. Front entrance")
+            Field("SERIAL NUMBER (OPTIONAL)", serial, { serial = it })
+            GoldButton("Pair", busy = busy, enabled = !busy && name.isNotBlank()) {
+                scope.launch { busy = true; runCatching { Api.post("/admin/sa/kiosks", mapOf("name" to name.trim(), "location" to loc.trim(), "serialNumber" to serial.trim())) }
+                    .onSuccess { reload(); showPair = false }.onFailure { error = it.message }; busy = false }
             }
         }
-        if (showPair) {
-            AlertDialog(
-                onDismissRequest = { showPair = false },
-                containerColor = Color(0xFF1A1A1E),
-                title = { Text("Pair new POS device", color = Brand.White) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Field("POS NAME", kioskName, { kioskName = it })
-                        Field("LOCATION", kioskLoc, { kioskLoc = it })
-                        Field("SERIAL NUMBER", kioskSerial, { kioskSerial = it })
-                    }
-                },
-                confirmButton = {
-                    GoldButton("Pair", busy = busy, enabled = kioskName.isNotBlank()) {
-                        scope.launch {
-                            busy = true
-                            runCatching {
-                                Api.post("/admin/sa/kiosks", mapOf("name" to kioskName, "location" to kioskLoc, "serialNumber" to kioskSerial))
-                                val resp = Api.get("/admin/sa/kiosks")
-                                Api.decode<List<SaKiosk>>(resp["kiosks"])
-                            }.onSuccess { k -> list.clear(); list.addAll(k); showPair = false; kioskName = ""; kioskLoc = ""; kioskSerial = "" }
-                                .onFailure { error = it.message }
-                            busy = false
-                        }
-                    }
-                },
-                dismissButton = { TextButton(onClick = { showPair = false }) { Text("Cancel", color = Brand.Text2) } }
-            )
-        }
     }
+    unbinding?.let { k -> ConfirmDialog("Unpair ${k.name}?", "It stops working as a POS until it's paired again.", "Unpair", { unbinding = null }) {
+        scope.launch { runCatching { Api.delete("/admin/sa/kiosks/${k.id}") }.onSuccess { list.removeAll { it.id == k.id } }.onFailure { error = it.message } }
+    } }
 }
 
 // ─── Comm Templates Pane ─────────────────────────────────────────────────────
+
+private val channels = listOf("sms" to "SMS", "email" to "Email", "push" to "Push", "whatsapp" to "WhatsApp")
+private fun channelIcon(c: String) = when (c) { "email" -> Icons.Rounded.Mail; "push" -> Icons.Rounded.NotificationsActive; "whatsapp" -> Icons.Rounded.Chat; else -> Icons.Rounded.Sms }
+private fun channelTint(c: String) = when (c) { "email" -> KitBlue; "push" -> Brand.Gold; "whatsapp" -> KitGreen; else -> KitViolet }
 
 @Composable
 internal fun SaTemplatesPane() {
@@ -723,80 +710,49 @@ internal fun SaTemplatesPane() {
     val list = remember { mutableStateListOf<SaCommTemplate>() }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var showCreate by remember { mutableStateOf(false) }
-    var tName by remember { mutableStateOf("") }
-    var tChannel by remember { mutableStateOf("sms") }
-    var tBody by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<SaCommTemplate?>(null) }
+    var deleting by remember { mutableStateOf<SaCommTemplate?>(null) }
+    var filter by rememberSaveable { mutableStateOf("all") }
+    suspend fun reload() { runCatching { Api.decode<List<SaCommTemplate>>(Api.get("/admin/sa/comm/templates")["templates"]) }.onSuccess { list.clear(); list.addAll(it) }.onFailure { error = it.message } }
+    LaunchedEffect(Unit) { reload(); loading = false }
 
-    LaunchedEffect(Unit) {
-        runCatching {
-            val resp = Api.get("/admin/sa/comm/templates")
-            Api.decode<List<SaCommTemplate>>(resp["templates"])
-        }.onSuccess { list.addAll(it) }.onFailure { error = it.message }
-        loading = false
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Comm Templates", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text("+ New", color = Brand.Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showCreate = true })
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatStrip(channels.map { (k, l) -> Stat("${list.count { it.channel == k }}", l, channelTint(k)) })
+        Text("Messages you send often (welcome, reminders, thank-you). Use {name} for the person's name.", style = Type.Meta, color = Brand.Text2)
+        FilterPills(listOf("all" to "All") + channels, filter) { filter = it }
+        SectionHeading("Templates", "+ New template") { editing = SaCommTemplate() }
         ErrorNote(error)
-        if (loading) CircularProgressIndicator(color = Brand.Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        if (!loading && list.isEmpty()) Empty("No templates yet.")
-        list.forEach { t ->
-            Row(
-                Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.9f).padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(t.name, color = Brand.White, fontWeight = FontWeight.SemiBold)
-                        Text(t.channel.uppercase(), style = Type.Label, color = Brand.Gold)
-                    }
-                    Text(t.body.take(80) + if (t.body.length > 80) "…" else "", style = Type.Meta, color = Brand.Text2)
-                }
-                Text("Del", color = Color(0xFFFF6B6B), fontSize = 12.sp,
-                    modifier = Modifier.clickable {
-                        scope.launch {
-                            runCatching { Api.delete("/admin/sa/comm/templates/${t.id}") }
-                                .onSuccess { list.removeAll { it.id == t.id } }
-                                .onFailure { error = it.message }
-                        }
-                    })
+        if (loading) Loading()
+        val shown = list.filter { filter == "all" || it.channel == filter }
+        if (!loading && shown.isEmpty()) EmptyState(Icons.Rounded.Mail, "No templates yet", "Save a message once and reuse it.")
+        shown.forEach { t ->
+            KitRow(t.name, line1 = t.body.replace("\n", " "), line2 = t.subject,
+                leading = { IconTile(channelIcon(t.channel), channelTint(t.channel)) },
+                trailing = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Badge(t.channel.uppercase(), channelTint(t.channel))
+                    SmallAction(Icons.Rounded.DeleteOutline, "Delete", KitRed) { deleting = t }
+                } }, onClick = { editing = t })
+        }
+    }
+    editing?.let { t ->
+        var name by remember(t.id) { mutableStateOf(t.name) }; var channel by remember(t.id) { mutableStateOf(t.channel) }
+        var subject by remember(t.id) { mutableStateOf(t.subject) }; var body by remember(t.id) { mutableStateOf(t.body) }; var busy by remember { mutableStateOf(false) }
+        KitSheet(if (t.id.isBlank()) "New template" else "Edit template", { editing = null }) {
+            FilterPills(channels, channel) { channel = it }
+            Field("NAME", name, { name = it }, hint = "e.g. Welcome new member")
+            if (channel == "email") Field("SUBJECT", subject, { subject = it })
+            Field("MESSAGE", body, { body = it }, minHeight = 120.dp, singleLine = false, hint = "Hello {name}, welcome to Shekinah Sons Global…")
+            if (channel == "sms") Text("${body.length} characters · ${(body.length + 159) / 160} SMS", style = Type.Meta, color = Brand.Text2)
+            GoldButton("Save", busy = busy, enabled = !busy && name.isNotBlank() && body.isNotBlank()) {
+                scope.launch { busy = true
+                    runCatching { Api.put("/admin/sa/comm/templates", buildMap { if (t.id.isNotBlank()) put("id", t.id); put("name", name.trim()); put("channel", channel); put("subject", subject.trim()); put("body", body.trim()); put("isActive", true) }) }
+                        .onSuccess { reload(); editing = null }.onFailure { error = it.message }; busy = false }
             }
         }
-        if (showCreate) {
-            AlertDialog(
-                onDismissRequest = { showCreate = false },
-                containerColor = Color(0xFF1A1A1E),
-                title = { Text("New Template", color = Brand.White) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Field("TEMPLATE NAME", tName, { tName = it })
-                        Chips(listOf("sms" to "SMS", "email" to "Email", "push" to "Push", "whatsapp" to "WhatsApp"), tChannel) { tChannel = it }
-                        Field("BODY", tBody, { tBody = it }, minHeight = 100.dp, singleLine = false)
-                    }
-                },
-                confirmButton = {
-                    GoldButton("Save", busy = busy, enabled = tName.isNotBlank() && tBody.isNotBlank()) {
-                        scope.launch {
-                            busy = true
-                            runCatching {
-                                Api.put("/admin/sa/comm/templates", mapOf("name" to tName, "channel" to tChannel, "body" to tBody, "isActive" to true))
-                                val resp = Api.get("/admin/sa/comm/templates")
-                                Api.decode<List<SaCommTemplate>>(resp["templates"])
-                            }.onSuccess { t -> list.clear(); list.addAll(t); showCreate = false; tName = ""; tBody = "" }
-                                .onFailure { error = it.message }
-                            busy = false
-                        }
-                    }
-                },
-                dismissButton = { TextButton(onClick = { showCreate = false }) { Text("Cancel", color = Brand.Text2) } }
-            )
-        }
     }
+    deleting?.let { t -> ConfirmDialog("Delete “${t.name}”?", "The template is removed. Messages already sent are not affected.", "Delete", { deleting = null }) {
+        scope.launch { runCatching { Api.delete("/admin/sa/comm/templates/${t.id}") }.onSuccess { list.removeAll { it.id == t.id } }.onFailure { error = it.message } }
+    } }
 }
 
 // ─── API Keys Pane ────────────────────────────────────────────────────────────
@@ -804,119 +760,90 @@ internal fun SaTemplatesPane() {
 @Composable
 internal fun SaApiKeysPane() {
     val scope = rememberCoroutineScope()
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val list = remember { mutableStateListOf<SaApiKey>() }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var showCreate by remember { mutableStateOf(false) }
-    var keyName by remember { mutableStateOf("") }
-    val keyPerms = remember { mutableStateListOf<String>() }
     var rawKey by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
+    var revoking by remember { mutableStateOf<SaApiKey?>(null) }
+    var rotating by remember { mutableStateOf<SaApiKey?>(null) }
+    suspend fun reload() { runCatching { Api.decode<List<SaApiKey>>(Api.get("/admin/sa/api-keys")["keys"]) }.onSuccess { list.clear(); list.addAll(it) }.onFailure { error = it.message } }
+    LaunchedEffect(Unit) { reload(); loading = false }
+    val labels = KEY_PERMISSIONS.toMap()
 
-    LaunchedEffect(Unit) {
-        runCatching {
-            val resp = Api.get("/admin/sa/api-keys")
-            Api.decode<List<SaApiKey>>(resp["keys"])
-        }.onSuccess { list.addAll(it) }.onFailure { error = it.message }
-        loading = false
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("API Keys", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text("+ Generate", color = Brand.Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showCreate = true })
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatStrip(listOf(Stat("${list.count { !it.revoked }}", "Active keys", KitGreen), Stat("${list.count { it.revoked }}", "Revoked", KitRed)))
+        Text("Let other systems (Zapier, n8n, your website) use the church's data. Each key can only do what you tick.", style = Type.Meta, color = Brand.Text2)
+        SectionHeading("Keys", "+ New key") { showCreate = true }
         ErrorNote(error)
-        if (loading) CircularProgressIndicator(color = Brand.Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        if (!loading && list.isEmpty()) Empty("No API keys yet.")
-        list.forEach { k ->
-            Row(
-                Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.9f).padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(k.name, color = Brand.White, fontWeight = FontWeight.SemiBold)
-                    Text("${k.prefix}••••••••", color = Brand.Text2, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 12.sp)
-                    if (k.revoked) Text("REVOKED", style = Type.Label, color = Color(0xFFFF6B6B))
-                }
-                if (!k.revoked) Text("Rotate", color = Brand.Gold, fontSize = 12.sp,
-                    modifier = Modifier.padding(end = 14.dp).clickable {
-                        scope.launch {
-                            runCatching { Api.post("/admin/sa/api-keys/${k.id}/rotate", emptyMap<String, String>())["key"]?.jsonPrimitive?.content }
-                                .onSuccess { fresh -> rawKey = fresh; list.clear(); list.addAll(Api.decode<List<SaApiKey>>(Api.get("/admin/sa/api-keys")["keys"])) }
-                                .onFailure { error = it.message }
-                        }
-                    })
-                if (!k.revoked) Text("Revoke", color = Color(0xFFFF6B6B), fontSize = 12.sp,
-                    modifier = Modifier.clickable {
-                        scope.launch {
-                            runCatching { Api.delete("/admin/sa/api-keys/${k.id}") }
-                                .onSuccess { val i = list.indexOfFirst { it.id == k.id }; if (i >= 0) list[i] = k.copy(revoked = true) }
-                                .onFailure { error = it.message }
-                        }
-                    })
+        if (loading) Loading()
+        if (!loading && list.isEmpty()) EmptyState(Icons.Rounded.Key, "No keys yet", "Create one when another system needs access.")
+        list.sortedBy { it.revoked }.forEach { k ->
+            KitRow(k.name, line1 = "${k.prefix}•••••• · " + k.permissions.joinToString(", ") { labels[it] ?: it },
+                line2 = if (k.lastUsedAt.isNotBlank()) "Last used ${k.lastUsedAt.take(10)}" else "Never used",
+                leading = { IconTile(Icons.Rounded.Key, if (k.revoked) Brand.Muted else KitViolet) },
+                trailing = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (k.revoked) Badge("REVOKED", KitRed) else {
+                        SmallAction(Icons.Rounded.Autorenew, "Rotate", Brand.GoldLight) { rotating = k }
+                        SmallAction(Icons.Rounded.Block, "Revoke", KitRed) { revoking = k }
+                    }
+                } })
+        }
+    }
+    if (showCreate) {
+        var name by remember { mutableStateOf("") }; val perms = remember { mutableStateListOf<String>() }; var busy by remember { mutableStateOf(false) }
+        KitSheet("New API key", { showCreate = false }) {
+            Field("NAME", name, { name = it }, hint = "e.g. Website forms")
+            Text("WHAT THIS KEY MAY DO", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Text2)
+            PermissionList(perms)
+            GoldButton("Create key", busy = busy, enabled = !busy && name.isNotBlank() && perms.isNotEmpty()) {
+                scope.launch { busy = true
+                    runCatching { Api.post("/admin/sa/api-keys", mapOf("name" to name.trim(), "permissions" to perms.toList()))["key"]?.jsonPrimitive?.content }
+                        .onSuccess { rawKey = it; reload(); showCreate = false }.onFailure { error = it.message }; busy = false }
             }
         }
-        rawKey?.let { key ->
-            AlertDialog(
-                onDismissRequest = { rawKey = null },
-                containerColor = Color(0xFF1A1A1E),
-                title = { Text("API Key Generated", color = Brand.Gold) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Copy this key now — it will not be shown again.", color = Brand.Text2, fontSize = 13.sp)
-                        Text(key, color = Brand.White, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 12.sp,
-                            modifier = Modifier.glass().padding(10.dp))
-                    }
-                },
-                confirmButton = { TextButton(onClick = { rawKey = null }) { Text("Done", color = Brand.Gold) } }
-            )
-        }
-        if (showCreate) {
-            AlertDialog(
-                onDismissRequest = { showCreate = false },
-                containerColor = Color(0xFF1A1A1E),
-                title = { Text("Generate API Key", color = Brand.White) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Field("KEY NAME", keyName, { keyName = it }, hint = "e.g. n8n Integration")
-                        Text("WHAT THIS KEY MAY DO", color = Brand.Text2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
-                            KEY_PERMISSIONS.forEach { (perm, label) ->
-                                Row(Modifier.fillMaxWidth().clickable { if (perm in keyPerms) keyPerms.remove(perm) else keyPerms.add(perm) }.padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    Checkbox(checked = perm in keyPerms, onCheckedChange = null)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(label, color = Brand.White, fontSize = 14.sp)
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    GoldButton("Generate", busy = busy, enabled = keyName.isNotBlank() && keyPerms.isNotEmpty()) {
-                        scope.launch {
-                            busy = true
-                            runCatching {
-                                val resp = Api.post("/admin/sa/api-keys", mapOf("name" to keyName, "permissions" to keyPerms.toList()))
-                                resp["key"]?.jsonPrimitive?.content
-                            }.onSuccess { k ->
-                                rawKey = k
-                                val resp2 = Api.get("/admin/sa/api-keys")
-                                list.clear(); list.addAll(Api.decode<List<SaApiKey>>(resp2["keys"]))
-                                showCreate = false; keyName = ""; keyPerms.clear()
-                            }.onFailure { error = it.message }
-                            busy = false
-                        }
-                    }
-                },
-                dismissButton = { TextButton(onClick = { showCreate = false }) { Text("Cancel", color = Brand.Text2) } }
-            )
+    }
+    rotating?.let { k -> ConfirmDialog("Rotate ${k.name}?", "A new key is made and the old one stops working at once. Update the system that uses it.", "Rotate", { rotating = null }) {
+        scope.launch { runCatching { Api.post("/admin/sa/api-keys/${k.id}/rotate", emptyMap<String, String>())["key"]?.jsonPrimitive?.content }.onSuccess { rawKey = it; reload() }.onFailure { error = it.message } }
+    } }
+    revoking?.let { k -> ConfirmDialog("Revoke ${k.name}?", "It stops working immediately and can't be turned back on.", "Revoke", { revoking = null }) {
+        scope.launch { runCatching { Api.delete("/admin/sa/api-keys/${k.id}") }.onSuccess { val i = list.indexOfFirst { it.id == k.id }; if (i >= 0) list[i] = k.copy(revoked = true) }.onFailure { error = it.message } }
+    } }
+    rawKey?.let { key ->
+        AlertDialog(onDismissRequest = { rawKey = null }, containerColor = Color(0xFF1A1A1E),
+            title = { Text("Copy the key now", color = Brand.Gold) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("For safety it's shown only once.", color = Brand.Text2, fontSize = 13.sp)
+                Text(key, color = Brand.White, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x1FFFFFFF)).padding(12.dp))
+                ActionPill("Copy", Icons.Rounded.ContentCopy, Brand.GoldLight, Modifier.fillMaxWidth()) { clipboard.setText(androidx.compose.ui.text.AnnotatedString(key)) }
+            } },
+            confirmButton = { TextButton(onClick = { rawKey = null }) { Text("Done", color = Brand.Gold) } })
+    }
+}
+
+@Composable
+internal fun PermissionList(perms: MutableList<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        KEY_PERMISSIONS.forEach { (perm, label) ->
+            val on = perm in perms
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (on) Color(0x26D4AF37) else Color(0x0FFFFFFF))
+                .border(1.dp, if (on) Brand.Gold.copy(alpha = 0.5f) else Color(0x14FFFFFF), RoundedCornerShape(14.dp))
+                .clickable { if (on) perms.remove(perm) else perms.add(perm) }.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(label, color = Brand.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                Icon(if (on) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked, null, tint = if (on) Brand.Gold else Brand.Muted, modifier = Modifier.size(22.dp))
+            }
         }
     }
 }
 
 // ─── Webhooks Pane ───────────────────────────────────────────────────────────
+
+private val WEBHOOK_EVENTS = listOf(
+    "member.created" to "New member", "member.updated" to "Member details changed", "giving.received" to "Gift received", "giving.refunded" to "Gift refunded",
+    "event.registered" to "Event registration", "attendance.session.created" to "Service recorded", "user.suspended" to "Account suspended", "user.deleted" to "Account removed",
+)
 
 @Composable
 internal fun SaWebhooksPane() {
@@ -924,129 +851,96 @@ internal fun SaWebhooksPane() {
     val list = remember { mutableStateListOf<SaWebhook>() }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var showCreate by remember { mutableStateOf(false) }
-    var wUrl by remember { mutableStateOf("") }
-    var testResult by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    var editing by remember { mutableStateOf<SaWebhook?>(null) }
+    var deleting by remember { mutableStateOf<SaWebhook?>(null) }
+    suspend fun reload() { runCatching { Api.decode<List<SaWebhook>>(Api.get("/admin/sa/webhooks")["webhooks"]) }.onSuccess { list.clear(); list.addAll(it) }.onFailure { error = it.message } }
+    LaunchedEffect(Unit) { reload(); loading = false }
+    val labels = WEBHOOK_EVENTS.toMap()
 
-    LaunchedEffect(Unit) {
-        runCatching {
-            val resp = Api.get("/admin/sa/webhooks")
-            Api.decode<List<SaWebhook>>(resp["webhooks"])
-        }.onSuccess { list.addAll(it) }.onFailure { error = it.message }
-        loading = false
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Webhooks", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text("+ New", color = Brand.Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showCreate = true })
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatStrip(listOf(Stat("${list.size}", "Webhooks"), Stat("${list.count { it.lastStatus in 200..299 }}", "Working", KitGreen), Stat("${list.count { it.lastStatus !in 0..299 }}", "Failing", KitRed)))
+        Text("Tell another system the moment something happens (a gift, a new member). It must be an https address.", style = Type.Meta, color = Brand.Text2)
+        SectionHeading("Webhooks", "+ New webhook") { editing = SaWebhook() }
         ErrorNote(error)
-        if (loading) CircularProgressIndicator(color = Brand.Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        if (!loading && list.isEmpty()) Empty("No webhooks configured.")
+        note?.let { Text(it, color = KitGreen, fontSize = 13.sp) }
+        if (loading) Loading()
+        if (!loading && list.isEmpty()) EmptyState(Icons.Rounded.Webhook, "No webhooks yet", "Connect Zapier, n8n or your own server.")
         list.forEach { w ->
-            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.9f).padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(w.url, color = Brand.White, fontSize = 13.sp, maxLines = 1)
-                        Text("Events: ${w.events.joinToString(", ")}", style = Type.Meta, color = Brand.Text2)
-                        if (w.lastStatus > 0) Text("Last: HTTP ${w.lastStatus}", style = Type.Meta,
-                            color = if (w.lastStatus in 200..299) Color(0xFF4ADE80) else Color(0xFFFF6B6B))
-                    }
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(if (w.isActive) Color(0xFF4ADE80) else Brand.Muted))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    Text("Test", color = Brand.Gold, fontSize = 12.sp, modifier = Modifier.clickable {
-                        scope.launch {
+            val ok = w.lastStatus in 200..299
+            KitRow(w.url.removePrefix("https://"), line1 = w.events.joinToString(", ") { labels[it] ?: it },
+                line2 = if (w.lastStatus == 0) "Not delivered yet" else "Last delivery: HTTP ${w.lastStatus}",
+                leading = { IconTile(Icons.Rounded.Webhook, if (w.lastStatus == 0) KitViolet else if (ok) KitGreen else KitRed) },
+                trailing = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SmallAction(Icons.Rounded.Send, "Send a test", Brand.GoldLight) {
+                        scope.launch { note = null; error = null
                             runCatching { Api.post("/admin/sa/webhooks/${w.id}/test", emptyMap<String, String>()) }
-                                .onSuccess { testResult = "Test sent — check your endpoint." }
-                                .onFailure { testResult = "Failed: ${it.message}" }
-                        }
-                    })
-                    Text("Delete", color = Color(0xFFFF6B6B), fontSize = 12.sp, modifier = Modifier.clickable {
-                        scope.launch {
-                            runCatching { Api.delete("/admin/sa/webhooks/${w.id}") }
-                                .onSuccess { list.removeAll { it.id == w.id } }
-                                .onFailure { error = it.message }
-                        }
-                    })
+                                .onSuccess { r -> val st = r["status"]?.jsonPrimitive?.intOrNull ?: 0; if (st in 200..299) note = "Test delivered (HTTP $st)." else error = "The endpoint did not accept the test" + if (st > 0) " (HTTP $st)." else "."; reload() }
+                                .onFailure { error = it.message } }
+                    }
+                    SmallAction(Icons.Rounded.DeleteOutline, "Delete", KitRed) { deleting = w }
+                } }, onClick = { editing = w })
+        }
+    }
+    editing?.let { w ->
+        var url by remember(w.id) { mutableStateOf(w.url) }; val events = remember(w.id) { mutableStateListOf<String>().apply { addAll(w.events.ifEmpty { listOf("member.created") }) } }; var busy by remember { mutableStateOf(false) }
+        KitSheet(if (w.id.isBlank()) "New webhook" else "Edit webhook", { editing = null }) {
+            Field("ADDRESS", url, { url = it.trim() }, hint = "https://example.com/hook", keyboard = androidx.compose.ui.text.input.KeyboardType.Uri)
+            Text("SEND WHEN", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Text2)
+            WEBHOOK_EVENTS.forEach { (e, label) ->
+                val on = e in events
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (on) Color(0x26D4AF37) else Color(0x0FFFFFFF)).clickable { if (on) events.remove(e) else events.add(e) }.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, color = Brand.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Icon(if (on) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked, null, tint = if (on) Brand.Gold else Brand.Muted, modifier = Modifier.size(22.dp))
                 }
             }
-        }
-        testResult?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp) }
-        if (showCreate) {
-            AlertDialog(
-                onDismissRequest = { showCreate = false },
-                containerColor = Color(0xFF1A1A1E),
-                title = { Text("New Webhook", color = Brand.White) },
-                text = { Field("ENDPOINT URL", wUrl, { wUrl = it }, hint = "https://…") },
-                confirmButton = {
-                    GoldButton("Save", busy = busy, enabled = wUrl.startsWith("http")) {
-                        scope.launch {
-                            busy = true
-                            runCatching {
-                                Api.put("/admin/sa/webhooks", mapOf("url" to wUrl, "events" to listOf("member.created"), "isActive" to true))
-                                val resp = Api.get("/admin/sa/webhooks")
-                                Api.decode<List<SaWebhook>>(resp["webhooks"])
-                            }.onSuccess { w -> list.clear(); list.addAll(w); showCreate = false; wUrl = "" }
-                                .onFailure { error = it.message }
-                            busy = false
-                        }
-                    }
-                },
-                dismissButton = { TextButton(onClick = { showCreate = false }) { Text("Cancel", color = Brand.Text2) } }
-            )
+            GoldButton("Save", busy = busy, enabled = !busy && url.startsWith("https://") && events.isNotEmpty()) {
+                scope.launch { busy = true
+                    runCatching { Api.put("/admin/sa/webhooks", buildMap { if (w.id.isNotBlank()) put("id", w.id); put("url", url); put("events", events.toList()); put("isActive", true) }) }
+                        .onSuccess { reload(); editing = null }.onFailure { error = it.message }; busy = false }
+            }
         }
     }
+    deleting?.let { w -> ConfirmDialog("Delete this webhook?", "${w.url} will stop receiving updates.", "Delete", { deleting = null }) {
+        scope.launch { runCatching { Api.delete("/admin/sa/webhooks/${w.id}") }.onSuccess { list.removeAll { it.id == w.id } }.onFailure { error = it.message } }
+    } }
 }
 
 // ─── Audit Trail Pane ─────────────────────────────────────────────────────────
 
 @Composable
 internal fun SaAuditPane() {
-    val scope = rememberCoroutineScope()
     val list = remember { mutableStateListOf<SaAuditEntry>() }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var query by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit) {
-        runCatching {
-            val resp = Api.get("/admin/sa/audit-trail?limit=50")
-            Api.decode<List<SaAuditEntry>>(resp["entries"])
-        }.onSuccess { list.addAll(it) }.onFailure { error = it.message }
+    var query by rememberSaveable { mutableStateOf("") }
+    var kind by rememberSaveable { mutableStateOf("all") }
+    var limit by remember { mutableStateOf(100) }
+    LaunchedEffect(limit) {
+        runCatching { Api.decode<List<SaAuditEntry>>(Api.get("/admin/sa/audit-trail?limit=$limit")["entries"]) }.onSuccess { list.clear(); list.addAll(it) }.onFailure { error = it.message }
         loading = false
     }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Audit Trail", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Field("SEARCH", query, { query = it }, hint = "Email, route…")
+    fun kindOf(e: SaAuditEntry) = when (e.method) { "DELETE" -> "removed"; "POST" -> "added"; "PUT", "PATCH" -> "changed"; else -> e.method.lowercase().ifBlank { "action" } }
+    val today = java.time.LocalDate.now().toString()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatStrip(listOf(Stat("${list.count { it.createdAt.startsWith(today) }}", "Today"), Stat("${list.map { it.actorEmail }.distinct().size}", "People", KitBlue), Stat("${list.count { it.method == "DELETE" }}", "Removals", KitRed)))
+        SearchBar(query, { query = it }, "Search person or action")
+        FilterPills(listOf("all" to "Everything", "added" to "Added", "changed" to "Changed", "removed" to "Removed"), kind) { kind = it }
         ErrorNote(error)
-        if (loading) CircularProgressIndicator(color = Brand.Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        val shown = list.filter { e -> query.isBlank() || e.actorEmail.contains(query, true) || e.route.contains(query, true) }
-        if (!loading && shown.isEmpty()) Empty("No audit entries found.")
-        shown.take(30).forEach { e ->
-            Row(
-                Modifier.fillMaxWidth().glass(RoundedCornerShape(14.dp), 0.9f).padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    Modifier.size(32.dp).clip(CircleShape).background(
-                        when (e.method) { "DELETE" -> Color(0x33FF6B6B); "POST", "PUT", "PATCH" -> Color(0x33D4AF37); else -> Color(0x33FFFFFF) }
-                    ), contentAlignment = Alignment.Center
-                ) {
-                    Text(e.method.take(3), fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                        color = when (e.method) { "DELETE" -> Color(0xFFFF6B6B); "POST", "PUT", "PATCH" -> Brand.Gold; else -> Brand.Text2 })
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(e.actorEmail, color = Brand.White, fontSize = 12.sp, maxLines = 1)
-                    Text(e.route, color = Brand.Text2, fontSize = 11.sp, maxLines = 1)
-                    Text(e.createdAt.take(16).replace("T", " "), style = Type.Meta, color = Brand.Muted)
-                }
-            }
+        if (loading) Loading()
+        val shown = list.filter { e -> (query.isBlank() || e.actorEmail.contains(query, true) || e.route.contains(query, true)) && (kind == "all" || kindOf(e) == kind) }
+        if (!loading && shown.isEmpty()) EmptyState(Icons.Rounded.History, "Nothing found", "Try another search.")
+        var lastDay = ""
+        shown.forEach { e ->
+            val day = e.createdAt.take(10)
+            if (day != lastDay) { lastDay = day; Text(if (day == today) "TODAY" else day, style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold, modifier = Modifier.padding(top = 4.dp)) }
+            val k = kindOf(e)
+            val tint = when (k) { "removed" -> KitRed; "added" -> KitGreen; "changed" -> Brand.Gold; else -> Brand.Text2 }
+            KitRow(e.actorEmail.ifBlank { "System" }, line1 = k.replaceFirstChar(Char::uppercase) + " · " + e.route.removePrefix("/api/v1").removePrefix("/admin"),
+                line2 = e.createdAt.drop(11).take(5) + " UTC",
+                leading = { IconTile(when (k) { "removed" -> Icons.Rounded.DeleteOutline; "added" -> Icons.Rounded.AddCircleOutline; else -> Icons.Rounded.Edit }, tint, 40) })
         }
+        if (list.size >= limit) GhostButton("Show older") { limit += 100 }
     }
 }
 
@@ -1059,53 +953,40 @@ internal fun SaModulesPane() {
     var error by remember { mutableStateOf<String?>(null) }
     var success by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var modules by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-
     val moduleLabels = listOf(
-        "onlineGiving" to "Online Giving",
-        "counseling" to "Counseling Module",
-        "volunteerScheduling" to "Volunteer Scheduling",
-        "livestream" to "Livestream",
-        "communityChat" to "Community Chat",
-        "attendanceKiosk" to "Attendance POS",
-        "taxStatements" to "Tax Statements",
+        Triple("onlineGiving", "Online giving", "M-Pesa and card giving in the app") to Icons.Rounded.Payments,
+        Triple("livestream", "Live services", "Watching live in the app") to Icons.Rounded.LiveTv,
+        Triple("communityChat", "Community chat", "Members talk to each other") to Icons.Rounded.Forum,
+        Triple("attendanceKiosk", "Attendance POS", "Check-in devices at the gate") to Icons.Rounded.PointOfSale,
+        Triple("volunteerScheduling", "Volunteer scheduling", "Serve teams and rotas") to Icons.Rounded.VolunteerActivism,
+        Triple("counseling", "Counseling", "Requests for a pastor's time") to Icons.Rounded.SupportAgent,
+        Triple("taxStatements", "Giving statements", "Yearly statements for givers") to Icons.Rounded.Description,
     )
-
     LaunchedEffect(Unit) {
-        runCatching {
-            val resp = Api.get("/admin/sa/system/modules")
-            val raw = resp["modules"]?.jsonObject ?: JsonObject(emptyMap())
-            raw.entries.associate { (k, v) -> k to (v.jsonPrimitive.booleanOrNull ?: false) }
-        }.onSuccess { modules = it }.onFailure { error = it.message }
+        runCatching { (Api.get("/admin/sa/system/modules")["modules"]?.jsonObject ?: JsonObject(emptyMap())).entries.associate { (k, v) -> k to (v.jsonPrimitive.booleanOrNull ?: false) } }
+            .onSuccess { modules = it; saved = it }.onFailure { error = it.message }
         loading = false
     }
-
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("System Modules", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        StatStrip(listOf(Stat("${modules.count { it.value }}", "Switched on", KitGreen), Stat("${modules.count { !it.value }}", "Off", Brand.Text2)))
+        Text("Turn whole features on or off for everyone. Changes apply when you save.", style = Type.Meta, color = Brand.Text2)
         ErrorNote(error)
-        success?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp) }
-        if (loading) CircularProgressIndicator(color = Brand.Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        moduleLabels.forEach { (key, label) ->
-            Row(
-                Modifier.fillMaxWidth().glass(RoundedCornerShape(14.dp), 0.9f).padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(label, color = Brand.White, modifier = Modifier.weight(1f), fontSize = 14.sp)
-                Switch(
-                    checked = modules[key] ?: false,
-                    onCheckedChange = { newVal -> modules = modules.toMutableMap().also { it[key] = newVal } },
-                    colors = SwitchDefaults.colors(checkedThumbColor = Brand.Black, checkedTrackColor = Color(0xFFD4AF37))
-                )
-            }
+        success?.let { Text(it, color = KitGreen, fontSize = 13.sp) }
+        if (loading) Loading()
+        moduleLabels.forEach { (t, icon) ->
+            val (key, label, sub) = t
+            val on = modules[key] ?: false
+            KitRow(label, line1 = sub, leading = { IconTile(icon, if (on) KitGreen else Brand.Muted) }, trailing = {
+                Switch(checked = on, onCheckedChange = { v -> modules = modules.toMutableMap().also { it[key] = v }; success = null },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Brand.Black, checkedTrackColor = Brand.Gold))
+            })
         }
-        GoldButton("Save Module Settings", busy = busy, enabled = modules.isNotEmpty()) {
-            scope.launch {
-                busy = true; error = null; success = null
-                runCatching { Api.put("/admin/sa/system/modules", mapOf("modules" to modules)) }
-                    .onSuccess { success = "Module settings saved." }
-                    .onFailure { error = it.message }
-                busy = false
-            }
+        GoldButton(if (modules == saved) "Saved" else "Save changes", busy = busy, enabled = !busy && modules.isNotEmpty() && modules != saved) {
+            scope.launch { busy = true; error = null; success = null
+                runCatching { Api.put("/admin/sa/system/modules", mapOf("modules" to modules)) }.onSuccess { saved = modules; success = "Saved. Members see the change right away." }.onFailure { error = it.message }
+                busy = false }
         }
     }
 }
@@ -1115,42 +996,33 @@ internal fun SaModulesPane() {
 @Composable
 internal fun SaBackupPane() {
     val scope = rememberCoroutineScope()
-    var backupBusy by remember { mutableStateOf(false) }
-    var backupResult by remember { mutableStateOf<String?>(null) }
     var gdprId by remember { mutableStateOf("") }
     var gdprReason by remember { mutableStateOf("") }
     var gdprConfirm by remember { mutableStateOf("") }
     var gdprBusy by remember { mutableStateOf(false) }
     var gdprResult by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Database Backup", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Column(Modifier.glass(RoundedCornerShape(18.dp), 0.9f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Backups hold every member's personal data, so they are downloaded on a computer, not a phone: open the web dashboard → System & Governance → Data & Backup → Download backup.",
-                color = Brand.Text2, fontSize = 13.sp)
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        KitSection("Backups", "Every night, automatically") {
+            KitRow("Nightly backup", line1 = "Database and all files, copied to Cloudflare", leading = { IconTile(Icons.Rounded.CloudDone, KitGreen) })
+            Text("A backup holds every member's personal details, so it's downloaded only on a computer: web dashboard → System → Data & Backup → Download backup.", style = Type.Meta, color = Brand.Text2)
         }
-        HorizontalDivider(color = Brand.Line)
-        Text("GDPR — Right to be Forgotten", color = Color(0xFFFF6B6B), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Column(Modifier.glass(RoundedCornerShape(18.dp), 0.9f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Permanently purge all personal data for a member. Financial records are anonymised, not deleted.", color = Brand.Text2, fontSize = 13.sp)
+        KitSection("Erase someone's data", "When a person asks to be forgotten (Kenya Data Protection Act)") {
+            Text("Removes their name, contacts, messages and history for good. Gifts stay in the accounts without their details.", style = Type.Meta, color = Brand.Text2)
             SaMemberPicker(gdprId) { gdprId = it }
-            Field("REASON", gdprReason, { gdprReason = it }, hint = "Legal basis for erasure")
-            Field("TYPE 'PURGE' TO CONFIRM", gdprConfirm, { gdprConfirm = it })
+            Field("REASON", gdprReason, { gdprReason = it }, hint = "e.g. Their written request of 3 Nov 2026")
+            Field("TYPE ERASE TO CONFIRM", gdprConfirm, { gdprConfirm = it.uppercase() })
             ErrorNote(error)
-            gdprResult?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp) }
-            GoldButton(
-                "Execute GDPR Purge",
-                busy = gdprBusy,
-                enabled = gdprId.isNotBlank() && gdprReason.isNotBlank() && gdprConfirm == "PURGE"
-            ) {
-                scope.launch {
-                    gdprBusy = true; error = null; gdprResult = null
-                    runCatching { Api.delete("/admin/sa/members/${gdprId.trim()}/purge-gdpr?reason=${java.net.URLEncoder.encode(gdprReason.trim(), "UTF-8")}") }
-                        .onSuccess { gdprResult = "Personal data erased. Payments stay in the accounts without the payer's details."; gdprId = ""; gdprReason = ""; gdprConfirm = "" }
-                        .onFailure { error = it.message }
-                    gdprBusy = false
-                }
+            gdprResult?.let { Text(it, color = KitGreen, fontSize = 13.sp) }
+            Box(Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(50))
+                .background(if (gdprId.isNotBlank() && gdprReason.isNotBlank() && gdprConfirm == "ERASE" && !gdprBusy) KitRed else KitRed.copy(alpha = 0.25f))
+                .clickable(enabled = gdprId.isNotBlank() && gdprReason.isNotBlank() && gdprConfirm == "ERASE" && !gdprBusy) {
+                    scope.launch { gdprBusy = true; error = null; gdprResult = null
+                        runCatching { Api.delete("/admin/sa/members/${gdprId.trim()}/purge-gdpr?reason=${java.net.URLEncoder.encode(gdprReason.trim(), "UTF-8")}") }
+                            .onSuccess { gdprResult = "Their personal data has been erased."; gdprId = ""; gdprReason = ""; gdprConfirm = "" }.onFailure { error = it.message }
+                        gdprBusy = false }
+                }, contentAlignment = Alignment.Center) {
+                Text(if (gdprBusy) "Erasing…" else "Erase permanently", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
         }
     }
@@ -1206,26 +1078,27 @@ internal fun SaRolesPane() {
     val scope = rememberCoroutineScope()
     val list = remember { mutableStateListOf<SaRole>() }
     var editing by remember { mutableStateOf<SaRole?>(null) }
+    var deleting by remember { mutableStateOf<SaRole?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
     suspend fun reload() { list.clear(); list.addAll(Api.decode<List<SaRole>>(Api.get("/admin/sa/roles")["roles"])) }
-    LaunchedEffect(Unit) { runCatching { reload() }.onFailure { error = it.message } }
+    LaunchedEffect(Unit) { runCatching { reload() }.onFailure { error = it.message }; loading = false }
     val labels = KEY_PERMISSIONS.toMap()
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Design roles like \"Media team\", then give them to people in Members. Editing a role updates everyone who has it.", color = Brand.Text2, fontSize = 13.sp)
-        GoldButton("New role") { editing = SaRole() }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatStrip(listOf(Stat("${list.size}", "Roles"), Stat("${list.sumOf { it.holders }}", "People with a role", KitBlue)))
+        Text("Design roles like “Media team” or “Usher”, then give them to people in Members. Changing a role changes it for everyone who has it.", style = Type.Meta, color = Brand.Text2)
+        SectionHeading("Roles", "+ New role") { editing = SaRole() }
         ErrorNote(error)
+        if (loading) Loading()
+        if (!loading && list.isEmpty()) EmptyState(Icons.Rounded.AdminPanelSettings, "No roles yet", "Start with “Usher” (check-in only).")
         list.forEach { r ->
-            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.9f).clickable { editing = r }.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(r.name, color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(if (r.holders == 1) "1 person" else "${r.holders} people", color = Brand.GoldLight, fontSize = 12.sp)
-                }
-                Text(r.permissions.joinToString(", ") { labels[it] ?: it }.ifBlank { "No permissions yet" }, color = Brand.Text2, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp))
-                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("Duplicate", color = Brand.Gold, fontSize = 13.sp, modifier = Modifier.clickable { scope.launch { runCatching { Api.post("/admin/sa/roles/${r.id}/duplicate", emptyMap<String, String>()); reload() }.onFailure { error = it.message } } })
-                    Text("Delete", color = Color(0xFFFF6B6B), fontSize = 13.sp, modifier = Modifier.clickable { scope.launch { runCatching { Api.delete("/admin/sa/roles/${r.id}"); reload() }.onFailure { error = it.message } } })
-                }
-            }
+            KitRow(r.name, line1 = r.permissions.joinToString(", ") { labels[it] ?: it }.ifBlank { "No permissions yet" }, line2 = r.description,
+                leading = { IconTile(Icons.Rounded.AdminPanelSettings, Brand.Gold) },
+                trailing = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Badge(if (r.holders == 1) "1 PERSON" else "${r.holders} PEOPLE", KitBlue)
+                    SmallAction(Icons.Rounded.ContentCopy, "Duplicate", Brand.GoldLight) { scope.launch { runCatching { Api.post("/admin/sa/roles/${r.id}/duplicate", emptyMap<String, String>()); reload() }.onFailure { error = it.message } } }
+                    SmallAction(Icons.Rounded.DeleteOutline, "Delete", KitRed) { deleting = r }
+                } }, onClick = { editing = r })
         }
     }
     editing?.let { role ->
@@ -1233,34 +1106,20 @@ internal fun SaRolesPane() {
         var description by remember(role.id) { mutableStateOf(role.description) }
         val perms = remember(role.id) { mutableStateListOf<String>().apply { addAll(role.permissions) } }
         var busy by remember { mutableStateOf(false) }
-        AlertDialog(
-            onDismissRequest = { editing = null },
-            containerColor = Color(0xFF1A1A1E),
-            title = { Text(if (role.id.isBlank()) "New role" else "Edit role", color = Brand.White, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Field("NAME", name, { name = it }, hint = "e.g. Media team")
-                    Field("DESCRIPTION", description, { description = it }, hint = "What this role is for")
-                    KEY_PERMISSIONS.forEach { (perm, label) ->
-                        Row(Modifier.fillMaxWidth().clickable { if (perm in perms) perms.remove(perm) else perms.add(perm) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = perm in perms, onCheckedChange = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(label, color = Brand.White, fontSize = 14.sp)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                GoldButton("Save", busy = busy, enabled = name.isNotBlank()) {
-                    scope.launch {
-                        busy = true
-                        runCatching { Api.put("/admin/sa/roles", mapOf("id" to role.id, "name" to name.trim(), "description" to description.trim(), "permissions" to perms.toList())); reload() }
-                            .onSuccess { editing = null }.onFailure { error = it.message }
-                        busy = false
-                    }
-                }
-            },
-            dismissButton = { TextButton(onClick = { editing = null }) { Text("Cancel", color = Brand.Text2) } }
-        )
+        KitSheet(if (role.id.isBlank()) "New role" else "Edit ${role.name}", { editing = null }) {
+            Field("NAME", name, { name = it }, hint = "e.g. Usher")
+            Field("WHAT IT'S FOR", description, { description = it }, hint = "e.g. Checks people in at the gate")
+            Text("WHAT PEOPLE WITH THIS ROLE CAN DO", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Text2)
+            PermissionList(perms)
+            if (role.holders > 0) Text("${role.holders} ${if (role.holders == 1) "person has" else "people have"} this role; they get the change straight away.", style = Type.Meta, color = Brand.GoldLight)
+            GoldButton("Save", busy = busy, enabled = !busy && name.isNotBlank()) {
+                scope.launch { busy = true
+                    runCatching { Api.put("/admin/sa/roles", mapOf("id" to role.id, "name" to name.trim(), "description" to description.trim(), "permissions" to perms.toList())); reload() }
+                        .onSuccess { editing = null }.onFailure { error = it.message }; busy = false }
+            }
+        }
     }
+    deleting?.let { r -> ConfirmDialog("Delete ${r.name}?", if (r.holders > 0) "${r.holders} ${if (r.holders == 1) "person loses" else "people lose"} these permissions." else "No one has this role.", "Delete", { deleting = null }) {
+        scope.launch { runCatching { Api.delete("/admin/sa/roles/${r.id}"); reload() }.onFailure { error = it.message } }
+    } }
 }
