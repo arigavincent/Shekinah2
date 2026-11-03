@@ -43,6 +43,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/sermonnotes"
 	"github.com/ariga/shekinah-backend/internal/serve"
 	"github.com/ariga/shekinah-backend/internal/settings"
+	"github.com/ariga/shekinah-backend/internal/mygroups"
 	"github.com/ariga/shekinah-backend/internal/testimonies"
 	"github.com/ariga/shekinah-backend/internal/versetopics"
 	"github.com/ariga/shekinah-backend/internal/uploads"
@@ -190,6 +191,8 @@ func newRouter(cfg config.Config, db *pgxpool.Pool, background context.Context) 
 		api.GET("/home", contentHandler.Home)
 		api.GET("/sermons/:id/notes", sermonNotes.Get)
 		api.GET("/settings/verse-topics", versetopics.NewHandler(db).Get)
+		api.GET("/me/groups", auth.RequireAuth(authService), mygroups.New(db).Mine)
+		api.GET("/me/groups/:id/members", auth.RequireAuth(authService), mygroups.New(db).Members)
 		api.GET("/playlists", auth.OptionalAuth(authService), playlistHandler.List)
 		api.POST("/playlists", auth.RequireAuth(authService), playlistHandler.Create)
 		api.PATCH("/playlists/:id", auth.RequireAuth(authService), playlistHandler.Update)

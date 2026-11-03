@@ -22,6 +22,7 @@ import (
 
 	"github.com/ariga/shekinah-backend/internal/auth"
 	mailer "github.com/ariga/shekinah-backend/internal/mail"
+	"github.com/ariga/shekinah-backend/internal/notifications"
 	"github.com/ariga/shekinah-backend/internal/permissions"
 	"github.com/ariga/shekinah-backend/internal/webhooks"
 	"github.com/gin-gonic/gin"
@@ -864,11 +865,30 @@ func (h *Handler) AssignGroupMember(c *gin.Context) {
 		fail(c, http.StatusConflict, "This group is full")
 		return
 	}
-	if _, err := h.db.Exec(ctx, `INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2::uuid,$3) ON CONFLICT(group_id,user_id) DO UPDATE SET role=EXCLUDED.role`, c.Param("id"), req.UserID, role); err != nil {
+	var joined bool
+	if err := h.db.QueryRow(ctx, `INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2::uuid,$3) ON CONFLICT(group_id,user_id) DO UPDATE SET role=EXCLUDED.role RETURNING (xmax = 0)`, c.Param("id"), req.UserID, role).Scan(&joined); err != nil {
 		fail(c, http.StatusBadRequest, "Member not found")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Member added"})
+	// Tell the person they've joined (only the first time, not on role changes).
+	if joined && h.notify != nil {
+		var name, schedule, location, leader string
+		_ = h.db.QueryRow(ctx, `SELECT g.name, COALESCE(g.schedule,''), COALESCE(g.location,''), COALESCE(l.name,'') FROM ministry_groups g LEFT JOIN users l ON l.id=g.leader_id WHERE g.id=$1`, c.Param("id")).Scan(&name, &schedule, &location, &leader)
+		body := "You're now part of " + name
+		if role != "member" {
+			body = "You're now " + map[string]string{"leader": "the leader", "assistant": "an assistant"}[role] + " of " + name
+		}
+		if leader != "" && role != "leader" {
+			body += ", led by " + leader
+		}
+		if when := strings.TrimSpace(strings.Join(slices.DeleteFunc([]string{schedule, location}, func(s string) bool { return s == "" }), " · ")); when != "" {
+			body += ". " + when
+		}
+		sender, _ := auth.UserIDFromContext(c)
+		_, _ = h.notify(ctx, notifications.BroadcastRequest{Title: "Welcome to " + name, Body: body + ".", Category: "general",
+			UserIDs: []string{req.UserID}, AudienceLabel: name, SentBy: sender, Channels: []string{"push"}, Data: map[string]interface{}{"open": "groups"}})
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Member added", "joined": joined})
 }
 
 func (h *Handler) RemoveGroupMember(c *gin.Context) {
