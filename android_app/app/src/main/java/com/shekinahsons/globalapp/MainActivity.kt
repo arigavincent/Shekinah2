@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
                             .onSuccess { com.shekinahsons.globalapp.bible.DailyWord.saveTopics(this@MainActivity, it) }
                     }
                     repo.refresh(); app.session.refresh()
+                    com.shekinahsons.globalapp.notify.Push.refresh(this@MainActivity)
                 }
                 // Keep Home current (a service going live shows up by itself).
                 LaunchedEffect(Unit) { lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) { while (true) { kotlinx.coroutines.delay(20_000); repo.refresh() } } }

@@ -64,6 +64,15 @@ object Push {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("token", null)?.let { register(context, it) }
     }
 
+    // On every launch: ask Firebase for this phone's current token and link it
+    // to whoever is signed in, so messages for one person (group welcomes,
+    // staff messages) always find their phone.
+    fun refresh(context: Context) {
+        runCatching {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnSuccessListener { t -> if (!t.isNullOrBlank()) register(context.applicationContext, t) }
+        }
+    }
+
     fun register(context: Context, token: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("token", token).apply()
         CoroutineScope(Dispatchers.IO).launch {
