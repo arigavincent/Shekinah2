@@ -157,6 +157,39 @@ class Narrator(private val context: Context) {
         playing = true
     }
 
+    // One verse from the BSB recording: play from its start to the next verse.
+    // Returns false when there's no recording, so the device voice can read it.
+    fun readOneRecorded(version: String, book: String, chapter: Int, v: Verse): Boolean {
+        if (version != BibleDb.ENGLISH) return false
+        val bookId = BibleDb.get(context).books().firstOrNull { it.code == book }?.id ?: return false
+        if (!BsbAudio.has(context, bookId, chapter)) return false
+        val times = BsbAudio.timings(context, bookId, chapter)
+        val start = times.firstOrNull { it.first == v.number }?.second ?: return false
+        val end = times.firstOrNull { it.second > start }?.second
+        stop()
+        recorded = true; active = true; rate = recordingRate; attribution = BsbAudio.ATTRIBUTION
+        timings = listOf(NarrationTime(v.number, start)); verse = v.number
+        onChapterEnd = { stop() }
+        recordedPlayer = ExoPlayer.Builder(context).build().apply {
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) { if (state == Player.STATE_ENDED) { playing = false; stop() } }
+                override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { playing = false }
+            })
+            setMediaItem(MediaItem.fromUri(BsbAudio.source(context, bookId, chapter)), start)
+            setPlaybackSpeed(rate); prepare(); play()
+        }
+        // Stop just before the next verse begins.
+        follow = scope.launch {
+            while (isActive) {
+                val p = recordedPlayer ?: break
+                if (end != null && p.currentPosition >= end - 120) { p.pause(); playing = false; stop(); break }
+                delay(80)
+            }
+        }
+        return true
+    }
+
     // One verse only (tap a verse, then Listen).
     fun readOne(language: String, v: Verse) {
         stop()

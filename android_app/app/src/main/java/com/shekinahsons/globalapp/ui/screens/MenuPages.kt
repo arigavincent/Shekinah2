@@ -77,6 +77,7 @@ fun MenuPage(
     if (page == "ReadingPlans") { com.shekinahsons.globalapp.readingplans.PlansScreen(session, openProfile, openReference, onBack); return }
     if (page == "Gate") { com.shekinahsons.globalapp.attendance.GateScreen(content, onBack); return }
     if (page == "Serve") { com.shekinahsons.globalapp.serve.ServeScreen(session, openProfile, onBack); return }
+    if (page == "Groups") { com.shekinahsons.globalapp.groups.MyGroupsScreen(session, openProfile, onBack); return }
     if (page == "Events") { com.shekinahsons.globalapp.events.EventsScreen(content, session, openProfile, onBack); return }
     if (page == "Library") { com.shekinahsons.globalapp.books.LibraryScreen(session, openProfile, onBack); return }
     Column(Modifier.fillMaxSize().background(Brand.Black)) {

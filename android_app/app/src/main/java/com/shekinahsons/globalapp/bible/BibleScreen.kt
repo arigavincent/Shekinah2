@@ -349,7 +349,7 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
                 speaking = if (narrator.active && readingChapter == ch) narrator.verse else -1,
                 listenOne = { n, id ->
                     listenId = id
-                    bible.chapter(id, book.id, ch).firstOrNull { it.number == n }?.let { v -> readingChapter = ch; narrator.readOne(versionOf(id)?.language ?: "en", v) }
+                    bible.chapter(id, book.id, ch).firstOrNull { it.number == n }?.let { v -> readingChapter = ch; if (!narrator.readOneRecorded(id, book.code, ch, v)) narrator.readOne(versionOf(id)?.language ?: "en", v) }
                 },
                 listenFrom = { n, id -> listenId = id; readChapter(ch, n) },
             )

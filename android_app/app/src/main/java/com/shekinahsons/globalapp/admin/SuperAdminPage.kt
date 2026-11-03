@@ -262,8 +262,9 @@ internal fun SaMemberPage(user: SaUser, back: () -> Unit, onSuspend: () -> Unit,
             Text(user.name.ifBlank { user.email }, style = Type.Title, color = Brand.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Badge(when (user.role) { "super_admin" -> "SUPER ADMIN"; "admin" -> "ADMIN"; else -> "MEMBER" }, if (user.role == "member") Brand.Text2 else Brand.Gold)
+                if (user.role != "member") Badge(if (user.role == "super_admin") "SUPER ADMIN" else "ADMIN", Brand.Gold)
                 Badge(user.membershipStatus.uppercase(), KitBlue)
+                if (user.staffRole.isNotBlank()) Badge(user.staffRole.uppercase(), KitViolet)
                 if (user.suspended) Badge("SUSPENDED", KitRed)
             }
             if (user.createdAt.length >= 10) Text("Joined " + user.createdAt.take(10), style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 6.dp))

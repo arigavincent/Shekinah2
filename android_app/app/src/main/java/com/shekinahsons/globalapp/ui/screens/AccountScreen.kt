@@ -33,6 +33,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -81,7 +83,9 @@ fun AccountPage(session: Session, onDone: (() -> Unit)? = null) {
             Text("Member since $since", color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 13.sp,
                 modifier = Modifier.glass().padding(horizontal = 14.dp, vertical = 6.dp))
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(20.dp))
+        MyGroupsCard()
+        Spacer(Modifier.height(16.dp))
         var resetting by remember { mutableStateOf(false) }
         var editing by remember { mutableStateOf(false) }
         if (editing) { EditDetails(session) { editing = false }; Spacer(Modifier.height(12.dp)) }
@@ -377,5 +381,30 @@ private fun EditDetails(session: Session, done: () -> Unit) {
             scope.launch { busy = true; error = null; runCatching { session.updateProfile(name, phone) }.onSuccess { done() }.onFailure { error = it.message }; busy = false }
         }
         GhostButton("Cancel", onClick = done)
+    }
+}
+
+
+// "My groups" on the profile: how many, and a tap to see them.
+@Composable
+private fun MyGroupsCard() {
+    var groups by remember { mutableStateOf<List<com.shekinahsons.globalapp.groups.MyGroup>?>(null) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { groups = runCatching { com.shekinahsons.globalapp.data.Api.decode<List<com.shekinahsons.globalapp.groups.MyGroup>>(com.shekinahsons.globalapp.data.Api.get("/me/groups")["groups"]) }.getOrNull() }
+    val list = groups ?: return
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF2A2210), Color(0xFF15151A))))
+            .border(1.dp, Color(0x33D4AF37), RoundedCornerShape(20.dp))
+            .clickable { com.shekinahsons.globalapp.notify.OpenLink.pending = com.shekinahsons.globalapp.notify.OpenLink.Target("groups") }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Groups, null, tint = Brand.Gold, modifier = Modifier.size(28.dp))
+        Spacer(Modifier.padding(start = 12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("MY GROUPS", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold)
+            Text(if (list.isEmpty()) "Not in a group yet" else list.joinToString(", ") { it.name }, style = Type.CardTitle, color = Brand.White, maxLines = 2)
+        }
+        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = Brand.Text2)
     }
 }

@@ -177,6 +177,7 @@ private fun AppShell(content: HomeContent, audio: AudioController, library: Libr
             "updates" -> nav.push(Route.Page("Updates"))
             "prayer" -> nav.push(Route.Page("Prayer"))
             "security" -> nav.push(Route.Page("Security"))
+            "groups" -> nav.push(Route.Page("Groups"))
             else -> nav.push(Route.Page("Notifications"))
         }
     }

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Diversity3
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Campaign
@@ -90,6 +91,7 @@ val MenuGroups: List<Pair<String, List<MenuItem>>> = listOf(
         MenuItem("Chat", "Chat", Icons.Outlined.Chat),
         MenuItem("Testimonies", "Testimonies", Icons.Outlined.LocalFireDepartment),
         MenuItem("Serve", "Serve", Icons.Outlined.Groups),
+        MenuItem("My groups", "Groups", Icons.Outlined.Diversity3),
         MenuItem("Branches", "Branches", Icons.Outlined.LocationOn),
         MenuItem("QR Check-In", "CheckIn", Icons.Outlined.QrCode2),
     ),
