@@ -96,17 +96,9 @@ internal fun LiveOffline(content: HomeContent, session: Session, openGoLive: () 
             item { LastService(last.title, last.speaker, last.date, last.thumbnail, last.duration, replays) }
         }
 
-        item { SectionTitle("EVERY WEEK", "Gather with us") }
+        item { SectionTitle("EVERY WEEK", "Service times") }
         item { WeekStrip(content.live.nextService, next?.second, now) }
 
-        item { SectionTitle("WHEN WE'RE LIVE", "Worship together from anywhere") }
-        item {
-            Row(Modifier.padding(horizontal = 20.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Perk(Icons.Rounded.NotificationsActive, "Alert", "The moment we start", Modifier.weight(1f))
-                Perk(Icons.Rounded.Forum, "Live chat", "Pray and greet", Modifier.weight(1f))
-                Perk(Icons.Rounded.History, "Replay", "Watch it later", Modifier.weight(1f))
-            }
-        }
     }
 }
 
@@ -130,17 +122,17 @@ private fun Stage(label: String, start: Long?, now: Long, backdrop: String?, rem
         Canvas(Modifier.matchParentSize()) {
             val c = Offset(size.width / 2, size.height * 0.36f)
             val r = size.maxDimension
-            rotate(angle, c) {
-                for (i in 0 until 18) {
-                    val a = Math.toRadians(i * 20.0)
-                    val a2 = Math.toRadians(i * 20.0 + 7)
+            rotate(-90f, c) {
+                for (i in 0 until 12) {
+                    val a = Math.toRadians(i * 30.0)
+                    val a2 = Math.toRadians(i * 30.0 + 8)
                     val p = androidx.compose.ui.graphics.Path().apply {
                         moveTo(c.x, c.y)
                         lineTo(c.x + (r * cos(a)).toFloat(), c.y + (r * sin(a)).toFloat())
                         lineTo(c.x + (r * cos(a2)).toFloat(), c.y + (r * sin(a2)).toFloat())
                         close()
                     }
-                    drawPath(p, Brush.radialGradient(listOf(Color(0xFFD4AF37).copy(alpha = 0.16f * shimmer), Color.Transparent), c, r * 0.55f))
+                    drawPath(p, Brush.radialGradient(listOf(Color(0xFFD4AF37).copy(alpha = 0.08f), Color.Transparent), c, r * 0.55f))
                 }
             }
             drawCircle(Brush.radialGradient(listOf(Color(0x55D4AF37), Color.Transparent), c, size.width * 0.42f), size.width * 0.42f, c)
@@ -150,19 +142,18 @@ private fun Stage(label: String, start: Long?, now: Long, backdrop: String?, rem
 
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             TopBar()
-            // Off-air pill
-            Row(
-                Modifier.clip(RoundedCornerShape(50)).background(Color(0x66000000)).border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
+            if (soon) Row(
+                Modifier.clip(RoundedCornerShape(50)).background(Color(0x66000000)).border(1.dp, Brand.Red.copy(alpha = 0.6f), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (soon) PulsingDot(Brand.Red, 7.dp) else Box(Modifier.size(7.dp).clip(CircleShape).background(Color(0xFF8A8A93)))
+                PulsingDot(Brand.Red, 7.dp)
                 Spacer(Modifier.width(7.dp))
-                Text(if (soon) "STARTING SOON" else "OFF AIR · SHEKINAH LIVE", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.4.sp)
+                Text("STARTING SOON", color = Color.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.4.sp)
             }
-            Spacer(Modifier.height(26.dp))
+            Spacer(Modifier.height(10.dp))
             // Dove in its countdown ring
-            Box(Modifier.size(172.dp), contentAlignment = Alignment.Center) {
-                ColorGlow(Brand.Gold.copy(alpha = 0.45f * glow), Modifier.size(120.dp), blur = 40.dp)
+            Box(Modifier.size(128.dp), contentAlignment = Alignment.Center) {
+                ColorGlow(Brand.Gold.copy(alpha = 0.3f * glow), Modifier.size(90.dp), blur = 36.dp)
                 Canvas(Modifier.fillMaxSize()) {
                     val w = 5.dp.toPx()
                     drawCircle(Color(0x22FFFFFF), size.minDimension / 2 - w, style = Stroke(w))
@@ -173,14 +164,14 @@ private fun Stage(label: String, start: Long?, now: Long, backdrop: String?, rem
                         style = Stroke(w, cap = StrokeCap.Round),
                     )
                 }
-                Box(Modifier.size(132.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF2C2410), Color(0xFF0C0C10)))).border(1.dp, Color(0x33D4AF37), CircleShape), contentAlignment = Alignment.Center) {
-                    Image(painterResource(R.drawable.dove_mark), null, Modifier.size(78.dp).graphicsLayer { scaleX = 0.96f + 0.06f * glow; scaleY = scaleX })
+                Box(Modifier.size(98.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF2C2410), Color(0xFF0C0C10)))).border(1.dp, Color(0x33D4AF37), CircleShape), contentAlignment = Alignment.Center) {
+                    Image(painterResource(R.drawable.dove_mark), null, Modifier.size(58.dp))
                 }
             }
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(16.dp))
             Text("NEXT SERVICE", style = Type.Label, color = Brand.Gold)
             Spacer(Modifier.height(6.dp))
-            Text(label.uppercase(), fontFamily = Poster, fontSize = 34.sp, lineHeight = 38.sp, letterSpacing = 0.5.sp, color = Color.White, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp))
+            Text(label.uppercase(), fontFamily = Poster, fontSize = 30.sp, lineHeight = 34.sp, letterSpacing = 0.5.sp, color = Color.White, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp))
             Spacer(Modifier.height(18.dp))
             if (start != null) {
                 val (d, h, m, s) = ServiceReminder.parts(start, now)
@@ -305,30 +296,10 @@ private fun WeekStrip(nextService: String, nextLabel: String?, now: Long) {
     val nextDay = nextLabel?.substringBefore(",")?.trim()?.uppercase()
     Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
         .background(Brush.linearGradient(listOf(Color(0xFF18171C), Color(0xFF0F0F12)))).border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(22.dp)).padding(14.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            weekDays.forEachIndexed { i, day ->
-                val has = services.keys.any { day.startsWith(it.take(3)) }
-                val isNext = nextDay != null && day.startsWith(nextDay.take(3))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        Modifier.size(38.dp).clip(CircleShape)
-                            .background(when { isNext -> Brand.GoldGradient; has -> Brush.linearGradient(listOf(Color(0x33D4AF37), Color(0x33D4AF37))); else -> Brush.linearGradient(listOf(Color(0x0FFFFFFF), Color(0x0FFFFFFF))) })
-                            .border(if (i == today) 1.5.dp else 0.dp, if (i == today) Color.White else Color.Transparent, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(day.take(1), color = if (isNext) Brand.Black else if (has) Brand.GoldLight else Color(0x80FFFFFF), fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(if (i == today) "Today" else day.take(3).lowercase().replaceFirstChar { it.uppercase() }, fontSize = 10.sp, color = if (i == today) Color.White else Color(0x80FFFFFF), fontFamily = Inter)
-                }
-            }
-        }
         if (services.isNotEmpty()) {
-            Spacer(Modifier.height(14.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x14FFFFFF)))
-            services.forEach { (day, times) ->
+            services.entries.forEachIndexed { i, (day, times) ->
                 val isNext = nextDay == day
-                Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(top = if (i == 0) 2.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Church, null, tint = if (isNext) Brand.Gold else Color(0x80FFFFFF), modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     Text(day.lowercase().replaceFirstChar { it.uppercase() }, color = Color.White, fontSize = 14.sp, fontFamily = Inter, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
@@ -338,19 +309,5 @@ private fun WeekStrip(nextService: String, nextLabel: String?, now: Long) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun Perk(icon: ImageVector, title: String, sub: String, modifier: Modifier) {
-    Column(
-        modifier.clip(RoundedCornerShape(18.dp)).background(Color(0x0FFFFFFF)).border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp)).padding(12.dp),
-    ) {
-        Box(Modifier.size(34.dp).clip(CircleShape).background(Color(0x26D4AF37)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = Brand.Gold, modifier = Modifier.size(18.dp))
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(title, style = Type.CardTitle.copy(fontSize = 14.sp), color = Color.White)
-        Text(sub, style = Type.Meta.copy(fontSize = 11.5.sp), color = Brand.Text2, maxLines = 2)
     }
 }

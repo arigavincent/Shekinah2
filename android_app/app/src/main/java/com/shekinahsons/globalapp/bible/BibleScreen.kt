@@ -74,6 +74,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -359,6 +364,8 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
                 listenId = if (listenId == s.right) s.left else s.right
                 readChapter(readingChapter, narrator.verse.coerceAtLeast(1))
             }) else null,
+            bsbBook = if (listenId == BibleDb.ENGLISH) book.id else null,
+            bookName = book.english,
         )
     }
     }
@@ -375,6 +382,8 @@ private fun ReadingSettings(store: BibleStore, bible: BibleDb, bookId: Int, clos
         Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Text("Reading settings", style = Type.Title, color = Brand.White)
             Spacer(Modifier.height(14.dp))
+            BsbAudioPanel(bookId, remember(bookId) { bible.books().firstOrNull { it.id == bookId }?.english ?: "this book" })
+            Spacer(Modifier.height(18.dp))
             Text("TEXT SIZE", style = Type.Label, color = Brand.Gold)
             Row(Modifier.padding(top = 8.dp, bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 listOf(0.85f, 1f, 1.15f, 1.3f, 1.5f).forEach { scale ->
@@ -409,7 +418,7 @@ private fun ReadingSettings(store: BibleStore, bible: BibleDb, bookId: Int, clos
 
 // The floating "now reading" bar: where we are, voice, speed and controls.
 @Composable
-private fun ListenBar(narrator: Narrator, modifier: Modifier, where: String, versionLabel: String, switchVersion: (() -> Unit)?) {
+private fun ListenBar(narrator: Narrator, modifier: Modifier, where: String, versionLabel: String, switchVersion: (() -> Unit)?, bsbBook: Int? = null, bookName: String = "") {
     val context = LocalContext.current
     var voiceMenu by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(22.dp)
@@ -440,7 +449,7 @@ private fun ListenBar(narrator: Narrator, modifier: Modifier, where: String, ver
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box {
+            if (narrator.recorded && bsbBook != null) BsbBookChip(bsbBook, bookName) else Box {
                 Row(Modifier.glass().clickable(enabled=!narrator.recorded) { voiceMenu = true }.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.RecordVoiceOver, null, tint = Brand.GoldLight, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(5.dp))
@@ -459,7 +468,7 @@ private fun ListenBar(narrator: Narrator, modifier: Modifier, where: String, ver
             }
             Icon(Icons.Rounded.SkipNext, "Next verse", tint = Brand.White, modifier = Modifier.size(42.dp).clip(CircleShape).clickable { narrator.next() }.padding(8.dp))
             Spacer(Modifier.weight(1f))
-            val speeds = listOf(0.8f, 0.95f, 1.1f, 1.25f)
+            val speeds = if (narrator.recorded) listOf(1f, 1.25f, 1.5f, 0.8f) else listOf(0.8f, 0.95f, 1.1f, 1.25f)
             Text("${"%.2f".format(narrator.rate).trimEnd('0').trimEnd('.')}x", color = Brand.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.glass().clickable { narrator.changeRate(speeds[(speeds.indexOf(narrator.rate).coerceAtLeast(0) + 1) % speeds.size]) }.padding(horizontal = 12.dp, vertical = 6.dp))
         }
@@ -794,5 +803,68 @@ private fun SearchView(bible: BibleDb, onBack: () -> Unit, open: (View) -> Unit)
                 }
             }
         }
+    }
+}
+
+
+// Bob Souer's BSB reading for offline listening: this book or the whole Bible.
+@Composable
+private fun BsbAudioPanel(bookId: Int, bookName: String) {
+    val context = LocalContext.current
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(1500); tick++ } }
+    val book = remember(tick, bookId) { BsbAudio.downloadedIn(context, bookId) to BsbAudio.chapters(context, bookId).size }
+    val all = remember(tick) { BsbAudio.downloadedChapters(context) to BsbAudio.totalChapters(context) }
+    val busy = remember(tick) { BsbAudio.downloading(context) }
+    fun mb(b: Double) = if (b >= 1e9) "%.1f GB".format(b / 1e9) else "${(b / 1e6).toInt().coerceAtLeast(1)} MB"
+    if (all.second == 0) return
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(listOf(Color(0xFF2A2210), Color(0xFF15151A))))
+        .border(1.dp, Color(0x33D4AF37), RoundedCornerShape(18.dp)).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Headphones, null, tint = Brand.Gold, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("AUDIO BIBLE \u00B7 OFFLINE", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Gold)
+                Text("Read by Bob Souer (BSB)", style = Type.CardTitle, color = Brand.White)
+            }
+        }
+        Text("Download once and listen anywhere, no internet needed. The verse being read is highlighted.", style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 6.dp, bottom = 10.dp))
+        AudioRow(bookName, book.first, book.second, mb(BsbAudio.bytesFor(context, bookId)), busy,
+            onDownload = { BsbAudio.download(context, listOf(bookId)); tick++ }, onRemove = { BsbAudio.remove(context, bookId); tick++ })
+        Spacer(Modifier.height(8.dp))
+        AudioRow("Whole Bible", all.first, all.second, mb(BsbAudio.bytesFor(context, null)), busy,
+            onDownload = { BsbAudio.download(context, emptyList()); tick++ }, onRemove = { BsbAudio.cancel(context); BsbAudio.remove(context, null); tick++ })
+        if (busy) Text("Downloading in the background. You can keep reading.", style = Type.Meta, color = Brand.GoldLight, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+@Composable
+private fun AudioRow(title: String, have: Int, total: Int, size: String, busy: Boolean, onDownload: () -> Unit, onRemove: () -> Unit) {
+    val done = total > 0 && have >= total
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x14FFFFFF)).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Brand.White, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text(when { done -> "On this phone \u00B7 $total chapters"; have > 0 -> "$have of $total chapters \u00B7 $size"; else -> "$total chapters \u00B7 $size" }, style = Type.Meta, color = Brand.Text2)
+            if (have in 1 until total) androidx.compose.material3.LinearProgressIndicator(progress = { have.toFloat() / total }, modifier = Modifier.padding(top = 6.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)), color = Brand.Gold, trackColor = Color(0x22FFFFFF))
+        }
+        Spacer(Modifier.width(10.dp))
+        if (done || (have > 0 && !busy)) Icon(Icons.Rounded.DeleteOutline, "Remove $title audio", tint = Brand.Text2, modifier = Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onRemove).padding(7.dp))
+        if (!done) Text(if (busy && have > 0) "\u2026" else "Download", color = Brand.Black, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 12.5.sp,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient).clickable(enabled = !busy, onClick = onDownload).padding(horizontal = 14.dp, vertical = 8.dp))
+        else Icon(Icons.Rounded.DownloadDone, null, tint = Brand.Gold, modifier = Modifier.size(22.dp))
+    }
+}
+
+@Composable
+private fun BsbBookChip(bookId: Int, bookName: String) {
+    val context = LocalContext.current
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(2000); tick++ } }
+    val (have, total) = remember(tick, bookId) { BsbAudio.downloadedIn(context, bookId) to BsbAudio.chapters(context, bookId).size }
+    val done = total > 0 && have >= total
+    Row(Modifier.glass().clickable(enabled = !done) { BsbAudio.download(context, listOf(bookId)); tick++ }.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (done) Icons.Rounded.DownloadDone else Icons.Rounded.Download, null, tint = Brand.GoldLight, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(when { done -> "Offline"; have > 0 -> "$have/$total"; else -> bookName }, color = Brand.White, fontSize = 12.5.sp, maxLines = 1)
     }
 }

@@ -28,7 +28,48 @@ type Handler struct {
 
 func NewHandler() Handler                                           { return Handler{client: &http.Client{Timeout: 15 * 1e9}} }
 func (h Handler) WithIntegrations(store integrations.Store) Handler { h.store = &store; return h }
+
+// The Berean Standard Bible read by Bob Souer (CC0), stored with the
+// church's media as bible-audio/bsb-souer/BB_CCC.mp3. The app has the verse
+// timings built in; this only says where the recordings live.
+const bsbAttribution = "Read by Bob Souer · Berean Standard Bible audio, public domain (CC0)"
+
+var bsbBooks = []string{"GEN", "EXO", "LEV", "NUM", "DEU", "JOS", "JDG", "RUT", "1SA", "2SA", "1KI", "2KI", "1CH", "2CH", "EZR", "NEH", "EST", "JOB", "PSA", "PRO", "ECC", "SNG", "ISA", "JER", "LAM", "EZK", "DAN", "HOS", "JOL", "AMO", "OBA", "JON", "MIC", "NAM", "HAB", "ZEP", "HAG", "ZEC", "MAL",
+	"MAT", "MRK", "LUK", "JHN", "ACT", "ROM", "1CO", "2CO", "GAL", "EPH", "PHP", "COL", "1TH", "2TH", "1TI", "2TI", "TIT", "PHM", "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD", "REV"}
+
+func bsbBase() string {
+	if v := strings.TrimRight(os.Getenv("BSB_AUDIO_BASE_URL"), "/"); v != "" {
+		return v
+	}
+	if v := strings.TrimRight(os.Getenv("R2_SERMONS_PUBLIC_BASE_URL"), "/"); v != "" {
+		return v + "/bible-audio/bsb-souer"
+	}
+	return ""
+}
+
+func (h Handler) bsb(c *gin.Context) {
+	base := bsbBase()
+	book := strings.ToUpper(c.Param("book"))
+	chapter, err := strconv.Atoi(c.Param("chapter"))
+	n := 0
+	for i, b := range bsbBooks {
+		if b == book {
+			n = i + 1
+		}
+	}
+	if base == "" || n == 0 || err != nil || chapter < 1 || chapter > 150 {
+		c.JSON(200, gin.H{"available": false, "reason": "Recorded narration is not available for this chapter."})
+		return
+	}
+	c.Header("Cache-Control", "public, max-age=3600")
+	c.JSON(200, gin.H{"available": true, "url": fmt.Sprintf("%s/%02d_%03d.mp3", base, n, chapter), "base": base, "attribution": bsbAttribution, "timings": []any{}})
+}
+
 func (h Handler) Chapter(c *gin.Context) {
+	if c.Param("version") == "eng_bsb" {
+		h.bsb(c)
+		return
+	}
 	raw, key := os.Getenv("BIBLE_BRAIN_FILESETS"), strings.TrimSpace(os.Getenv("BIBLE_BRAIN_KEY"))
 	if h.store != nil {
 		cfg, _, err := h.store.Load(c.Request.Context(), "biblebrain")

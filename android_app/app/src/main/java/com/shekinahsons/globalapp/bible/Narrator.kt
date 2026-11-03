@@ -35,18 +35,24 @@ class Narrator(private val context: Context) {
     @Serializable data class Recording(val available:Boolean=false,val url:String="",val attribution:String="",val timings:List<NarrationTime> = emptyList())
     suspend fun readChapter(version:String,book:String,chapter:Int,language:String,heading:String,verses:List<Verse>,from:Int,onEnd:()->Unit) {
         stop()
-        val recording=runCatching { Api.decode<Recording>(Api.get("/bible/audio/$version/$book/$chapter")) }.getOrNull()
+        // The BSB: Bob Souer's reading, from the phone if downloaded, with the
+        // verse timings built into the app (works offline).
+        val bsbBook = if (version == BibleDb.ENGLISH) BibleDb.get(context).books().firstOrNull { it.code == book }?.id else null
+        val recording = if (bsbBook != null && BsbAudio.has(context, bsbBook, chapter))
+            Recording(true, BsbAudio.source(context, bsbBook, chapter), BsbAudio.ATTRIBUTION,
+                BsbAudio.timings(context, bsbBook, chapter).map { NarrationTime(it.first, it.second) })
+        else runCatching { Api.decode<Recording>(Api.get("/bible/audio/$version/$book/$chapter")) }.getOrNull()
         currentCoroutineContext().ensureActive()
         if(recording?.available!=true || recording.url.isBlank()) {read(language,heading,verses,from,onEnd);return}
         this.language=language;this.heading=heading;this.verses=verses;onChapterEnd=onEnd
-        recorded=true;active=true;attribution=recording.attribution;timings=recording.timings.sortedBy{it.positionMs};verse=from
+        recorded=true;active=true;rate=recordingRate;attribution=recording.attribution;timings=recording.timings.sortedBy{it.positionMs};verse=from
         recordedPlayer=ExoPlayer.Builder(context).build().apply {
             addListener(object:Player.Listener {
                 override fun onPlaybackStateChanged(state:Int){if(state==Player.STATE_ENDED){playing=false;onChapterEnd?.invoke()}}
                 override fun onIsPlayingChanged(isPlaying:Boolean){playing=isPlaying}
                 override fun onPlayerError(error:androidx.media3.common.PlaybackException){playing=false}
             })
-            setMediaItem(MediaItem.fromUri(recording.url),timings.lastOrNull{it.verse<=from}?.positionMs ?: 0L)
+            setMediaItem(MediaItem.fromUri(recording.url),if(from<=1) 0L else timings.lastOrNull{it.verse<=from}?.positionMs ?: 0L)
             setPlaybackSpeed(rate);prepare();play()
         }
         follow=scope.launch {while(isActive){val position=recordedPlayer?.currentPosition ?: break;timings.lastOrNull{it.positionMs<=position}?.let{verse=it.verse};delay(150)}}
@@ -59,7 +65,9 @@ class Narrator(private val context: Context) {
     var active by mutableStateOf(false); private set
     // The verse being read right now (0 = the chapter heading).
     var verse by mutableIntStateOf(0); private set
-    var rate by mutableFloatStateOf(prefs.getFloat("rate", 0.95f)); private set
+    private var deviceRate = prefs.getFloat("rate", 0.95f)
+    private var recordingRate = prefs.getFloat("recorded-rate", 1f)
+    var rate by mutableFloatStateOf(deviceRate); private set
     var voices by mutableStateOf<List<Voice>>(emptyList()); private set
     var voice by mutableStateOf<Voice?>(null); private set
     var missingLanguage by mutableStateOf(false); private set
@@ -116,7 +124,7 @@ class Narrator(private val context: Context) {
     private fun clean(text: String) = text.replace(Regex("[\\[\\]¶]"), "").replace(Regex("\\s+"), " ").trim()
 
     fun read(language: String, heading: String, verses: List<Verse>, from: Int, onChapterEnd: () -> Unit) {
-        follow?.cancel();recordedPlayer?.release();recordedPlayer=null;recorded=false;attribution="Device voice"
+        follow?.cancel();recordedPlayer?.release();recordedPlayer=null;recorded=false;rate=deviceRate;attribution="Device voice"
         this.language = language; this.heading = heading; this.verses = verses; this.onChapterEnd = onChapterEnd
         active = true
         val start = {
@@ -176,7 +184,8 @@ class Narrator(private val context: Context) {
 
     fun changeRate(value: Float) {
         rate = value
-        prefs.edit().putFloat("rate", value).apply()
+        if (recorded) { recordingRate = value; prefs.edit().putFloat("recorded-rate", value).apply() }
+        else { deviceRate = value; prefs.edit().putFloat("rate", value).apply() }
         if(recorded) recordedPlayer?.setPlaybackSpeed(value) else if (playing) speakFrom(verse.coerceAtLeast(1))
     }
 
