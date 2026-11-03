@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Forward30
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
@@ -97,7 +99,7 @@ private fun clock(ms: Long): String {
 }
 
 @Composable
-fun AudioPlayerScreen(sermon: Sermon, queue: List<Sermon>, audio: AudioController, openReference: (String) -> Unit = {}, onBack: () -> Unit) {
+fun AudioPlayerScreen(sermon: Sermon, queue: List<Sermon>, audio: AudioController, openReference: (String) -> Unit = {}, library: com.shekinahsons.globalapp.data.Library? = null, onBack: () -> Unit) {
     LaunchedEffect(sermon.id) { audio.play(sermon, queue) }
     LaunchedEffect(Unit) { while (true) { audio.tick(); delay(500) } }
     val now = audio.current ?: sermon
@@ -105,10 +107,18 @@ fun AudioPlayerScreen(sermon: Sermon, queue: List<Sermon>, audio: AudioControlle
     var scrub by remember { mutableStateOf<Float?>(null) }
 
     Box(Modifier.fillMaxSize().background(Brand.Black)) {
-        // Whole-page wash in the cover's colour.
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(audioGlowColor(now).copy(alpha = 0.32f), Brand.Black, Brand.Black))))
+        // The cover itself, blurred and glowing across the whole screen, so the
+        // page takes on each sermon's colours; darker at the bottom for the controls.
+        AmbientGlow(now.thumbnail, Modifier.fillMaxSize(), blur = 90.dp, alpha = 0.95f)
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x33000000), 0.45f to Color(0x66000000), 1f to Color(0xF2000000))))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(audioGlowColor(now).copy(alpha = 0.22f), Color.Transparent))))
         Column(Modifier.fillMaxSize().navigationBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
             TopBar(title = "Now Playing", onBack = onBack)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.shekinahsons.globalapp.R.drawable.dove_mark), null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("SHEKINAH SONS GLOBAL", color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, letterSpacing = 2.sp)
+            }
             Spacer(Modifier.weight(0.6f))
             Box(Modifier.padding(horizontal = 40.dp), contentAlignment = Alignment.Center) {
                 ColorGlow(audioGlowColor(now).copy(alpha = 0.85f * glow), Modifier.matchParentSize().padding(14.dp).graphicsLayer { scaleX = 0.94f + 0.08f * glow; scaleY = scaleX }, blur = 46.dp)
@@ -118,7 +128,24 @@ fun AudioPlayerScreen(sermon: Sermon, queue: List<Sermon>, audio: AudioControlle
             Column(Modifier.padding(horizontal = 28.dp).fillMaxWidth()) {
                 Text(now.title, style = Type.Display.copy(fontSize = 23.sp), color = Brand.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
-                Text(now.speaker, color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(now.speaker, color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    // Download while listening, with progress.
+                    if (library != null && now.youtubeId.isBlank()) {
+                        val pct = library.downloading[now.id]
+                        val done = pct == null && library.isDownloaded(now)
+                        Row(
+                            Modifier.clip(RoundedCornerShape(50)).background(if (done) Color(0x33D4AF37) else Color(0x26FFFFFF))
+                                .clickable(enabled = pct == null && !done) { library.download(now) }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(if (done) Icons.Rounded.DownloadDone else Icons.Rounded.Download, null, tint = if (done) Brand.Gold else Brand.White, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text(when { done -> "Downloaded"; pct != null -> "${(pct * 100).toInt()}%"; else -> "Download" }, color = Brand.White, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                        }
+                    }
+                }
                 Spacer(Modifier.height(18.dp))
                 val dur = audio.duration.coerceAtLeast(1)
                 Slider(
