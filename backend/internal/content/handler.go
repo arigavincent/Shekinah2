@@ -27,8 +27,23 @@ func (h Handler) Home(c *gin.Context) {
 		return
 	}
 
-	// Sermons without an uploaded cover get the bright automatic one.
+	// A podcast feed usually gives every episode the same show picture; that
+	// counts as no cover, so those episodes get the bright automatic one too.
+	shared := map[string]int{}
+	for _, s := range response.Sermons {
+		if s.Source == "podcast" && s.Thumbnail != "" {
+			shared[s.Thumbnail]++
+		}
+	}
 	for i, s := range response.Sermons {
+		if s.Source == "podcast" && shared[s.Thumbnail] > 2 {
+			response.Sermons[i].Thumbnail = ""
+		}
+	}
+
+	// Sermons without an uploaded cover get the bright automatic one.
+	for i := range response.Sermons {
+		s := response.Sermons[i]
 		if id := YouTubeID(s.MediaURL); id != "" {
 			response.Sermons[i].YouTubeID = id
 			response.Sermons[i].Type = "video"

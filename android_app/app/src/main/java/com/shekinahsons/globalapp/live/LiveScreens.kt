@@ -451,21 +451,24 @@ private fun LiveOffline(content: HomeContent, session: Session, openGoLive: () -
                         Text("Join us in person or online", style = Type.CardTitle.copy(fontSize = 15.sp), color = Brand.White)
                     }
                 }
-                Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Sunday Main Service", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                    Text("9:00 AM & 11:30 AM", color = Brand.GoldLight, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                // The service times set in the admin (the same ones Home counts down to).
+                val days = remember(content.live.nextService) {
+                    content.live.nextService.split(";").map { it.trim() }.filter { it.contains(",") }
+                        .groupBy({ it.substringBefore(",").trim() }, { it.substringAfter(",").trim() }).toList()
                 }
-                Spacer(Modifier.height(10.dp))
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x14FFFFFF)))
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Midweek Communion", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                    Text("Wednesday 5:30 PM", color = Brand.GoldLight, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                days.forEachIndexed { i, (day, times) ->
+                    if (i > 0) {
+                        Spacer(Modifier.height(10.dp))
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x14FFFFFF)))
+                    }
+                    Spacer(Modifier.height(if (i == 0) 14.dp else 10.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(day, color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                        Text(times.joinToString(" & "), color = Brand.GoldLight, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
-        item { Box(Modifier.padding(horizontal=20.dp,vertical=12.dp)) { GoldButton("Watch service replays",onClick=replays) } }
         if (session.canBroadcast) {
             item { Spacer(Modifier.height(18.dp)) }
             item {
