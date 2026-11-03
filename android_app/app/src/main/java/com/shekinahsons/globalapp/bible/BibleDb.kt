@@ -15,9 +15,13 @@ data class Hit(val versionId: String, val bookId: Int, val chapter: Int, val ver
 // SQLite file in the app's private storage.
 class BibleDb private constructor(context: Context) {
     companion object {
-        const val ENGLISH = "eng_msb"
+        // The Berean Standard Bible: modern, public domain, with a human-read audio Bible.
+        const val ENGLISH = "eng_bsb"
+        const val MSB = "eng_msb"
         const val SWAHILI = "swh_neno"
-        private const val SHIPPED = 1
+        private const val SHIPPED = 2
+        // Versions that come inside the app (others are downloaded by the reader).
+        private val BUILT_IN = listOf("eng_bsb", "eng_msb", "swh_neno")
         @Volatile private var instance: BibleDb? = null
         fun get(context: Context) = instance ?: synchronized(this) { instance ?: BibleDb(context.applicationContext).also { instance = it } }
     }
@@ -27,11 +31,35 @@ class BibleDb private constructor(context: Context) {
     init {
         val file = File(context.filesDir, "bible.db")
         val prefs = context.getSharedPreferences("bible", Context.MODE_PRIVATE)
-        if (!file.exists() || prefs.getInt("shipped", 0) < SHIPPED) {
+        if (!file.exists()) {
             context.assets.open("bible.db").use { input -> file.outputStream().use { input.copyTo(it) } }
             prefs.edit().putInt("shipped", SHIPPED).apply()
         }
         db = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE)
+        // A newer app brings new built-in versions: swap those in and keep the
+        // versions the reader downloaded.
+        if (prefs.getInt("shipped", 0) < SHIPPED) {
+            val fresh = File(context.cacheDir, "bible-shipped.db")
+            context.assets.open("bible.db").use { input -> fresh.outputStream().use { input.copyTo(it) } }
+            db.execSQL("ATTACH DATABASE ? AS shipped", arrayOf(fresh.path))
+            db.beginTransaction()
+            try {
+                val ids = BUILT_IN.joinToString(",") { "'$it'" }
+                db.execSQL("DELETE FROM verses WHERE version_id IN ($ids)")
+                db.execSQL("DELETE FROM book_labels WHERE version_id IN ($ids)")
+                db.execSQL("DELETE FROM versions WHERE id IN ($ids)")
+                db.execSQL("INSERT OR REPLACE INTO books SELECT * FROM shipped.books")
+                db.execSQL("INSERT INTO versions SELECT * FROM shipped.versions WHERE id IN ($ids)")
+                db.execSQL("INSERT INTO book_labels SELECT * FROM shipped.book_labels WHERE version_id IN ($ids)")
+                db.execSQL("INSERT INTO verses SELECT * FROM shipped.verses WHERE version_id IN ($ids)")
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            db.execSQL("DETACH DATABASE shipped")
+            fresh.delete()
+            prefs.edit().putInt("shipped", SHIPPED).apply()
+        }
     }
 
     // Catalogue codes look like "ENG-KJV2006"; readers know it as "KJV".
@@ -104,7 +132,7 @@ class BibleDb private constructor(context: Context) {
     }
 
     fun remove(versionId: String) {
-        if (versionId == ENGLISH || versionId == SWAHILI) return
+        if (versionId == ENGLISH || versionId == SWAHILI || versionId == MSB) return
         db.delete("verses", "version_id = ?", arrayOf(versionId))
         db.delete("versions", "id = ?", arrayOf(versionId))
     }

@@ -410,11 +410,21 @@ private fun DevotionCarousel(devotions: List<Devotion>, open: (Devotion) -> Unit
     }
 }
 
+// The verse day, which turns over at 7 AM local time (checked every minute
+// so an open app moves on by itself).
+@Composable
+fun rememberVerseDay(): Long {
+    var day by remember { androidx.compose.runtime.mutableLongStateOf(com.shekinahsons.globalapp.bible.DailyWord.dayKey()) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(60_000); day = com.shekinahsons.globalapp.bible.DailyWord.dayKey() } }
+    return day
+}
+
 @Composable
 private fun ScriptureCard(content: HomeContent, openReference: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     // A new verse every morning from the offline Bible; the backend's verse if that fails.
-    val daily = remember(java.time.LocalDate.now()) { runCatching { com.shekinahsons.globalapp.bible.DailyWord.today(context) }.getOrNull() }
+    val day = rememberVerseDay()
+    val daily = remember(day) { runCatching { com.shekinahsons.globalapp.bible.DailyWord.today(context, 0, day) }.getOrNull() }
     val s = daily?.let { com.shekinahsons.globalapp.data.Scripture("Verse of the Day", it.text, it.reference) } ?: content.scripture
     if (s.verse.isBlank()) return
     Column(

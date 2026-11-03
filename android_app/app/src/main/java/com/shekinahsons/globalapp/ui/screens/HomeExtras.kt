@@ -106,8 +106,12 @@ private val blessings = mapOf(
 fun Greeting(name: String, onProfile: () -> Unit) {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val (part, hello) = when (hour) { in 4..11 -> "morning" to "Good morning"; in 12..16 -> "afternoon" to "Good afternoon"; else -> "evening" to "Good evening" }
-    val day = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
-    val (line, ref) = blessings.getValue(part).let { it[day % it.size] }
+    // Today's verse from the offline Bible (from the church's chosen topics),
+    // new every day at 7 AM; the short blessings are the fallback.
+    val context = LocalContext.current
+    val verseDay = rememberVerseDay()
+    val verse = remember(verseDay) { runCatching { com.shekinahsons.globalapp.bible.DailyWord.today(context, 1, verseDay) }.getOrNull() }
+    val (line, ref) = verse?.let { it.text to it.reference } ?: blessings.getValue(part).let { it[(verseDay % it.size).toInt()] }
     Column(Modifier.padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 12.dp)) {
         Text(if (name.isNotBlank()) "$hello, $name" else hello, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-0.4).sp, color = Brand.White)
         Text("$line · $ref", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.GoldLight, maxLines = 2)

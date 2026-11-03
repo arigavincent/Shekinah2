@@ -88,6 +88,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -269,6 +273,7 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
     DisposableEffect(Unit) { onDispose { narrator.shutdown() } }
     // Which version is read aloud; in side-by-side either column can be chosen.
     var listenId by remember { mutableStateOf(if (s.sideBySide) s.right else s.single) }
+    var readingSettings by remember { mutableStateOf(false) }
     var readingChapter by remember { mutableStateOf(0) }
     var advancing by remember { mutableStateOf(false) }
 
@@ -315,8 +320,8 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
                 modifier = Modifier.size(42.dp).clip(CircleShape).clickable {
                     if (narrator.active) narrator.stop() else readChapter(chapter, 1)
                 }.padding(10.dp))
-            Icon(Icons.Rounded.TextFields, "Text size", tint = Brand.White, modifier = Modifier.size(42.dp).clip(CircleShape).clickable {
-                store.update { st -> st.copy(textScale = listOf(0.85f, 1f, 1.15f, 1.3f, 1.5f).let { l -> l[(l.indexOf(st.textScale).coerceAtLeast(0) + 1) % l.size] }) }
+            Icon(Icons.Rounded.TextFields, "Font and text size", tint = Brand.White, modifier = Modifier.size(42.dp).clip(CircleShape).clickable {
+                readingSettings = true
             }.padding(10.dp))
             Icon(Icons.Rounded.Search, "Search", tint = Brand.White, modifier = Modifier.size(42.dp).clip(CircleShape).clickable(onClick = openSearch).padding(10.dp))
         }
@@ -356,6 +361,49 @@ private fun Reader(bible: BibleDb, store: BibleStore, book: Book, startChapter: 
             }) else null,
         )
     }
+    }
+    if (readingSettings) ReadingSettings(store, bible, book.id) { readingSettings = false }
+}
+
+// Font and text size for reading, each font shown with a real verse.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReadingSettings(store: BibleStore, bible: BibleDb, bookId: Int, close: () -> Unit) {
+    val s = store.state.also { store.version }
+    val sample = remember { bible.verse(BibleDb.ENGLISH, 19, 23, 1) ?: "The LORD is my shepherd; I shall not want." }
+    ModalBottomSheet(onDismissRequest = close, containerColor = Color(0xFF16161A)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Text("Reading settings", style = Type.Title, color = Brand.White)
+            Spacer(Modifier.height(14.dp))
+            Text("TEXT SIZE", style = Type.Label, color = Brand.Gold)
+            Row(Modifier.padding(top = 8.dp, bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                listOf(0.85f, 1f, 1.15f, 1.3f, 1.5f).forEach { scale ->
+                    val on = s.textScale == scale
+                    Box(Modifier.size(50.dp).clip(CircleShape).background(if (on) Brand.GoldGradient else SolidColor(Color(0x1FFFFFFF))).clickable { store.update { it.copy(textScale = scale) } },
+                        contentAlignment = Alignment.Center) {
+                        Text("A", fontFamily = BibleFonts.of(s.font), fontSize = (14 * scale).sp, color = if (on) Brand.Black else Brand.White)
+                    }
+                }
+            }
+            Text("FONT", style = Type.Label, color = Brand.Gold)
+            Spacer(Modifier.height(8.dp))
+            BibleFonts.all.forEach { f ->
+                val on = s.font == f.id
+                Column(
+                    Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(16.dp))
+                        .background(if (on) Color(0x26D4AF37) else Color(0x0FFFFFFF))
+                        .border(1.dp, if (on) Brand.Gold else Color.Transparent, RoundedCornerShape(16.dp))
+                        .clickable { store.update { it.copy(font = f.id) } }.padding(14.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(f.label, fontFamily = f.family, fontSize = 17.sp, color = Brand.White, modifier = Modifier.weight(1f))
+                        if (on) Icon(Icons.Rounded.Check, null, tint = Brand.Gold, modifier = Modifier.size(20.dp))
+                    }
+                    Text(f.note, style = Type.Meta, color = Brand.Text2)
+                    Text(sample, fontFamily = f.family, fontSize = 15.sp, lineHeight = 22.sp, color = Color(0xFFE8E2D2), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
+        }
     }
 }
 
@@ -488,15 +536,15 @@ private fun ChapterPage(
                         if (s.notes[key] != null) Icon(Icons.Rounded.EditNote, null, tint = Brand.BlueText, modifier = Modifier.padding(start = 4.dp).size(15.dp))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text(left.firstOrNull { it.number == n }?.text.orEmpty(), fontFamily = Scripture, fontSize = size.sp, lineHeight = (size * 1.5f).sp, color = Brand.White, modifier = Modifier.weight(1f))
-                        Text(right.firstOrNull { it.number == n }?.text.orEmpty(), fontFamily = Scripture, fontSize = size.sp, lineHeight = (size * 1.5f).sp, color = Color(0xFFE8E2D2), modifier = Modifier.weight(1f))
+                        Text(left.firstOrNull { it.number == n }?.text.orEmpty(), fontFamily = BibleFonts.of(s.font), fontSize = size.sp, lineHeight = (size * 1.5f).sp, color = Brand.White, modifier = Modifier.weight(1f))
+                        Text(right.firstOrNull { it.number == n }?.text.orEmpty(), fontFamily = BibleFonts.of(s.font), fontSize = size.sp, lineHeight = (size * 1.5f).sp, color = Color(0xFFE8E2D2), modifier = Modifier.weight(1f))
                     }
                 } else {
                     val text = single.firstOrNull { it.number == n }?.text.orEmpty()
                     Text(buildAnnotatedString {
                         withStyle(SpanStyle(color = Brand.Gold, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = (size * 0.62f).sp, baselineShift = BaselineShift.Superscript)) { append("$n ") }
                         append(text)
-                    }, fontFamily = Scripture, fontSize = (size * 1.12f).sp, lineHeight = (size * 1.75f).sp, color = Brand.White)
+                    }, fontFamily = BibleFonts.of(s.font), fontSize = (size * 1.05f).sp, lineHeight = (size * 1.7f).sp, color = Brand.White)
                 }
                 s.notes[key]?.let { Text("\u270E $it", style = Type.Meta, color = Brand.BlueText, modifier = Modifier.padding(top = 6.dp)) }
                 // Tap a verse: quick actions appear right under it.
@@ -536,7 +584,7 @@ private fun VerseSheet(bible: BibleDb, store: BibleStore, book: Book, chapter: I
     ModalBottomSheet(onDismissRequest = close, containerColor = Color(0xFF16161A)) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text(reference, style = Type.Title, color = Brand.White)
-            Text(text, fontFamily = Scripture, fontSize = 17.sp, lineHeight = 25.sp, color = Brand.Text2, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+            Text(text, fontFamily = BibleFonts.of(s.font), fontSize = 17.sp, lineHeight = 25.sp, color = Brand.Text2, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 highlightColors.forEach { (name, color) ->

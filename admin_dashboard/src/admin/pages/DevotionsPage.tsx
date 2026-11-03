@@ -24,6 +24,7 @@ import { useAdminFeedback } from "../feedback/AdminFeedback";
 import { usePaginatedItems } from "../hooks/usePaginatedItems";
 import { formatPublishAt, getPublishState, PUBLISH_TIME_ZONE, publishNowValue } from "../lib/publish";
 import { isValidAssetReference, isValidDateString, isValidDateTimeString, hasMinLength } from "../lib/validation";
+import { VerseTopicsCard } from "../components/VerseTopicsCard";
 
 const emptyForm: DevotionPayload = {
   externalId: "",
@@ -531,6 +532,8 @@ export function DevotionsPage() {
           </button>
         </div>
       </header>
+
+      <VerseTopicsCard />
 
       {error ? <InlineAlert title="Devotions could not be updated" message={error} /> : null}
 

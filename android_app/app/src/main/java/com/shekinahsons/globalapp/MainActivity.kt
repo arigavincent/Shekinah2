@@ -90,7 +90,15 @@ class MainActivity : ComponentActivity() {
                 val content by repo.content.collectAsState()
                 val refreshing by repo.refreshing.collectAsState()
                 val scope = rememberCoroutineScope()
-                LaunchedEffect(Unit) { launch { com.shekinahsons.globalapp.data.Ministry.load(this@MainActivity) }; repo.refresh(); app.session.refresh() }
+                LaunchedEffect(Unit) {
+                    launch { com.shekinahsons.globalapp.data.Ministry.load(this@MainActivity) }
+                    // The church's chosen topics for the daily verses (kept for offline use).
+                    launch {
+                        runCatching { com.shekinahsons.globalapp.data.Api.decode<List<String>>(com.shekinahsons.globalapp.data.Api.get("/settings/verse-topics")["topics"]) }
+                            .onSuccess { com.shekinahsons.globalapp.bible.DailyWord.saveTopics(this@MainActivity, it) }
+                    }
+                    repo.refresh(); app.session.refresh()
+                }
                 // Keep Home current (a service going live shows up by itself).
                 LaunchedEffect(Unit) { lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) { while (true) { kotlinx.coroutines.delay(20_000); repo.refresh() } } }
                 val c = content

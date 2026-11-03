@@ -46,7 +46,7 @@ func (c Checker) StaffRoute() gin.HandlerFunc {
 			permission = SermonsManage
 		case strings.HasPrefix(path, "events"):
 			permission = EventsManage
-		case strings.HasPrefix(path, "devotions"), strings.HasPrefix(path, "updates"), strings.HasPrefix(path, "reading-plans"):
+		case strings.HasPrefix(path, "devotions"), strings.HasPrefix(path, "updates"), strings.HasPrefix(path, "reading-plans"), path == "settings/verse-topics":
 			permission = ContentManage
 		case strings.HasPrefix(path, "community"), strings.HasPrefix(path, "testimonies"):
 			permission = CommunityModerate

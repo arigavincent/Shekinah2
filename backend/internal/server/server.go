@@ -44,6 +44,7 @@ import (
 	"github.com/ariga/shekinah-backend/internal/serve"
 	"github.com/ariga/shekinah-backend/internal/settings"
 	"github.com/ariga/shekinah-backend/internal/testimonies"
+	"github.com/ariga/shekinah-backend/internal/versetopics"
 	"github.com/ariga/shekinah-backend/internal/uploads"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -188,6 +189,7 @@ func newRouter(cfg config.Config, db *pgxpool.Pool, background context.Context) 
 		api.GET("/healthz", health.HandleHealthz(cfg, db))
 		api.GET("/home", contentHandler.Home)
 		api.GET("/sermons/:id/notes", sermonNotes.Get)
+		api.GET("/settings/verse-topics", versetopics.NewHandler(db).Get)
 		api.GET("/playlists", auth.OptionalAuth(authService), playlistHandler.List)
 		api.POST("/playlists", auth.RequireAuth(authService), playlistHandler.Create)
 		api.PATCH("/playlists/:id", auth.RequireAuth(authService), playlistHandler.Update)
@@ -337,6 +339,7 @@ func newRouter(cfg config.Config, db *pgxpool.Pool, background context.Context) 
 
 			adminGroup.GET("/sermons", adminSermonHandler.List)
 			adminGroup.PUT("/sermons/:id/notes", sermonNotes.Save)
+			adminGroup.PUT("/settings/verse-topics", versetopics.NewHandler(db).Save)
 			adminGroup.GET("/live/studio", liveHandler.AdminStudio)
 			adminGroup.PUT("/live/studio", liveHandler.AdminSaveStudio)
 			adminGroup.POST("/live/studio/key", liveHandler.AdminNewStudioKey)

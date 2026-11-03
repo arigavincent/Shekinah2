@@ -1,6 +1,8 @@
 package com.shekinahsons.globalapp.admin
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -80,6 +82,44 @@ fun AdminNextService() {
                 busy = true; error = null
                 runCatching { Api.patch("/admin/live-config", mapOf("nextService" to text)) }
                     .onSuccess { saved = true; current = text }.onFailure { error = it.message }
+                busy = false
+            }
+        }
+    }
+}
+
+// Which topics the daily verses come from (Home's greeting verse and Verse of
+// the Day). None chosen = all topics.
+@Composable
+fun AdminVerseTopics() {
+    val scope = rememberCoroutineScope()
+    val chosen = remember { mutableStateListOf<String>() }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saved by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        runCatching { Api.decode<List<String>>(Api.get("/settings/verse-topics")["topics"]) }.onSuccess { chosen.clear(); chosen.addAll(it) }.onFailure { error = it.message }
+    }
+    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.85f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Daily verse topics", style = Type.Title, color = Brand.White)
+        Text("Home shows a new verse every morning at 7. Pick topics to focus them, for example Faith and Healing during a healing series. Leave all off for every topic.", style = Type.Meta, color = Brand.Text2)
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            com.shekinahsons.globalapp.bible.DailyWord.topics.forEach { t ->
+                val on = t.id in chosen
+                Text(t.label, color = if (on) Brand.Black else Brand.White, fontSize = 13.5.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50))
+                        .background(if (on) Brand.GoldGradient else androidx.compose.ui.graphics.SolidColor(Color(0x1FFFFFFF)))
+                        .clickable { if (on) chosen.remove(t.id) else chosen.add(t.id); saved = false }
+                        .padding(horizontal = 14.dp, vertical = 8.dp))
+            }
+        }
+        Text(if (chosen.isEmpty()) "Using: all topics" else "Using: " + com.shekinahsons.globalapp.bible.DailyWord.topics.filter { it.id in chosen }.joinToString(", ") { it.label }, style = Type.Meta, color = Brand.GoldLight)
+        ErrorNote(error)
+        if (saved) Text("Saved. Members see it from the next 7 AM verse.", color = Color(0xFF4ADE80), fontSize = 13.sp)
+        GoldButton("Save topics", busy = busy) {
+            scope.launch {
+                busy = true; error = null
+                runCatching { Api.put("/admin/settings/verse-topics", mapOf("topics" to chosen.toList())) }.onSuccess { saved = true }.onFailure { error = it.message }
                 busy = false
             }
         }

@@ -25,6 +25,10 @@ data class BibleState(
     val highlights: Map<String, String> = emptyMap(),
     val bookmarks: List<String> = emptyList(),
     val notes: Map<String, String> = emptyMap(),
+    // Reading font (see BibleFonts); Roboto unless the reader picks another.
+    val font: String = "roboto",
+    // Set once the reader has been moved to the BSB as the main English Bible.
+    val bsbDefault: Boolean = false,
 )
 
 fun ref(bookId: Int, chapter: Int, verse: Int) = "$bookId:$chapter:$verse"
@@ -38,6 +42,18 @@ class BibleStore(context: Context) {
         private set
     var version by mutableIntStateOf(0)
         private set
+
+    init {
+        // The BSB replaces the MSB as the main English Bible (once; a reader can switch back).
+        if (!state.bsbDefault) update { s ->
+            s.copy(
+                single = if (s.single == BibleDb.MSB) BibleDb.ENGLISH else s.single,
+                right = if (s.right == BibleDb.MSB) BibleDb.ENGLISH else s.right,
+                left = if (s.left == BibleDb.MSB) BibleDb.ENGLISH else s.left,
+                bsbDefault = true,
+            )
+        }
+    }
 
     fun update(change: (BibleState) -> BibleState) {
         state = change(state)
