@@ -93,35 +93,49 @@ data class SaKiosk(
 
 @Composable
 internal fun SuperAdminPage() {
-    var view by rememberSaveable { mutableStateOf("members") }
-    val tools = listOf(
-        "members" to "Members",
-        "roles" to "Roles",
-        "groups" to "Groups",
-        "attendance" to "Attendance",
-        "kiosks" to "POS",
-        "templates" to "Comm Templates",
-        "apikeys" to "API Keys",
-        "webhooks" to "Webhooks",
-        "audit" to "Audit Trail",
-        "modules" to "System Modules",
-        "backup" to "Backup & GDPR",
+    var view by rememberSaveable { mutableStateOf<String?>(null) }
+    val gold = Brand.Gold; val blue = Color(0xFF6EA8FF); val green = Color(0xFF4ADE80); val rose = Color(0xFFFF8FA3); val violet = Color(0xFFB79CFF)
+    val I = androidx.compose.material.icons.Icons.Rounded
+    val groups = listOf(
+        "People" to listOf(
+            AdminTool("members", "Members", "Accounts, roles, suspend", I.People, gold),
+            AdminTool("roles", "Roles", "What each staff role can do", I.AdminPanelSettings, gold),
+            AdminTool("groups", "Groups", "Cells, ministries, classes", I.Groups, gold),
+            AdminTool("templates", "Comm Templates", "Reusable messages", I.Mail, gold),
+        ),
+        "Gatherings" to listOf(
+            AdminTool("attendance", "Attendance", "Check-ins and reports", I.FactCheck, blue),
+            AdminTool("kiosks", "POS", "Check-in and sales points", I.PointOfSale, blue),
+        ),
+        "System" to listOf(
+            AdminTool("modules", "System Modules", "Turn features on or off", I.Tune, green),
+            AdminTool("audit", "Audit Trail", "Who changed what, and when", I.History, green),
+            AdminTool("backup", "Backup & GDPR", "Exports and data requests", I.Backup, green),
+            AdminTool("apikeys", "API Keys", "Access for other systems", I.Key, violet),
+            AdminTool("webhooks", "Webhooks", "Send events to other apps", I.Webhook, violet),
+        ),
     )
+    val current = groups.flatMap { it.second }.firstOrNull { it.id == view }
+    androidx.activity.compose.BackHandler(enabled = current != null) { view = null }
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { PageTitle("Super Admin", "Full system governance & control") }
-        item { ToolChoices(tools, view) { view = it } }
-        when (view) {
-            "members"   -> item { SaMembersPane() }
-            "roles"     -> item { SaRolesPane() }
-            "groups"    -> item { SaGroupsPane() }
-            "attendance"-> item { SaAttendancePane() }
-            "kiosks"    -> item { SaKiosksPane() }
-            "templates" -> item { SaTemplatesPane() }
-            "apikeys"   -> item { SaApiKeysPane() }
-            "webhooks"  -> item { SaWebhooksPane() }
-            "audit"     -> item { SaAuditPane() }
-            "modules"   -> item { SaModulesPane() }
-            "backup"    -> item { SaBackupPane() }
+        if (current == null) {
+            item { PageTitle("Super Admin", "Full system governance & control") }
+            toolHub(groups) { view = it }
+        } else {
+            item { ToolHeader(current) { view = null } }
+            when (current.id) {
+                "members"   -> item { SaMembersPane() }
+                "roles"     -> item { SaRolesPane() }
+                "groups"    -> item { SaGroupsPane() }
+                "attendance"-> item { SaAttendancePane() }
+                "kiosks"    -> item { SaKiosksPane() }
+                "templates" -> item { SaTemplatesPane() }
+                "apikeys"   -> item { SaApiKeysPane() }
+                "webhooks"  -> item { SaWebhooksPane() }
+                "audit"     -> item { SaAuditPane() }
+                "modules"   -> item { SaModulesPane() }
+                "backup"    -> item { SaBackupPane() }
+            }
         }
     }
 }

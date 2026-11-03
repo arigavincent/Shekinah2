@@ -31,8 +31,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -589,27 +591,50 @@ private fun TeamPage() {
 
 @Composable
 private fun MorePage() {
-    var view by rememberSaveable { mutableStateOf("events") }
-    val tools = listOf(
-        "events" to "Events", "serve" to "Serve", "branches" to "Branches",
-        "notify" to "Send notification", "prayers" to "Prayer requests",
-        "sermons" to "Sermons", "devotions" to "Devotions", "updates" to "Updates",
-        "plans" to "Reading plans", "testimonies" to "Testimonies", "community" to "Community",
-        "monetization" to "Monetization", "settings" to "Ministry settings",
+    var view by rememberSaveable { mutableStateOf<String?>(null) }
+    val gold = Brand.Gold; val blue = Color(0xFF6EA8FF); val green = Color(0xFF4ADE80); val rose = Color(0xFFFF8FA3); val violet = Color(0xFFB79CFF)
+    val groups = listOf(
+        "Content" to listOf(
+            AdminTool("sermons", "Sermons", "Videos, audio, notes, YouTube links", androidx.compose.material.icons.Icons.Rounded.PlayCircle, gold),
+            AdminTool("devotions", "Devotions", "Daily word and verse topics", androidx.compose.material.icons.Icons.AutoMirrored.Rounded.MenuBook, gold),
+            AdminTool("plans", "Reading plans", "Daily readings and reflections", androidx.compose.material.icons.Icons.Rounded.AutoStories, gold),
+            AdminTool("updates", "Updates", "Church news and announcements", androidx.compose.material.icons.Icons.AutoMirrored.Rounded.Article, gold),
+        ),
+        "Church life" to listOf(
+            AdminTool("events", "Events", "Registrations, tickets, check-in", androidx.compose.material.icons.Icons.Rounded.Event, blue),
+            AdminTool("serve", "Serve", "Ministry teams and requests", androidx.compose.material.icons.Icons.Rounded.VolunteerActivism, blue),
+            AdminTool("branches", "Branches", "Locations and service times", androidx.compose.material.icons.Icons.Rounded.Church, blue),
+            AdminTool("settings", "Ministry settings", "Service times, contacts, links", androidx.compose.material.icons.Icons.Rounded.Settings, blue),
+        ),
+        "Care and community" to listOf(
+            AdminTool("prayers", "Prayer requests", "Read, pray, pin to the wall", androidx.compose.material.icons.Icons.Rounded.Favorite, rose),
+            AdminTool("testimonies", "Testimonies", "Approve what God has done", androidx.compose.material.icons.Icons.Rounded.AutoAwesome, rose),
+            AdminTool("community", "Community", "Moderate the chat", androidx.compose.material.icons.Icons.Rounded.Forum, rose),
+            AdminTool("notify", "Send notification", "Reach every phone at once", androidx.compose.material.icons.Icons.Rounded.Campaign, rose),
+        ),
+        "Income" to listOf(
+            AdminTool("monetization", "Monetization", "Paid books, lives and replays", androidx.compose.material.icons.Icons.Rounded.Payments, green),
+        ),
     )
+    val current = groups.flatMap { it.second }.firstOrNull { it.id == view }
+    androidx.activity.compose.BackHandler(enabled = current != null) { view = null }
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { PageTitle("More", "Content, ministry settings and community care") }
-        item { ToolChoices(tools, view) { view = it } }
-        when (view) {
-            "events" -> item { AdminEventsPane() }
-            "serve" -> item { AdminServePane() }
-            "branches" -> item { AdminBranchesPane() }
-            "notify" -> item { NotifyForm() }
-            "sermons", "devotions", "updates", "plans" -> item { androidx.compose.runtime.key(view) { AdminContentPane(view) } }
-            "testimonies", "community" -> item { androidx.compose.runtime.key(view) { AdminModerationPane(view=="testimonies") } }
-            "monetization" -> item { AdminMonetizationPane() }
-            "settings" -> item { AdminMinistrySettings() }
-            else -> prayers(this)
+        if (current == null) {
+            item { PageTitle("More", "Content, ministry settings and community care") }
+            toolHub(groups) { view = it }
+        } else {
+            item { ToolHeader(current) { view = null } }
+            when (current.id) {
+                "events" -> item { AdminEventsPane() }
+                "serve" -> item { AdminServePane() }
+                "branches" -> item { AdminBranchesPane() }
+                "notify" -> item { NotifyForm() }
+                "sermons", "devotions", "updates", "plans" -> item { androidx.compose.runtime.key(current.id) { AdminContentPane(current.id) } }
+                "testimonies", "community" -> item { androidx.compose.runtime.key(current.id) { AdminModerationPane(current.id == "testimonies") } }
+                "monetization" -> item { AdminMonetizationPane() }
+                "settings" -> item { AdminMinistrySettings() }
+                else -> prayers(this)
+            }
         }
     }
 }
