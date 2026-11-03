@@ -164,8 +164,9 @@ private val grey = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation
 
 @Composable
 fun AudioCover(sermon: Sermon, modifier: Modifier = Modifier) {
-    // A cover the church uploaded wins; otherwise the bright drawn one.
-    val uploaded = sermon.thumbnail.takeIf { it.isNotBlank() && !it.contains("/api/v1/covers/") }
+    // A cover the church uploaded wins; otherwise the server's bright square
+    // Shekinah cover. The drawn one is only for when there is no picture at all.
+    val uploaded = sermon.thumbnail.takeIf { it.isNotBlank() }
     if (uploaded != null) {
         coil3.compose.AsyncImage(uploaded, sermon.title, contentScale = ContentScale.Crop, modifier = modifier.background(Color(0xFF14286B)))
         return

@@ -25,7 +25,7 @@ func (h *Handler) SermonCover(c *gin.Context) {
 		c.Status(404)
 		return
 	}
-	key := id + "|" + title + "|" + speaker + "|" + kind
+	key := id + "|" + title + "|" + speaker + "|" + kind + "|v2"
 	sermonCoverMu.Lock()
 	img, ok := sermonCoverCache[key]
 	sermonCoverMu.Unlock()
@@ -42,7 +42,17 @@ func (h *Handler) SermonCover(c *gin.Context) {
 			sub += date.Format("2 January 2006")
 		}
 		var err error
-		if img, err = RenderCover(id, label, title, sub); err != nil {
+		if kind == "audio" {
+			// Square, bright and bold: what people see in the audio list and player.
+			l, main, by := AudioCoverText(title, speaker)
+			if l == "" {
+				l = label
+			}
+			img, err = RenderSquareCover(id, l, main, by)
+		} else {
+			img, err = RenderCover(id, label, title, sub)
+		}
+		if err != nil {
 			c.Status(500)
 			return
 		}

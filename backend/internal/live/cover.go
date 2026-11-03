@@ -237,3 +237,150 @@ func RenderCover(seed, labelText, title, subtitle string) ([]byte, error) {
 	}
 	return out.Bytes(), nil
 }
+
+// centered draws text centred on x.
+func centered(img *image.RGBA, fc font.Face, cx, y int, text string, c color.Color, shadow bool) {
+	w := font.MeasureString(fc, text).Ceil()
+	drawText(img, fc, cx-w/2, y, text, c, shadow)
+}
+
+// RenderSquareCover draws a bright 1080x1080 JPEG for audio sermons: a light
+// burst behind the gold dove, a label pill (e.g. "SHEKINAH DAY 085"), the
+// title in big letters and the speaker.
+func RenderSquareCover(seed, labelText, title, subtitle string) ([]byte, error) {
+	if err := loadCoverAssets(); err != nil {
+		return nil, err
+	}
+	const W, H = 1080, 1080
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(seed))
+	pal := coverPalettes[h.Sum32()%uint32(len(coverPalettes))]
+	img := image.NewRGBA(image.Rect(0, 0, W, H))
+
+	// Diagonal gradient, a strong sunburst from behind the dove and a glow.
+	gx, gy := float64(W)*0.5, float64(H)*0.2
+	for y := 0; y < H; y++ {
+		for x := 0; x < W; x++ {
+			t := float64(x)/W*0.45 + float64(y)/H*0.55
+			i := img.PixOffset(x, y)
+			img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = lerp(pal.from.R, pal.to.R, t), lerp(pal.from.G, pal.to.G, t), lerp(pal.from.B, pal.to.B, t), 255
+			dx, dy := float64(x)-gx, float64(y)-gy
+			dist := math.Hypot(dx, dy)
+			ray := math.Pow(math.Abs(math.Sin(math.Atan2(dy, dx)*10)), 5) * 0.32 * math.Max(0, 1-dist/1050)
+			glow := math.Exp(-dist*dist/(2*260*260)) * 0.9
+			blend(img, x, y, pal.glow, glow+ray)
+			// Darken the lower part a little so the title stands out.
+			shade := math.Max(0, float64(y)/H-0.45) * 0.55
+			blend(img, x, y, color.RGBA{0, 0, 0, 255}, shade)
+		}
+	}
+	r := h.Sum32()
+	for k := 0; k < 46; k++ {
+		r = r*1664525 + 1013904223
+		cx, cy := int(r%W), int((r>>12)%H)
+		rad := 2 + int((r>>24)%6)
+		for y := -rad * 3; y <= rad*3; y++ {
+			for x := -rad * 3; x <= rad*3; x++ {
+				px, py := cx+x, cy+y
+				if px < 0 || py < 0 || px >= W || py >= H {
+					continue
+				}
+				d := math.Hypot(float64(x), float64(y))
+				blend(img, px, py, color.RGBA{255, 255, 255, 255}, math.Exp(-d*d/float64(2*rad*rad))*0.5)
+			}
+		}
+	}
+
+	white := color.RGBA{255, 255, 255, 255}
+	xdraw.CatmullRom.Scale(img, image.Rect(W/2-95, 60, W/2+95, 250), coverDove, coverDove.Bounds(), xdraw.Over, nil)
+	// Dark ink: the name sits in the brightest part of the light burst.
+	ink := color.RGBA{28, 18, 6, 255}
+	centered(img, face(coverCinzel, 54), W/2, 318, "SHEKINAH", ink, false)
+	centered(img, face(coverCinzel, 29), W/2, 360, "SONS GLOBAL", ink, false)
+
+	// Label pill.
+	label := face(coverInter, 30)
+	labelText = strings.ToUpper(strings.TrimSpace(labelText))
+	if labelText == "" {
+		labelText = "AUDIO SERMON"
+	}
+	tw := font.MeasureString(label, labelText).Ceil()
+	pill := image.Rect(W/2-tw/2-30, 430, W/2+tw/2+30, 430+58)
+	for y := pill.Min.Y; y < pill.Max.Y; y++ {
+		for x := pill.Min.X; x < pill.Max.X; x++ {
+			rr := 29.0
+			cx := math.Min(math.Max(float64(x), float64(pill.Min.X)+rr), float64(pill.Max.X)-rr)
+			if math.Hypot(float64(x)-cx, float64(y)-(float64(pill.Min.Y)+rr)) <= rr {
+				blend(img, x, y, white, 0.96)
+			}
+		}
+	}
+	centered(img, label, W/2, 430+40, labelText, pal.from, false)
+
+	// The title, as big as fits in three lines.
+	title = strings.ToUpper(strings.TrimSpace(title))
+	if title == "" {
+		title = "Sermon"
+	}
+	size := 128.0
+	var big font.Face
+	var lines []string
+	for {
+		big = face(coverAnton, size)
+		lines = wrap(big, title, W-130, 3)
+		if (len(lines) <= 2 || size <= 92) && !strings.HasSuffix(lines[len(lines)-1], "…") || size <= 80 {
+			break
+		}
+		size -= 8
+	}
+	y := 540 + int(size)
+	for _, line := range lines {
+		centered(img, big, W/2, y, line, white, true)
+		y += int(size * 1.02)
+	}
+	if subtitle != "" {
+		centered(img, face(coverInter, 36), W/2, min(y+30, H-60), subtitle, white, true)
+	}
+
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: 88}); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+// AudioCoverText turns a podcast-style title into what the cover shows:
+// "SHEKINAH DAY 085 | Questions and Answers by Apostle Joseph Mash" →
+// label "SHEKINAH DAY 085", title "Questions and Answers", speaker "Apostle Joseph Mash".
+func AudioCoverText(title, speaker string) (label, main, by string) {
+	t := strings.Join(strings.Fields(title), " ")
+	if i := strings.Index(t, "|"); i > 0 {
+		label, main = strings.TrimSpace(t[:i]), strings.TrimSpace(t[i+1:])
+	} else if i := strings.Index(t, ":"); i > 0 && i < 40 {
+		label, main = strings.TrimSpace(t[:i]), strings.TrimSpace(t[i+1:])
+	} else {
+		main = t
+	}
+	// "SUNDAY SERVICE 086 : KERUGOYA GIRLS MINISTRATION" → keep the short part.
+	if i := strings.Index(label, ":"); i > 0 {
+		label = strings.TrimSpace(label[:i])
+	}
+	if len([]rune(label)) > 26 {
+		label = ""
+	}
+	lower := strings.ToLower(main)
+	if i := strings.LastIndex(lower, " by "); i > 0 {
+		by = strings.TrimSpace(main[i+4:])
+		main = strings.TrimSpace(main[:i])
+	}
+	if main == "" {
+		main, label = label, ""
+	}
+	if by == "" {
+		by = strings.TrimSpace(speaker)
+	}
+	if strings.EqualFold(by, "shekinah sons movement") || strings.EqualFold(by, "shekinah sons global") {
+		by = "Shekinah Sons Global"
+	}
+	return label, main, by
+}
