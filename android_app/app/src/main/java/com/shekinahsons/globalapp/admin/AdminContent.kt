@@ -1,6 +1,10 @@
 package com.shekinahsons.globalapp.admin
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -42,7 +46,7 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
   ErrorNote(error)
   if(edit==null){if(kind=="sermons")BatchPublishingPane("sermons")
  GoldButton("Add ${when(kind){"plans"->"reading plan";"updates"->"update";"devotions"->"devotion";else->"sermon"}} "){begin(JsonObject(emptyMap()))}
-   records.forEach{item->Column(Modifier.fillMaxWidth().glass().clickable{begin(item)}.padding(16.dp)){Text(item.text("title"),style=Type.CardTitle,color=Brand.White);Text("Edit",style=Type.Meta,color=Brand.Gold)}}
+   ContentList(kind,records){begin(it)}
    if(kind=="sermons"){AdminPlaylistsPane();AdminReplaysPane()}
   } else {
    Text(if(edit!!.text("id").isBlank())"New content" else "Edit content",style=Type.Title,color=Brand.White)
@@ -65,9 +69,10 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
     Field("SERMON NOTES",values["notes"].orEmpty(),{values["notes"]=it},hint="Key points and scriptures. Start a line with - for a bullet. Bible references like John 3:16 become tappable.",singleLine=false,minHeight=160.dp)
     ToggleRow("Publish on release","",values["isPublished"]=="true"){values["isPublished"]=it.toString()}
     ToggleRow("Notify members","Keep off for backlog imports",values["notifyOnPublish"]=="true"){values["notifyOnPublish"]=it.toString()}
-    Row(horizontalArrangement=Arrangement.spacedBy(16.dp)){listOf("video","audio").forEach{type->Text(type.uppercase(),color=if(values["type"]==type)Brand.Gold else Brand.Text2,modifier=Modifier.clickable{values["type"]=type}.padding(10.dp))}}
+    Text("TYPE",style=Type.Label,color=Brand.Gold)
+    FilterPills(listOf("video" to "Video","audio" to "Audio"),values["type"].orEmpty()){values["type"]=it}
     Text("CATEGORY",style=Type.Label,color=Brand.Gold)
-    LazyRow {items(categories){cat->Text(cat.text("name"),color=if(values["categoryId"]==cat.text("id"))Brand.Gold else Brand.Text2,modifier=Modifier.clickable{values["categoryId"]=cat.text("id")}.padding(10.dp))}}
+    FilterPills(categories.map{it.text("id") to it.text("name")},values["categoryId"].orEmpty()){values["categoryId"]=it}
    }
    if(kind=="plans") {
     ToggleRow("Visible to members","",values["isActive"]=="true"){values["isActive"]=it.toString()}
@@ -101,11 +106,30 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
  val scope=rememberCoroutineScope();var rows by remember(testimonies){mutableStateOf(emptyList<JsonObject>())};var error by remember{mutableStateOf<String?>(null)};var tick by remember{mutableIntStateOf(0)}
  val endpoint=if(testimonies)"testimonies" else "community/messages";val key=if(testimonies)"testimonies" else "messages";var deleting by remember{mutableStateOf<JsonObject?>(null)}
  LaunchedEffect(testimonies,tick){runCatching{(Api.get("/admin/$endpoint")[key] as? JsonArray)?.map{it.jsonObject}.orEmpty()}.onSuccess{rows=it}.onFailure{error=it.message}}
- Column(verticalArrangement=Arrangement.spacedBy(12.dp)){ErrorNote(error);if(!testimonies) AdminReportsPane();rows.forEach{row->Column(Modifier.fillMaxWidth().glass().padding(16.dp)){
-  Text(row.text(if(testimonies)"title" else "displayName"),style=Type.CardTitle,color=Brand.White);Text(row.text(if(testimonies)"body" else "message"),style=Type.Body,color=Brand.Text2);Text(row.text("status"),style=Type.Meta,color=Brand.Gold)
-  Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){listOf("approved" to "Approve","hidden" to "Hide").forEach{(status,label)->Text(label,color=Brand.Gold,modifier=Modifier.clickable{scope.launch{runCatching{Api.patch("/admin/$endpoint/${row.text("id")}",mapOf("status" to status,"hiddenReason" to "Reviewed by ministry team"))}.onSuccess{tick++}.onFailure{error=it.message}}}.padding(vertical=14.dp))}
-   if(!testimonies)Text("Delete",color=Brand.Red,modifier=Modifier.clickable{deleting=row}.padding(vertical=14.dp))}
- }}
+ var filter by remember(testimonies){mutableStateOf("all")}
+ Column(verticalArrangement=Arrangement.spacedBy(12.dp)){ErrorNote(error);if(!testimonies) AdminReportsPane()
+  StatStrip(listOf(Stat("${rows.size}",if(testimonies)"Testimonies" else "Messages"),Stat("${rows.count{it.text("status")=="pending"}}","Waiting",Brand.Gold),Stat("${rows.count{it.text("status")=="approved"}}","Shown",KitGreen),Stat("${rows.count{it.text("status")=="hidden"}}","Hidden",KitRed)))
+  FilterPills(listOf("all" to "All","pending" to "Waiting","approved" to "Shown","hidden" to "Hidden"),filter){filter=it}
+  val shown=rows.filter{filter=="all"||it.text("status")==filter}
+  if(shown.isEmpty())EmptyState(androidx.compose.material.icons.Icons.Rounded.Forum,"Nothing here","Messages appear as members post them.")
+  shown.forEach{row->
+   val name=row.text(if(testimonies)"title" else "displayName").ifBlank{"Member"}
+   val st=row.text("status")
+   Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.Color(0xFF1B1A1F),androidx.compose.ui.graphics.Color(0xFF131316)))).border(1.dp,androidx.compose.ui.graphics.Color(0x14FFFFFF),androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+    Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+     if(testimonies)IconTile(androidx.compose.material.icons.Icons.Rounded.AutoAwesome,Brand.Gold,40) else PersonAvatar(name,row.text("userId").ifBlank{name},40)
+     Spacer(Modifier.width(12.dp))
+     Column(Modifier.weight(1f)){Text(name,style=Type.CardTitle,color=Brand.White);Text(row.text("createdAt").take(10),style=Type.Meta,color=Brand.Muted)}
+     Badge(when(st){"approved"->"SHOWN";"hidden"->"HIDDEN";else->"WAITING"},when(st){"approved"->KitGreen;"hidden"->KitRed;else->Brand.Gold})
+    }
+    Text(row.text(if(testimonies)"body" else "message"),style=Type.Body,color=Brand.Text2)
+    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+     if(st!="approved")ActionPill("Show",androidx.compose.material.icons.Icons.Rounded.Check,KitGreen,Modifier.weight(1f)){scope.launch{runCatching{Api.patch("/admin/$endpoint/${row.text("id")}",mapOf("status" to "approved","hiddenReason" to ""))}.onSuccess{tick++}.onFailure{error=it.message}}}
+     if(st!="hidden")ActionPill("Hide",androidx.compose.material.icons.Icons.Rounded.VisibilityOff,Brand.GoldLight,Modifier.weight(1f)){scope.launch{runCatching{Api.patch("/admin/$endpoint/${row.text("id")}",mapOf("status" to "hidden","hiddenReason" to "Reviewed by ministry team"))}.onSuccess{tick++}.onFailure{error=it.message}}}
+     if(!testimonies)ActionPill("Delete",androidx.compose.material.icons.Icons.Rounded.DeleteOutline,KitRed,Modifier.weight(1f)){deleting=row}
+    }
+   }
+  }
  if(!testimonies)AdminChatBlocksPane()}
  deleting?.let{row->AlertDialog(onDismissRequest={deleting=null},containerColor=androidx.compose.ui.graphics.Color(0xFF1C1C20),
   title={Text("Delete this message?",color=Brand.White)},text={Text("\"${row.text("message").take(120)}\" from ${row.text("displayName")} is removed for everyone in the app. A hidden copy is kept for the records.",color=Brand.Text2)},
@@ -125,5 +149,27 @@ private fun fields(kind:String):List<ContentField> = when(kind) {
    Column(Modifier.weight(1f)){Text(r.text("name"),style=Type.Body,color=Brand.White);Text(r.text("reason"),style=Type.Meta,color=Brand.Text2)}
    Text("Unblock",color=Brand.Gold,modifier=Modifier.clickable{scope.launch{runCatching{Api.delete("/live/chat/bans/${r.text("userId")}")}.onSuccess{tick++}.onFailure{error=it.message}}}.padding(10.dp))
   }}
+ }
+}
+
+
+// The list of sermons, devotions, updates or plans: counts, search, filters,
+// and a row per item with its cover and whether it's live in the app.
+@Composable private fun ContentList(kind:String,records:List<JsonObject>,open:(JsonObject)->Unit){
+ var query by remember(kind){mutableStateOf("")};var filter by remember(kind){mutableStateOf("all")}
+ val now=Instant.now()
+ fun state(i:JsonObject):String{val pub=i.text("isPublished")!="false"&&i.text("isActive")!="false";val at=runCatching{Instant.parse(i.text("publishedAt"))}.getOrNull();return when{!pub->"hidden";at!=null&&at.isAfter(now)->"scheduled";else->"live"}}
+ val date={i:JsonObject->listOf("sermonDate","devotionDate","updateDate").map{i.text(it)}.firstOrNull{it.isNotBlank()}.orEmpty().take(10)}
+ StatStrip(listOf(Stat("${records.size}","Total"),Stat("${records.count{state(it)=="live"}}","In the app",KitGreen),Stat("${records.count{state(it)=="scheduled"}}","Scheduled",KitBlue),Stat("${records.count{state(it)=="hidden"}}","Hidden",KitRed)))
+ SearchBar(query,{query=it},"Search titles")
+ FilterPills(listOf("all" to "All","live" to "In the app","scheduled" to "Scheduled","hidden" to "Hidden")+if(kind=="sermons")listOf("video" to "Video","audio" to "Audio") else emptyList(),filter){filter=it}
+ val shown=records.filter{i->(query.isBlank()||i.text("title").contains(query,true)||i.text("speaker").contains(query,true))&&when(filter){"all"->true;"video","audio"->i.text("type").ifBlank{"video"}==filter;else->state(i)==filter}}
+ if(shown.isEmpty())EmptyState(androidx.compose.material.icons.Icons.Rounded.Search,"Nothing found","Try another search or filter.")
+ shown.forEach{i->
+  val img=i.text("thumbnailUrl").ifBlank{i.text("imageUrl")}
+  val st=state(i)
+  KitRow(i.text("title").ifBlank{"Untitled"},line1=listOf(i.text("speaker"),date(i)).filter{it.isNotBlank()}.joinToString(" \u00B7 "),line2=if(kind=="sermons")i.text("type").ifBlank{"video"}.replaceFirstChar(Char::uppercase)+(if(i.text("duration").isNotBlank())" \u00B7 "+i.text("duration") else "") else i.text("excerpt").take(80),
+   leading={if(img.isNotBlank())FadeImage(img,Modifier.size(64.dp,44.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),label=kind.uppercase().removeSuffix("S")) else IconTile(when(kind){"devotions"->androidx.compose.material.icons.Icons.AutoMirrored.Rounded.MenuBook;"plans"->androidx.compose.material.icons.Icons.Rounded.AutoStories;"updates"->androidx.compose.material.icons.Icons.Rounded.Campaign;else->androidx.compose.material.icons.Icons.Rounded.PlayCircle},Brand.Gold)},
+   trailing={Badge(when(st){"live"->"IN APP";"scheduled"->"SCHEDULED";else->"HIDDEN"},when(st){"live"->KitGreen;"scheduled"->KitBlue;else->KitRed})},onClick={open(i)})
  }
 }
