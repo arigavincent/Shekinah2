@@ -499,15 +499,26 @@ internal fun SaAttendancePane() {
     var removing by remember { mutableStateOf<SaAttendanceSession?>(null) }
     var tab by rememberSaveable { mutableStateOf("services") }
 
+    // Both kinds of check-in: the gate scanner (services) and event check-in.
+    suspend fun loadCheckins() {
+        val events = runCatching { Api.decode<List<SaRecentCheckin>>(Api.get("/admin/checkins/recent")["checkins"]) }.getOrDefault(emptyList())
+        val gate = runCatching {
+            Api.get("/attendance?date=${java.time.LocalDate.now()}")["records"]?.jsonArray.orEmpty().map { r ->
+                val o = r.jsonObject
+                fun f(k: String) = o[k]?.jsonPrimitive?.contentOrNull.orEmpty()
+                SaRecentCheckin(id = f("id"), eventTitle = f("occasion"), name = f("name"), email = f("email"), phone = f("phone"), source = "gate", notes = f("by").let { if (it.isBlank()) "" else "by $it" }, createdAt = f("createdAt"))
+            }
+        }.getOrDefault(emptyList())
+        recent.clear(); recent.addAll((events + gate).sortedByDescending { it.createdAt })
+    }
     suspend fun reload() {
         runCatching { Api.decode<List<SaAttendanceSession>>(Api.get("/admin/sa/attendance/sessions")["sessions"]) }
             .onSuccess { list.clear(); list.addAll(it.sortedByDescending { s -> s.sessionDate }) }.onFailure { error = it.message }
-        runCatching { Api.decode<List<SaRecentCheckin>>(Api.get("/admin/checkins/recent")["checkins"]) }
-            .onSuccess { recent.clear(); recent.addAll(it) }
+        loadCheckins()
     }
     LaunchedEffect(Unit) { reload(); loading = false }
     // Check-ins update by themselves while the page is open.
-    LaunchedEffect(tab) { while (tab == "checkins") { kotlinx.coroutines.delay(15_000); runCatching { Api.decode<List<SaRecentCheckin>>(Api.get("/admin/checkins/recent")["checkins"]) }.onSuccess { recent.clear(); recent.addAll(it) } } }
+    LaunchedEffect(tab) { while (tab == "checkins") { kotlinx.coroutines.delay(15_000); loadCheckins() } }
 
     val month = java.time.LocalDate.now().toString().take(7)
     val thisMonth = list.filter { it.sessionDate.startsWith(month) }
@@ -550,7 +561,7 @@ internal fun SaAttendancePane() {
             }
         } else {
             SectionHeading("Recent check-ins")
-            Text("From the gate scanner and event check-in. Updates every 15 seconds.", style = Type.Meta, color = Brand.Text2)
+            Text("Today's gate scans and recent event check-ins. Updates every 15 seconds.", style = Type.Meta, color = Brand.Text2)
             if (!loading && recent.isEmpty()) EmptyState(Icons.Rounded.QrCodeScanner, "No check-ins yet", "Scan members' codes at the gate or at an event.")
             recent.forEach { c ->
                 KitRow(
@@ -559,9 +570,12 @@ internal fun SaAttendancePane() {
                     line2 = listOfNotNull(c.createdAt.takeIf { it.length >= 16 }?.let { it.take(10) + " " + it.substring(11, 16) + " UTC" }, c.notes.ifBlank { null }).joinToString(" · "),
                     leading = { PersonAvatar(c.name, c.email.ifBlank { c.name }) },
                     trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Badge(if (c.source == "gate") "GATE" else "EVENT", if (c.source == "gate") KitBlue else Brand.Gold)
                         if (c.phone.isNotBlank()) Icon(Icons.Rounded.Call, "Call ${c.name}", tint = KitGreen, modifier = Modifier.size(38.dp).clip(CircleShape).background(KitGreen.copy(alpha = 0.12f)).clickable {
                             runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:${c.phone}"))) }
                         }.padding(9.dp))
+                        }
                     },
                 )
             }
