@@ -121,7 +121,7 @@ private fun EventsPage(content: HomeContent) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         items(content.events, key = { it.id }) { e ->
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Brand.Surface)) {
-                FadeImage(e.imageUrl, Modifier.fillMaxWidth().aspectRatio(2.2f))
+                FadeImage(e.imageUrl, Modifier.fillMaxWidth().aspectRatio(2.2f), label = "EVENT")
                 Column(Modifier.padding(16.dp)) {
                     Text(e.date.uppercase(), style = Type.Label, color = Brand.Gold)
                     Spacer(Modifier.height(6.dp))
@@ -146,7 +146,7 @@ private fun BranchesPage(content: HomeContent) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         items(content.branches, key = { it.id }) { b ->
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Brand.Surface)) {
-                FadeImage(b.imageUrl, Modifier.fillMaxWidth().aspectRatio(2.2f))
+                FadeImage(b.imageUrl, Modifier.fillMaxWidth().aspectRatio(2.2f), label = "BRANCH")
                 Column(Modifier.padding(16.dp)) {
                     Text(b.name, style = Type.Title, color = Brand.White)
                     Spacer(Modifier.height(8.dp))
@@ -191,7 +191,7 @@ private fun UpdatesPage(content: HomeContent) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         items(content.updates, key = { it.id }) { u ->
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Brand.Surface).padding(12.dp)) {
-                FadeImage(u.image, Modifier.size(92.dp).clip(RoundedCornerShape(12.dp)))
+                FadeImage(u.image, Modifier.size(92.dp).clip(RoundedCornerShape(12.dp)), label = "UPDATE")
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text(u.date.uppercase(), style = Type.Label, color = Brand.Gold)

@@ -95,7 +95,7 @@ fun DevotionsScreen(content: HomeContent, open: (Devotion) -> Unit) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 10.dp).fillMaxWidth().pressable { open(d) }) {
                 Box {
                     AmbientGlow(d.imageUrl, Modifier.matchParentSize().outset(4.dp, drop = 14.dp), blur = 26.dp, alpha = 0.7f)
-                    FadeImage(d.imageUrl, Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(18.dp)))
+                    FadeImage(d.imageUrl, Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(18.dp)), label = "DEVOTION")
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(d.date.uppercase(), style = Type.Label, color = Brand.Gold)
@@ -147,7 +147,7 @@ fun DevotionReader(d: Devotion, onBack: () -> Unit) {
             item {
                 Box(Modifier.padding(horizontal = 20.dp)) {
                     AmbientGlow(d.imageUrl, Modifier.matchParentSize().outset(4.dp, drop = 16.dp), blur = 30.dp)
-                    FadeImage(d.imageUrl, Modifier.fillMaxWidth().aspectRatio(1.5f).clip(RoundedCornerShape(22.dp)))
+                    FadeImage(d.imageUrl, Modifier.fillMaxWidth().aspectRatio(1.5f).clip(RoundedCornerShape(22.dp)), label = "DEVOTION")
                 }
             }
             item {
