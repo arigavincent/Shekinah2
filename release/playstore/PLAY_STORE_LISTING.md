@@ -1,6 +1,6 @@
 # Shekinah Sons Global: Google Play submission pack
 
-Upload file: `release/artifacts/shekinah-2.4.0-play.aab` (version 2.4.0, code 27, Play build).
+Upload file: `release/artifacts/shekinah-2.4.2-play.aab` (version 2.4.2, code 31, Play build).
 The Play build has no in-app purchase of digital content (paid books, paid recordings, paid lives); Google requires its own billing for those. Giving and event tickets work as normal. Items members already own still open.
 
 ## 1. Store listing
