@@ -331,9 +331,10 @@ private fun LivePaywall(live: LiveSession, session: Session, openProfile: () -> 
             Text(live.title, style = Type.Display, color = Brand.White)
             Text("Hosted by ${live.broadcaster}", style = Type.Meta, color = Brand.GoldLight)
             Spacer(Modifier.height(10.dp))
-            Text("This is a paid live. Pay once with M-Pesa, Airtel Money or bank and watch the whole broadcast with the live chat.", style = Type.Body, color = Brand.Text2)
+            Text(if (com.shekinahsons.globalapp.BuildConfig.PLAY_STORE) "This is a paid live." else "This is a paid live. Pay once with M-Pesa, Airtel Money or bank and watch the whole broadcast with the live chat.", style = Type.Body, color = Brand.Text2)
             Spacer(Modifier.height(20.dp))
             if (session.member == null) GoldButton("Sign in to get access", onClick = openProfile)
+            else if (com.shekinahsons.globalapp.BuildConfig.PLAY_STORE) Text("This live is for those who have access to it.", style = Type.Body, color = Brand.Text2)
             else GoldButton("Get access \u00B7 ${money(live.price)}", onClick = pay)
         }
     }

@@ -24,6 +24,9 @@ android {
         testInstrumentationRunner = "com.shekinahsons.globalapp.live.DirectLiveAcceptance"
         versionCode = providers.gradleProperty("versionCode").orElse("7").get().toInt()
         versionName = providers.gradleProperty("versionName").orElse("2.1.0").get()
+        // Google Play build: no in-app purchase of digital content (books, recordings,
+        // paid lives), which Play only allows through its own billing. -PplayStore=true
+        buildConfigField("boolean", "PLAY_STORE", providers.gradleProperty("playStore").orElse("false").get())
         // Firebase: drop the google-services.json from the Firebase console into
         // app/ (it is git-ignored). Without it the app checks the announcement
         // feed itself instead of receiving pushes.

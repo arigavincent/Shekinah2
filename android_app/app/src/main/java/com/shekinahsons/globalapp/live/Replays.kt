@@ -129,6 +129,7 @@ import kotlinx.serialization.Serializable
    else if(current.status!="ready") Text("Preparing replay. It will become available here automatically.",color=Brand.Gold)
    else if(session.member==null) Text("Sign in from Account to purchase and watch this replay.",color=Brand.Gold)
    else if(paying) GivingPage(session,Purchase(current.id,current.title,current.price,kind="Replay",after="unlocks after finance confirms your payment.",back="Back to recording")){paying=false}
+   else if(BuildConfig.PLAY_STORE) Text("This recording is for those who have access to it. If you watched the paid live, it opens here.",color=Brand.Text2)
    else {Text("Your live purchase includes this recording. Otherwise, purchase access below.",color=Brand.Text2);GoldButton("Get access · KSh ${current.price}"){paying=true}}
   }
  }

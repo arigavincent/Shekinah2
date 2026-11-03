@@ -391,6 +391,8 @@ private fun Detail(b: Book, session: Session, onBack: () -> Unit, read: () -> Un
                         Spacer(Modifier.width(12.dp))
                         Text("Your payment is being confirmed. This book opens here as soon as it is.", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.White)
                     }
+                    com.shekinahsons.globalapp.BuildConfig.PLAY_STORE -> Text("This book isn't available to buy in this version of the app. If you already have it, it opens here.",
+                        style = Type.Meta, color = Brand.Text2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     else -> {
                         GoldButton("Get this book · ${price(b)}", onClick = buy)
                         Text(if (session.member == null) "Sign in to buy. " else "" + "Pay with M-Pesa, Airtel Money or bank; it unlocks once confirmed.",

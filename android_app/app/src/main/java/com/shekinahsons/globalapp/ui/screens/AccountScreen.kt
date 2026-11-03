@@ -100,7 +100,47 @@ fun AccountPage(session: Session, onDone: (() -> Unit)? = null) {
         Spacer(Modifier.height(18.dp))
         Text("Your name is shown with everything you share in the app, like chat messages, prayer requests and testimonies.",
             style = Type.Meta, color = Brand.Muted, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(28.dp))
+        DeleteAccount(session)
     }
+}
+
+// Deleting the account (app stores require it in the app). The password
+// confirms it; nothing can be recovered afterwards.
+@Composable
+private fun DeleteAccount(session: Session) {
+    val scope = rememberCoroutineScope()
+    var open by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    Text("Delete my account", color = Brand.Red, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().clickable { open = true; password = ""; error = null }.padding(12.dp))
+    if (open) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!busy) open = false }, containerColor = androidx.compose.ui.graphics.Color(0xFF1C1C20),
+        title = { Text("Delete your account?", color = Brand.White) },
+        text = {
+            Column {
+                Text("This permanently deletes your profile, prayer requests, testimonies, chat messages, playlists and saved items. Gifts and payments stay in the church's records without your details. This can't be undone.",
+                    style = Type.Body, color = Brand.Text2)
+                Spacer(Modifier.height(12.dp))
+                Field("YOUR PASSWORD", password, { password = it }, password = true)
+                ErrorNote(error)
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(enabled = password.isNotBlank() && !busy, onClick = {
+                scope.launch {
+                    busy = true; error = null
+                    runCatching { com.shekinahsons.globalapp.data.Api.post("/auth/delete-account", mapOf("password" to password)) }
+                        .onSuccess { open = false; session.signOut() }
+                        .onFailure { error = it.message }
+                    busy = false
+                }
+            }) { Text(if (busy) "Deleting…" else "Delete forever", color = Brand.Red) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton({ open = false }, enabled = !busy) { Text("Cancel", color = Brand.Text2) } },
+    )
 }
 
 // Reset while signed in, when the current password is forgotten: a code is
