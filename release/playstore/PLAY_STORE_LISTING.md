@@ -1,6 +1,6 @@
 # Shekinah Sons Global: Google Play submission pack
 
-Upload file: `release/artifacts/shekinah-2.4.3-play.aab` (version 2.4.3, code 33, Play build).
+Upload file: `release/artifacts/shekinah-2.4.4-play.aab` (version 2.4.4, code 35, Play build).
 The Play build has no in-app purchase of digital content (paid books, paid recordings, paid lives); Google requires its own billing for those. Giving and event tickets work as normal. Items members already own still open.
 
 ## 1. Store listing
@@ -25,7 +25,7 @@ WATCH AND LISTEN
 THE BIBLE
 • The whole Bible offline: the Berean Standard Bible in English and Kiswahili, side by side
 • Choose your reading font and text size
-• Listen to any chapter read aloud
+• Listen to the whole Bible read by Bob Souer, verse by verse, and download it to listen offline
 • Highlights, notes, bookmarks and search
 • Reading plans with a daily reading, reflection and prayer, and streaks
 • A new verse every morning on the home screen
