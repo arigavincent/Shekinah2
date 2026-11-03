@@ -48,7 +48,7 @@ data class SaUser(
 data class SaGroup(
     val id: String = "", val name: String = "", val type: String = "ministry",
     val leaderId: String = "", val leaderName: String = "", val location: String = "",
-    val schedule: String = "", val memberCount: Int = 0, val archived: Boolean = false,
+    val schedule: String = "", val memberCount: Int = 0, val archived: Boolean = false, val maxCapacity: Int = 0,
 )
 
 @Serializable
@@ -148,71 +148,81 @@ internal fun SaMembersPane() {
     val list = remember { mutableStateListOf<SaUser>() }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var query by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf<SaUser?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var filter by rememberSaveable { mutableStateOf("all") }
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        runCatching {
-            val resp = Api.get("/admin/members")
-            Api.decode<List<SaUser>>(resp["members"])
-        }.onSuccess { list.addAll(it) }.onFailure { error = it.message }
+        runCatching { Api.decode<List<SaUser>>(Api.get("/admin/members")["members"]) }
+            .onSuccess { list.clear(); list.addAll(it) }.onFailure { error = it.message }
         loading = false
     }
+    val selected = list.firstOrNull { it.id == selectedId }
+    androidx.activity.compose.BackHandler(enabled = selected != null) { selectedId = null }
+    if (selected != null) {
+        SaMemberPage(selected,
+            back = { selectedId = null },
+            onSuspend = { scope.launch {
+                runCatching { Api.post("/admin/sa/users/${selected.id}/suspend", emptyMap<String, String>()) }
+                    .onSuccess { val i = list.indexOfFirst { it.id == selected.id }; if (i >= 0) list[i] = selected.copy(isActive = !selected.isActive) }
+                    .onFailure { error = it.message }
+            } },
+            onArchive = { scope.launch {
+                runCatching { Api.delete("/admin/sa/users/${selected.id}?mode=soft") }
+                    .onSuccess { list.removeAll { it.id == selected.id }; selectedId = null }
+                    .onFailure { error = it.message }
+            } },
+            onSaved = { updated -> val i = list.indexOfFirst { it.id == updated.id }; if (i >= 0) list[i] = updated })
+        return
+    }
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Field("SEARCH", query, { query = it }, hint = "Name or email…")
+    val weekAgo = remember { java.time.Instant.now().minus(java.time.Duration.ofDays(7)) }
+    fun isNew(u: SaUser) = runCatching { java.time.Instant.parse(u.createdAt).isAfter(weekAgo) }.getOrDefault(false)
+    fun isStaff(u: SaUser) = u.role != "member" || u.staffRoleId.isNotBlank()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatStrip(listOf(
+            Stat("${list.size}", "People"),
+            Stat("${list.count(::isStaff)}", "Staff", KitBlue),
+            Stat("${list.count(::isNew)}", "New this week", KitGreen),
+            Stat("${list.count { it.suspended }}", "Suspended", KitRed),
+        ))
+        SearchBar(query, { query = it }, "Search name, email or phone")
+        FilterPills(listOf("all" to "Everyone", "members" to "Members", "staff" to "Staff", "new" to "New", "suspended" to "Suspended"), filter) { filter = it }
         ErrorNote(error)
-        if (loading) Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Brand.Gold)
-        }
+        if (loading) Loading()
+        val digits = query.filter(Char::isDigit)
         val shown = list.filter { u ->
-            query.isBlank() || u.name.contains(query, true) || u.email.contains(query, true)
-        }
+            (query.isBlank() || u.name.contains(query, true) || u.email.contains(query, true) || (digits.length >= 3 && u.phone.filter(Char::isDigit).contains(digits.trimStart('0')))) &&
+                when (filter) { "members" -> !isStaff(u); "staff" -> isStaff(u); "new" -> isNew(u); "suspended" -> u.suspended; else -> true }
+        }.sortedWith(compareBy<SaUser> { it.suspended }.thenBy { it.name.lowercase() })
+        if (!loading && shown.isEmpty()) EmptyState(Icons.Rounded.PersonSearch, "No one found", "Try another name, or clear the filter.")
+        Text("${shown.size} shown", style = Type.Meta, color = Brand.Muted)
         shown.forEach { u ->
-            Column(
-                Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.9f)
-                    .clickable { selected = u }.padding(14.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(36.dp).clip(CircleShape).background(Brand.GoldGradient), contentAlignment = Alignment.Center) {
-                        Text(u.name.firstOrNull()?.uppercase() ?: "?", color = Brand.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            KitRow(
+                title = u.name.ifBlank { u.email },
+                line1 = listOf(u.phone, u.email).filter { it.isNotBlank() }.joinToString(" · "),
+                line2 = u.staffRole.ifBlank { u.membershipStatus.replaceFirstChar(Char::uppercase) },
+                leading = { PersonAvatar(u.name.ifBlank { u.email }, u.id) },
+                trailing = {
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        when (u.role) {
+                            "super_admin" -> Badge("SUPER ADMIN", Brand.Gold)
+                            "admin" -> Badge("ADMIN", KitBlue)
+                        }
+                        if (u.suspended) Badge("SUSPENDED", KitRed)
+                        if (isNew(u)) Badge("NEW", KitGreen)
                     }
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(u.name, color = Brand.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Text(u.email, style = Type.Meta, color = Brand.Text2)
-                    }
-                    Text(u.role.uppercase(), style = Type.Label, color = if (u.role == "super_admin") Brand.Gold else Brand.Text2)
-                }
-                if (u.suspended) Spacer(Modifier.height(4.dp)).also {
-                    Text("SUSPENDED", style = Type.Label, color = Color(0xFFFF6B6B))
-                }
-            }
-        }
-        selected?.let { u ->
-            SaUserDetailDialog(u,
-                onDismiss = { selected = null },
-                onSuspend = { scope.launch {
-                    runCatching { Api.post("/admin/sa/users/${u.id}/suspend", emptyMap<String, String>()) }
-                        .onSuccess {
-                            val idx = list.indexOfFirst { it.id == u.id }
-                            if (idx >= 0) list[idx] = u.copy(isActive = !u.isActive)
-                            selected = null
-                        }.onFailure { error = it.message }
-                }},
-                onSoftDelete = { scope.launch {
-                    runCatching { Api.delete("/admin/sa/users/${u.id}?mode=soft") }
-                        .onSuccess { list.removeAll { it.id == u.id }; selected = null }
-                        .onFailure { error = it.message }
-                }},
-                onSaved = { updated -> val i = list.indexOfFirst { it.id == updated.id }; if (i >= 0) list[i] = updated }
+                },
+                onClick = { selectedId = u.id },
             )
         }
     }
 }
 
+// One member on their own page: contact, details, role, sign-in help, account.
 @Composable
-internal fun SaUserDetailDialog(user: SaUser, onDismiss: () -> Unit, onSuspend: () -> Unit, onSoftDelete: () -> Unit, onSaved: (SaUser) -> Unit = {}) {
+internal fun SaMemberPage(user: SaUser, back: () -> Unit, onSuspend: () -> Unit, onArchive: () -> Unit, onSaved: (SaUser) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var name by remember(user.id) { mutableStateOf(user.name) }
     var email by remember(user.id) { mutableStateOf(user.email) }
@@ -226,70 +236,113 @@ internal fun SaUserDetailDialog(user: SaUser, onDismiss: () -> Unit, onSuspend: 
     var note by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var temporary by remember { mutableStateOf<String?>(null) }
+    var confirmArchive by remember { mutableStateOf(false) }
+    val changed = name.trim() != user.name || email != user.email || phone.trim() != user.phone || role != user.role || status != user.membershipStatus || staffRole != user.staffRoleId
     fun act(kind: String, block: suspend () -> Unit) = scope.launch {
         busy = kind; error = null; note = null; temporary = null
         runCatching { block() }.onFailure { error = it.message }
         busy = ""
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1A1A1E),
-        title = { Text(user.name, color = Brand.White, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Field("FULL NAME", name, { name = it })
-                Field("EMAIL", email, { email = it.trim() }, keyboard = androidx.compose.ui.text.input.KeyboardType.Email)
-                Field("PHONE", phone, { phone = it }, keyboard = androidx.compose.ui.text.input.KeyboardType.Phone)
-                Text("ROLE", color = Brand.Text2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Chips(listOf("member" to "Member", "admin" to "Admin", "super_admin" to "Super admin"), role) { role = it }
-                Text("MEMBERSHIP", color = Brand.Text2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Chips(listOf("member" to "Member", "visitor" to "Visitor", "leader" to "Leader", "pastor" to "Pastor", "staff" to "Staff", "transferred" to "Transferred"), status) { status = it }
-                if (roles.isNotEmpty()) {
-                    Text("STAFF ROLE", color = Brand.Text2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Chips(listOf("" to "No role") + roles.map { it.id to it.name }, staffRole) { staffRole = it }
+    fun open(uri: String) = runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri))) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Hero
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+                .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(personColor(user.id).copy(alpha = 0.35f), Color(0xFF141418))))
+                .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(24.dp)).padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Row(Modifier.fillMaxWidth()) {
+                Text("← All members", color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = back).padding(horizontal = 6.dp, vertical = 4.dp))
+            }
+            PersonAvatar(user.name.ifBlank { user.email }, user.id, 76)
+            Spacer(Modifier.height(10.dp))
+            Text(user.name.ifBlank { user.email }, style = Type.Title, color = Brand.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Badge(when (user.role) { "super_admin" -> "SUPER ADMIN"; "admin" -> "ADMIN"; else -> "MEMBER" }, if (user.role == "member") Brand.Text2 else Brand.Gold)
+                Badge(user.membershipStatus.uppercase(), KitBlue)
+                if (user.suspended) Badge("SUSPENDED", KitRed)
+            }
+            if (user.createdAt.length >= 10) Text("Joined " + user.createdAt.take(10), style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (user.phone.isNotBlank()) {
+                    ActionPill("Call", Icons.Rounded.Call, KitGreen, Modifier.weight(1f)) { open("tel:${user.phone}") }
+                    ActionPill("WhatsApp", Icons.Rounded.Chat, KitGreen, Modifier.weight(1f)) { open("https://wa.me/${user.phone.filter(Char::isDigit)}") }
                 }
-                ErrorNote(error)
-                note?.let { Text(it, color = Color(0xFF4ADE80), fontSize = 13.sp) }
-                temporary?.let {
-                    Text("Temporary password (share privately; they choose their own at sign-in):", color = Brand.Text2, fontSize = 12.sp)
-                    Text(it, color = Brand.White, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 16.sp,
-                        modifier = Modifier.glass().padding(horizontal = 14.dp, vertical = 10.dp))
-                }
-                GoldButton(if (busy == "save") "Saving…" else "Save details", busy = busy == "save", enabled = busy.isEmpty() && name.isNotBlank() && "@" in email) {
-                    act("save") {
-                        Api.patch("/admin/sa/users/${user.id}", mapOf("name" to name.trim(), "email" to email, "phone" to phone.trim(), "role" to role, "membershipStatus" to status))
-                        if (staffRole != user.staffRoleId) Api.put("/admin/sa/users/${user.id}/role", mapOf("roleId" to staffRole))
-                        note = "Details saved."
-                        onSaved(user.copy(name = name.trim(), email = email, phone = phone.trim(), role = role, membershipStatus = status, staffRoleId = staffRole, staffRole = roles.firstOrNull { it.id == staffRole }?.name.orEmpty()))
-                    }
-                }
-                GhostButton(if (busy == "email") "Sending…" else "Email a reset code", Modifier.fillMaxWidth()) {
+                if (user.email.isNotBlank()) ActionPill("Email", Icons.Rounded.Mail, KitBlue, Modifier.weight(1f)) { open("mailto:${user.email}") }
+            }
+        }
+
+        KitSection("Details", "What the church knows them by") {
+            Field("FULL NAME", name, { name = it })
+            Field("PHONE", phone, { phone = it }, keyboard = androidx.compose.ui.text.input.KeyboardType.Phone, hint = "0712 345 678")
+            Field("EMAIL", email, { email = it.trim() }, keyboard = androidx.compose.ui.text.input.KeyboardType.Email)
+        }
+        KitSection("Role and membership", "What they can do in the app") {
+            FilterPills(listOf("member" to "Member", "admin" to "Admin", "super_admin" to "Super admin"), role) { role = it }
+            Text("MEMBERSHIP", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Text2)
+            FilterPills(listOf("member" to "Member", "visitor" to "Visitor", "leader" to "Leader", "pastor" to "Pastor", "staff" to "Staff", "transferred" to "Transferred"), status) { status = it }
+            if (roles.isNotEmpty()) {
+                Text("STAFF ROLE", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Text2)
+                FilterPills(listOf("" to "No role") + roles.map { it.id to it.name }, staffRole) { staffRole = it }
+            }
+        }
+        ErrorNote(error)
+        note?.let { Text(it, color = KitGreen, fontSize = 13.sp) }
+        GoldButton(if (busy == "save") "Saving…" else if (changed) "Save changes" else "Saved", busy = busy == "save", enabled = busy.isEmpty() && changed && name.isNotBlank() && "@" in email) {
+            act("save") {
+                Api.patch("/admin/sa/users/${user.id}", mapOf("name" to name.trim(), "email" to email, "phone" to phone.trim(), "role" to role, "membershipStatus" to status))
+                if (staffRole != user.staffRoleId) Api.put("/admin/sa/users/${user.id}/role", mapOf("roleId" to staffRole))
+                note = "Changes saved."
+                onSaved(user.copy(name = name.trim(), email = email, phone = phone.trim(), role = role, membershipStatus = status, staffRoleId = staffRole, staffRole = roles.firstOrNull { it.id == staffRole }?.name.orEmpty()))
+            }
+        }
+
+        KitSection("Sign-in help", "When they forget their password") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionPill(if (busy == "email") "Sending…" else "Email a code", Icons.Rounded.Mail, Brand.GoldLight, Modifier.weight(1f)) {
                     if (busy.isEmpty()) act("email") { note = Api.post("/admin/members/${user.id}/reset-password", emptyMap<String, String>())["message"]?.jsonPrimitive?.content }
                 }
-                GhostButton(if (busy == "temp") "Setting…" else "Set a temporary password", Modifier.fillMaxWidth()) {
+                ActionPill(if (busy == "temp") "Setting…" else "Temporary password", Icons.Rounded.Key, Brand.GoldLight, Modifier.weight(1f)) {
                     if (busy.isEmpty()) act("temp") { temporary = Api.post("/admin/sa/users/${user.id}/temporary-password", emptyMap<String, String>())["temporaryPassword"]?.jsonPrimitive?.content }
                 }
-                HorizontalDivider(color = Brand.Line, modifier = Modifier.padding(vertical = 4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        if (user.suspended) "Reactivate" else "Suspend",
-                        color = if (user.suspended) Color(0xFF4ADE80) else Color(0xFFFF6B6B),
-                        fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-                        modifier = Modifier.glass().clickable(onClick = onSuspend).padding(horizontal = 14.dp, vertical = 8.dp)
-                    )
-                    Text(
-                        "Archive",
-                        color = Color(0xFFFF6B6B), fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-                        modifier = Modifier.glass().clickable(onClick = onSoftDelete).padding(horizontal = 14.dp, vertical = 8.dp)
-                    )
-                }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Brand.Gold) } }
+            temporary?.let {
+                Text("Share this privately. They choose their own password when they sign in.", style = Type.Meta, color = Brand.Text2)
+                Text(it, color = Brand.White, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 17.sp,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x1FFFFFFF)).padding(horizontal = 14.dp, vertical = 12.dp))
+            }
+        }
+
+        KitSection("Account") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionPill(if (user.suspended) "Reactivate" else "Suspend", if (user.suspended) Icons.Rounded.LockOpen else Icons.Rounded.Block, if (user.suspended) KitGreen else KitRed, Modifier.weight(1f), onSuspend)
+                ActionPill("Archive", Icons.Rounded.Archive, KitRed, Modifier.weight(1f)) { confirmArchive = true }
+            }
+            Text(if (user.suspended) "Suspended: they can't sign in or be checked in." else "Suspending signs them out everywhere until reactivated.", style = Type.Meta, color = Brand.Text2)
+        }
+    }
+    if (confirmArchive) AlertDialog(
+        onDismissRequest = { confirmArchive = false }, containerColor = Color(0xFF1A1A1E),
+        title = { Text("Archive ${user.name}?", color = Brand.White) },
+        text = { Text("They disappear from the members list and can't sign in. Their giving and attendance history is kept.", color = Brand.Text2) },
+        confirmButton = { TextButton(onClick = { confirmArchive = false; onArchive() }) { Text("Archive", color = KitRed) } },
+        dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Cancel", color = Brand.Text2) } },
     )
 }
 
 // ─── Groups Pane ──────────────────────────────────────────────────────────────
+
+@Serializable
+data class SaRosterMember(val userId: String = "", val name: String = "", val email: String = "", val role: String = "member", val joinedAt: String = "")
+
+private val groupTypes = listOf("ministry" to "Ministry", "department" to "Department", "small_group" to "Small group", "sunday_school" to "Sunday school")
+private fun groupTint(type: String) = when (type) { "ministry" -> Brand.Gold; "department" -> KitBlue; "small_group" -> KitGreen; else -> KitViolet }
+private fun groupIcon(type: String) = when (type) { "ministry" -> Icons.Rounded.VolunteerActivism; "department" -> Icons.Rounded.Apartment; "small_group" -> Icons.Rounded.Groups; else -> Icons.Rounded.ChildCare }
 
 @Composable
 internal fun SaGroupsPane() {
@@ -298,154 +351,259 @@ internal fun SaGroupsPane() {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var showCreate by remember { mutableStateOf(false) }
-    var newName by remember { mutableStateOf("") }
-    var newType by remember { mutableStateOf("ministry") }
-    var busy by remember { mutableStateOf(false) }
+    var filter by rememberSaveable { mutableStateOf("all") }
+    var openId by rememberSaveable { mutableStateOf<String?>(null) }
+    suspend fun reload() { runCatching { Api.decode<List<SaGroup>>(Api.get("/admin/sa/groups")["groups"]) }.onSuccess { list.clear(); list.addAll(it.filter { g -> !g.archived }) }.onFailure { error = it.message } }
+    LaunchedEffect(Unit) { reload(); loading = false }
 
-    LaunchedEffect(Unit) {
-        runCatching {
-            val resp = Api.get("/admin/sa/groups")
-            Api.decode<List<SaGroup>>(resp["groups"])
-        }.onSuccess { list.addAll(it) }.onFailure { error = it.message }
-        loading = false
-    }
+    val open = list.firstOrNull { it.id == openId }
+    androidx.activity.compose.BackHandler(enabled = open != null) { openId = null }
+    if (open != null) { SaGroupPage(open, back = { openId = null; scope.launch { reload() } }, archived = { openId = null; scope.launch { reload() } }); return }
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Ministry Groups", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text("+ New", color = Brand.Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showCreate = true })
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatStrip(listOf(Stat("${list.size}", "Groups"), Stat("${list.sumOf { it.memberCount }}", "Places filled", KitGreen), Stat("${list.count { it.leaderName.isBlank() }}", "Without a leader", KitRed)))
+        FilterPills(listOf("all" to "All") + groupTypes, filter) { filter = it }
         ErrorNote(error)
-        if (loading) CircularProgressIndicator(color = Brand.Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        list.forEach { g ->
-            Row(
-                Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.9f).padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(g.name, color = Brand.White, fontWeight = FontWeight.SemiBold)
-                    Text("${g.type.uppercase()} · ${g.memberCount} members", style = Type.Meta, color = Brand.Text2)
-                    if (g.location.isNotBlank()) Text(g.location, style = Type.Meta, color = Brand.Muted)
-                }
-                Text(
-                    "Archive",
-                    color = Color(0xFFFF6B6B), fontSize = 12.sp,
-                    modifier = Modifier.clickable {
-                        scope.launch {
-                            runCatching { Api.delete("/admin/sa/groups/${g.id}?mode=soft") }
-                                .onSuccess { list.removeAll { it.id == g.id } }
-                                .onFailure { error = it.message }
-                        }
-                    }
-                )
-            }
+        SectionHeading("Groups", "+ New group") { showCreate = true }
+        if (loading) Loading()
+        val shown = list.filter { filter == "all" || it.type == filter }
+        if (!loading && shown.isEmpty()) EmptyState(Icons.Rounded.Groups, "No groups yet", "Create ministries, departments and cells.")
+        shown.forEach { g ->
+            KitRow(g.name,
+                line1 = (groupTypes.firstOrNull { it.first == g.type }?.second ?: g.type) + if (g.leaderName.isNotBlank()) " · Led by ${g.leaderName}" else "",
+                line2 = listOf(g.schedule, g.location).filter { it.isNotBlank() }.joinToString(" · "),
+                leading = { IconTile(groupIcon(g.type), groupTint(g.type)) },
+                trailing = { Column(horizontalAlignment = Alignment.End) {
+                    Text("${g.memberCount}", color = Brand.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("members", style = Type.Meta.copy(fontSize = 10.5.sp), color = Brand.Text2)
+                } },
+                onClick = { openId = g.id })
         }
-        if (showCreate) {
-            AlertDialog(
-                onDismissRequest = { showCreate = false },
-                containerColor = Color(0xFF1A1A1E),
-                title = { Text("New Group", color = Brand.White) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Field("GROUP NAME", newName, { newName = it })
-                        Chips(listOf("ministry" to "Ministry", "department" to "Department", "small_group" to "Small Group", "sunday_school" to "Sunday School"), newType) { newType = it }
-                    }
-                },
-                confirmButton = {
-                    GoldButton("Create", busy = busy, enabled = newName.isNotBlank()) {
-                        scope.launch {
-                            busy = true
-                            runCatching {
-                                Api.put("/admin/sa/groups", mapOf("name" to newName, "type" to newType))
-                                val resp = Api.get("/admin/sa/groups")
-                                Api.decode<List<SaGroup>>(resp["groups"])
-                            }.onSuccess { g -> list.clear(); list.addAll(g); showCreate = false; newName = "" }
-                                .onFailure { error = it.message }
-                            busy = false
-                        }
-                    }
-                },
-                dismissButton = { TextButton(onClick = { showCreate = false }) { Text("Cancel", color = Brand.Text2) } }
-            )
+    }
+    if (showCreate) GroupSheet(null, onDismiss = { showCreate = false }) { body -> Api.put("/admin/sa/groups", body); reload(); showCreate = false }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroupSheet(group: SaGroup?, onDismiss: () -> Unit, save: suspend (Map<String, Any>) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var name by remember { mutableStateOf(group?.name.orEmpty()) }
+    var type by remember { mutableStateOf(group?.type ?: "ministry") }
+    var schedule by remember { mutableStateOf(group?.schedule.orEmpty()) }
+    var location by remember { mutableStateOf(group?.location.orEmpty()) }
+    var leader by remember { mutableStateOf(group?.leaderId.orEmpty()) }
+    var capacity by remember { mutableStateOf(group?.maxCapacity?.takeIf { it > 0 }?.toString().orEmpty()) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF16161A)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(if (group == null) "New group" else "Edit group", style = Type.Title, color = Brand.White)
+            FilterPills(groupTypes, type) { type = it }
+            Field("NAME", name, { name = it }, hint = "e.g. Ushers, Worship team, Kasarani cell")
+            Field("WHEN THEY MEET", schedule, { schedule = it }, hint = "e.g. Saturdays 4 PM")
+            Field("WHERE", location, { location = it }, hint = "e.g. Church hall")
+            Field("MOST PEOPLE (OPTIONAL)", capacity, { capacity = it.filter(Char::isDigit).take(5) }, keyboard = androidx.compose.ui.text.input.KeyboardType.Number, hint = "Leave empty for no limit")
+            Text("LEADER", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Text2)
+            if (group?.leaderName?.isNotBlank() == true && leader == group.leaderId) Text("Currently ${group.leaderName}. Search to change.", style = Type.Meta, color = Brand.Text2)
+            SaMemberPicker(leader) { leader = it.ifBlank { group?.leaderId.orEmpty() } }
+            ErrorNote(error)
+            GoldButton(if (group == null) "Create group" else "Save", busy = busy, enabled = !busy && name.isNotBlank()) {
+                scope.launch {
+                    busy = true; error = null
+                    runCatching { save(buildMap { group?.let { put("id", it.id) }; put("name", name.trim()); put("type", type); put("schedule", schedule.trim()); put("location", location.trim()); put("maxCapacity", capacity.toIntOrNull() ?: 0); if (leader.isNotBlank()) put("leaderId", leader) }) }.onFailure { error = it.message }
+                    busy = false
+                }
+            }
         }
     }
 }
 
+// One group: who is in it, add and remove people, edit or archive it.
+@Composable
+private fun SaGroupPage(group: SaGroup, back: () -> Unit, archived: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val roster = remember { mutableStateListOf<SaRosterMember>() }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var adding by remember { mutableStateOf("") }
+    var addRole by remember { mutableStateOf("member") }
+    var editing by remember { mutableStateOf(false) }
+    var confirmArchive by remember { mutableStateOf(false) }
+    suspend fun reload() { runCatching { Api.decode<List<SaRosterMember>>(Api.get("/admin/sa/groups/${group.id}/roster")["members"]) }.onSuccess { roster.clear(); roster.addAll(it) }.onFailure { error = it.message } }
+    LaunchedEffect(group.id) { reload(); loading = false }
+    val tint = groupTint(group.type)
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(tint.copy(alpha = 0.3f), Color(0xFF141418))))
+            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(24.dp)).padding(18.dp)) {
+            Text("← All groups", color = Brand.GoldLight, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = back).padding(horizontal = 6.dp, vertical = 4.dp))
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconTile(groupIcon(group.type), tint, 52)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(group.name, style = Type.Title, color = Brand.White)
+                    Text((groupTypes.firstOrNull { it.first == group.type }?.second ?: group.type) + " · ${roster.size} people", style = Type.Meta, color = Brand.Text2)
+                }
+            }
+            if (group.schedule.isNotBlank() || group.location.isNotBlank()) Text(listOf(group.schedule, group.location).filter { it.isNotBlank() }.joinToString(" · "), style = Type.Meta, color = Brand.Text2, modifier = Modifier.padding(top = 8.dp))
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionPill("Edit", Icons.Rounded.Edit, Brand.GoldLight, Modifier.weight(1f)) { editing = true }
+                ActionPill("Archive", Icons.Rounded.Archive, KitRed, Modifier.weight(1f)) { confirmArchive = true }
+            }
+        }
+        KitSection("Add someone") {
+            SaMemberPicker(adding) { adding = it }
+            FilterPills(listOf("member" to "Member", "assistant" to "Assistant", "leader" to "Leader"), addRole) { addRole = it }
+            GoldButton("Add to ${group.name}", enabled = adding.isNotBlank()) {
+                scope.launch { runCatching { Api.post("/admin/sa/groups/${group.id}/roster", mapOf("userId" to adding, "role" to addRole)) }.onSuccess { adding = ""; addRole = "member"; reload() }.onFailure { error = it.message } }
+            }
+        }
+        ErrorNote(error)
+        SectionHeading("People")
+        if (loading) Loading()
+        if (!loading && roster.isEmpty()) EmptyState(Icons.Rounded.PersonAdd, "No one yet", "Add the first person above.")
+        roster.forEach { m ->
+            KitRow(m.name, line1 = m.email, leading = { PersonAvatar(m.name, m.userId) },
+                trailing = { Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (m.role != "member") Badge(m.role.uppercase(), if (m.role == "leader") Brand.Gold else KitBlue)
+                    Icon(Icons.Rounded.RemoveCircleOutline, "Remove ${m.name}", tint = Brand.Muted, modifier = Modifier.padding(start = 6.dp).size(34.dp).clip(CircleShape).clickable {
+                        scope.launch { runCatching { Api.delete("/admin/sa/groups/${group.id}/roster/${m.userId}") }.onSuccess { roster.removeAll { it.userId == m.userId } }.onFailure { error = it.message } }
+                    }.padding(6.dp))
+                } })
+        }
+    }
+    if (editing) GroupSheet(group, onDismiss = { editing = false }) { body -> Api.put("/admin/sa/groups", body); editing = false; back() }
+    if (confirmArchive) AlertDialog(onDismissRequest = { confirmArchive = false }, containerColor = Color(0xFF1A1A1E),
+        title = { Text("Archive ${group.name}?", color = Brand.White) },
+        text = { Text("It leaves the groups list. The people in it are not affected.", color = Brand.Text2) },
+        confirmButton = { TextButton(onClick = { confirmArchive = false; scope.launch { runCatching { Api.delete("/admin/sa/groups/${group.id}?mode=soft") }.onSuccess { archived() }.onFailure { error = it.message } } }) { Text("Archive", color = KitRed) } },
+        dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Cancel", color = Brand.Text2) } })
+}
+
 // ─── Attendance Pane ─────────────────────────────────────────────────────────
+
+@Serializable
+data class SaRecentCheckin(val id: String = "", val eventTitle: String = "", val name: String = "", val email: String = "", val phone: String = "", val source: String = "", val notes: String = "", val createdAt: String = "")
 
 @Composable
 internal fun SaAttendancePane() {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val list = remember { mutableStateListOf<SaAttendanceSession>() }
+    val recent = remember { mutableStateListOf<SaRecentCheckin>() }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var showCreate by remember { mutableStateOf(false) }
-    var title by remember { mutableStateOf("") }
-    var occasion by remember { mutableStateOf("Sunday Service") }
-    var headcount by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
+    var removing by remember { mutableStateOf<SaAttendanceSession?>(null) }
+    var tab by rememberSaveable { mutableStateOf("services") }
 
-    LaunchedEffect(Unit) {
-        runCatching {
-            val resp = Api.get("/admin/sa/attendance/sessions")
-            Api.decode<List<SaAttendanceSession>>(resp["sessions"])
-        }.onSuccess { list.addAll(it) }.onFailure { error = it.message }
-        loading = false
+    suspend fun reload() {
+        runCatching { Api.decode<List<SaAttendanceSession>>(Api.get("/admin/sa/attendance/sessions")["sessions"]) }
+            .onSuccess { list.clear(); list.addAll(it.sortedByDescending { s -> s.sessionDate }) }.onFailure { error = it.message }
+        runCatching { Api.decode<List<SaRecentCheckin>>(Api.get("/admin/checkins/recent")["checkins"]) }
+            .onSuccess { recent.clear(); recent.addAll(it) }
     }
+    LaunchedEffect(Unit) { reload(); loading = false }
+    // Check-ins update by themselves while the page is open.
+    LaunchedEffect(tab) { while (tab == "checkins") { kotlinx.coroutines.delay(15_000); runCatching { Api.decode<List<SaRecentCheckin>>(Api.get("/admin/checkins/recent")["checkins"]) }.onSuccess { recent.clear(); recent.addAll(it) } } }
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Attendance Sessions", color = Brand.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text("+ New", color = Brand.Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showCreate = true })
-        }
+    val month = java.time.LocalDate.now().toString().take(7)
+    val thisMonth = list.filter { it.sessionDate.startsWith(month) }
+    val today = java.time.LocalDate.now().toString()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatStrip(listOf(
+            Stat("${thisMonth.size}", "Services this month"),
+            Stat(list.firstOrNull()?.headcount?.toString() ?: "–", "Last headcount", KitBlue),
+            Stat(if (thisMonth.isEmpty()) "–" else "${thisMonth.sumOf { it.headcount } / thisMonth.size}", "Average", KitViolet),
+            Stat("${recent.count { it.createdAt.startsWith(today) }}", "Checked in today", KitGreen),
+        ))
+        FilterPills(listOf("services" to "Services", "checkins" to "Recent check-ins"), tab) { tab = it }
         ErrorNote(error)
-        if (loading) CircularProgressIndicator(color = Brand.Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        list.forEach { s ->
-            Row(
-                Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp), 0.9f).padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(s.title, color = Brand.White, fontWeight = FontWeight.SemiBold)
-                    Text("${s.occasion} · ${s.headcount} present", style = Type.Meta, color = Brand.Text2)
-                    Text(s.sessionDate.take(10), style = Type.Meta, color = Brand.Muted)
-                }
-                if (s.kioskLocked) Icon(Icons.Rounded.Lock, null, tint = Brand.Gold, modifier = Modifier.size(16.dp))
+        if (loading) Loading()
+        if (tab == "services") {
+            SectionHeading("Services", "+ Record a service") { showCreate = true }
+            if (!loading && list.isEmpty()) EmptyState(Icons.Rounded.EventAvailable, "No services recorded yet", "Record the headcount after each service.")
+            list.forEach { s ->
+                val date = runCatching { java.time.LocalDate.parse(s.sessionDate.take(10)) }.getOrNull()
+                KitRow(
+                    title = s.title,
+                    line1 = s.occasion,
+                    line2 = s.notes,
+                    leading = {
+                        Column(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x26D4AF37)), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Text(date?.dayOfMonth?.toString() ?: "?", color = Brand.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            Text(date?.month?.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)?.uppercase() ?: "", color = Brand.Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("${s.headcount}", color = Brand.White, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text("present", style = Type.Meta.copy(fontSize = 10.5.sp), color = Brand.Text2)
+                            }
+                            Icon(Icons.Rounded.DeleteOutline, "Remove", tint = Brand.Muted, modifier = Modifier.padding(start = 6.dp).size(34.dp).clip(CircleShape).clickable { removing = s }.padding(7.dp))
+                        }
+                    },
+                )
+            }
+        } else {
+            SectionHeading("Recent check-ins")
+            Text("From the gate scanner and event check-in. Updates every 15 seconds.", style = Type.Meta, color = Brand.Text2)
+            if (!loading && recent.isEmpty()) EmptyState(Icons.Rounded.QrCodeScanner, "No check-ins yet", "Scan members' codes at the gate or at an event.")
+            recent.forEach { c ->
+                KitRow(
+                    title = c.name,
+                    line1 = listOf(c.phone, c.eventTitle).filter { it.isNotBlank() }.joinToString(" · "),
+                    line2 = listOfNotNull(c.createdAt.takeIf { it.length >= 16 }?.let { it.take(10) + " " + it.substring(11, 16) + " UTC" }, c.notes.ifBlank { null }).joinToString(" · "),
+                    leading = { PersonAvatar(c.name, c.email.ifBlank { c.name }) },
+                    trailing = {
+                        if (c.phone.isNotBlank()) Icon(Icons.Rounded.Call, "Call ${c.name}", tint = KitGreen, modifier = Modifier.size(38.dp).clip(CircleShape).background(KitGreen.copy(alpha = 0.12f)).clickable {
+                            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:${c.phone}"))) }
+                        }.padding(9.dp))
+                    },
+                )
             }
         }
-        if (showCreate) {
-            AlertDialog(
-                onDismissRequest = { showCreate = false },
-                containerColor = Color(0xFF1A1A1E),
-                title = { Text("New Session", color = Brand.White) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Field("SESSION TITLE", title, { title = it })
-                        Field("OCCASION", occasion, { occasion = it })
-                        Field("HEADCOUNT", headcount, { headcount = it.filter { c -> c.isDigit() } })
-                    }
-                },
-                confirmButton = {
-                    GoldButton("Create", busy = busy, enabled = title.isNotBlank()) {
-                        scope.launch {
-                            busy = true
-                            runCatching {
-                                Api.post("/admin/sa/attendance/sessions", mapOf(
-                                    "title" to title, "occasion" to occasion,
-                                    "headcount" to (headcount.toIntOrNull() ?: 0),
-                                    "sessionDate" to java.time.LocalDate.now().toString()
-                                ))
-                            }.onSuccess {
-                                val resp = Api.get("/admin/sa/attendance/sessions")
-                                list.clear(); list.addAll(Api.decode<List<SaAttendanceSession>>(resp["sessions"]))
-                                showCreate = false; title = ""; headcount = ""
-                            }.onFailure { error = it.message }
-                            busy = false
-                        }
-                    }
-                },
-                dismissButton = { TextButton(onClick = { showCreate = false }) { Text("Cancel", color = Brand.Text2) } }
-            )
+    }
+    if (showCreate) RecordServiceSheet(onDismiss = { showCreate = false }) { title, occasion, date, headcount, notes ->
+        Api.post("/admin/sa/attendance/sessions", mapOf("title" to title, "occasion" to occasion, "headcount" to headcount, "sessionDate" to date, "notes" to notes))
+        reload(); showCreate = false
+    }
+    removing?.let { s ->
+        AlertDialog(onDismissRequest = { removing = null }, containerColor = Color(0xFF1A1A1E),
+            title = { Text("Remove “${s.title}”?", color = Brand.White) },
+            text = { Text("The headcount for ${s.sessionDate.take(10)} will be removed from the reports.", color = Brand.Text2) },
+            confirmButton = { TextButton(onClick = { removing = null; scope.launch { runCatching { Api.delete("/admin/sa/attendance/sessions/${s.id}") }.onSuccess { list.removeAll { it.id == s.id } }.onFailure { error = it.message } } }) { Text("Remove", color = KitRed) } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel", color = Brand.Text2) } })
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecordServiceSheet(onDismiss: () -> Unit, save: suspend (String, String, String, Int, String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var title by remember { mutableStateOf("Sunday Service") }
+    var occasion by remember { mutableStateOf("Service") }
+    var day by remember { mutableStateOf(java.time.LocalDate.now()) }
+    var headcount by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF16161A)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Record a service", style = Type.Title, color = Brand.White)
+            FilterPills(listOf("Service" to "Service", "Midweek" to "Midweek", "Prayer" to "Prayer", "Youth" to "Youth", "Event" to "Event"), occasion) { occasion = it }
+            Field("TITLE", title, { title = it })
+            Text("DATE", style = Type.Label.copy(fontSize = 10.sp), color = Brand.Text2)
+            FilterPills((0..6).map { java.time.LocalDate.now().minusDays(it.toLong()) }.map { d -> d.toString() to when (d) { java.time.LocalDate.now() -> "Today"; java.time.LocalDate.now().minusDays(1) -> "Yesterday"; else -> d.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) + " " + d.dayOfMonth } }, day.toString()) { day = java.time.LocalDate.parse(it) }
+            Field("HOW MANY CAME", headcount, { headcount = it.filter(Char::isDigit).take(6) }, keyboard = androidx.compose.ui.text.input.KeyboardType.Number, hint = "e.g. 230")
+            Field("NOTES (OPTIONAL)", notes, { notes = it.take(300) }, hint = "e.g. Guest speaker, heavy rain")
+            ErrorNote(error)
+            GoldButton("Save", busy = busy, enabled = !busy && title.isNotBlank() && headcount.isNotBlank()) {
+                scope.launch { busy = true; error = null; runCatching { save(title.trim(), occasion, day.toString(), headcount.toInt(), notes.trim()) }.onFailure { error = it.message }; busy = false }
+            }
         }
     }
 }

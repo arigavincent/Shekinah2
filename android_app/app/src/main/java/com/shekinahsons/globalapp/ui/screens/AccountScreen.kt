@@ -74,6 +74,7 @@ fun AccountPage(session: Session, onDone: (() -> Unit)? = null) {
         Spacer(Modifier.height(14.dp))
         Text(member.name, style = Type.Display, color = Brand.White, textAlign = TextAlign.Center)
         Text(member.email, style = Type.Meta.copy(fontSize = 14.sp), color = Brand.Text2)
+        if (member.phone.isNotBlank()) Text(member.phone, style = Type.Meta.copy(fontSize = 14.sp), color = Brand.Text2)
         val since = runCatching { OffsetDateTime.parse(member.createdAt).format(DateTimeFormatter.ofPattern("MMMM yyyy")) }.getOrNull()
         if (since != null) {
             Spacer(Modifier.height(10.dp))
@@ -82,6 +83,9 @@ fun AccountPage(session: Session, onDone: (() -> Unit)? = null) {
         }
         Spacer(Modifier.height(28.dp))
         var resetting by remember { mutableStateOf(false) }
+        var editing by remember { mutableStateOf(false) }
+        if (editing) { EditDetails(session) { editing = false }; Spacer(Modifier.height(12.dp)) }
+        else if (!changing && !resetting) { GhostButton("Edit my name and phone") { editing = true }; Spacer(Modifier.height(12.dp)) }
         when {
             resetting -> ResetByEmail(session, member.email) { resetting = false }
             changing -> {
@@ -351,5 +355,27 @@ fun PhoneRequiredPage(session: Session) {
         }
         Spacer(Modifier.height(10.dp))
         GhostButton("Sign out") { session.signOut() }
+    }
+}
+
+
+// Members correct their own name and phone number.
+@Composable
+private fun EditDetails(session: Session, done: () -> Unit) {
+    val member = session.member ?: return
+    val scope = rememberCoroutineScope()
+    var name by remember { mutableStateOf(member.name) }
+    var phone by remember { mutableStateOf(member.phone) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp), 0.9f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Your details", style = Type.Title, color = Brand.White)
+        Field("FULL NAME", name, { name = it.take(80) })
+        Field("PHONE", phone, { phone = it.take(20) }, keyboard = androidx.compose.ui.text.input.KeyboardType.Phone, hint = "0712 345 678")
+        ErrorNote(error)
+        GoldButton("Save", busy = busy, enabled = !busy && name.trim().length >= 2 && phone.isNotBlank()) {
+            scope.launch { busy = true; error = null; runCatching { session.updateProfile(name, phone) }.onSuccess { done() }.onFailure { error = it.message }; busy = false }
+        }
+        GhostButton("Cancel", onClick = done)
     }
 }

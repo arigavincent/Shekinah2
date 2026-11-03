@@ -111,6 +111,12 @@ class Session(private val context: Context) {
         prefs.edit().putString("member",Api.json.encodeToString(Member.serializer(),member!!)).apply()
     }
 
+    suspend fun updateProfile(name: String, phone: String) {
+        val res = Api.patch("/auth/profile", mapOf("name" to name.trim(), "phone" to phone.trim()))
+        member = Api.decode(res["user"])
+        prefs.edit().putString("member",Api.json.encodeToString(Member.serializer(),member!!)).apply()
+    }
+
     suspend fun requestReset(email: String) { Api.post("/auth/password-reset/request", mapOf("email" to email.trim())) }
 
     suspend fun confirmReset(email: String, code: String, password: String) {
