@@ -15,10 +15,11 @@ import kotlinx.serialization.json.*
  Column(verticalArrangement=Arrangement.spacedBy(12.dp)){
   AdminNextService()
   AdminVerseTopics()
-  Text("Ministry details",style=Type.Title,color=Brand.White);Text("Use the ministry's confirmed details. Blank links stay unavailable in the app.",style=Type.Meta,color=Brand.Text2)
+  KitSection("Ministry details","Shown in the app's About and contact pages. Blank links stay hidden."){
   listOf("phone" to "Phone","email" to "Email","address" to "Address","website" to "Website URL","radioUrl" to "Radio stream URL","tvUrl" to "TV stream URL","appUrl" to "App download URL").forEach{(k,label)->Field(label.uppercase(),fields[k].orEmpty(),{fields[k]=it;saved=false})}
-  ErrorNote(error);if(saved)Text("Saved",color=Brand.Gold)
+  ErrorNote(error);if(saved)Text("Saved",color=KitGreen)
   GoldButton("Save ministry details",busy=busy){scope.launch{busy=true;runCatching{Api.put("/admin/settings/ministry",fields.toMap())}.onSuccess{saved=true;error=null}.onFailure{error=it.message};busy=false}}
+  }
   AdminPodcastSettings()
   AdminSMTPSettings()
   AdminProductionSettings()

@@ -741,7 +741,8 @@ private fun PrayerList() {
             }
             savedNote?.let { Text(it, style = Type.Meta, color = Color(0xFF4ADE80), modifier = Modifier.padding(top = 6.dp)) }
         }
-        Chips(listOf("new" to "New (${list.count { it.status == "new" }})", "prayed_for" to "Prayed for", "pinned" to "Pinned", "all" to "All"), filter) { filter = it }
+        StatStrip(listOf(Stat("${list.count { it.status == "new" }}", "New", Brand.Gold), Stat("${list.count { it.status == "prayed_for" }}", "Prayed for", KitGreen), Stat("${list.count { it.pinned }}", "Pinned", KitBlue), Stat("${list.count { !it.isPublic }}", "Private", KitViolet)))
+        FilterPills(listOf("new" to "New", "prayed_for" to "Prayed for", "pinned" to "Pinned", "all" to "All"), filter) { filter = it }
         ErrorNote(error)
         if (loading) Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Brand.Gold) }
         val shown = list.filter { filter == "all" || (filter == "pinned" && it.pinned) || it.status == filter }
@@ -749,8 +750,13 @@ private fun PrayerList() {
         shown.forEach { p ->
             Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(22.dp), 0.9f).padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(p.name.ifBlank { "Member" }, style = Type.CardTitle, color = Brand.White, modifier = Modifier.weight(1f))
-                    Text(ago(p.createdAt), style = Type.Meta, color = Brand.Muted)
+                    PersonAvatar(p.name.ifBlank { "Member" }, p.id, 40)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(p.name.ifBlank { "Member" }, style = Type.CardTitle, color = Brand.White)
+                        Text(ago(p.createdAt), style = Type.Meta, color = Brand.Muted)
+                    }
+                    if (p.pinned) Badge("PINNED", KitBlue) else if (!p.isPublic) Badge("PRIVATE", KitViolet) else if (p.status == "new") Badge("NEW", Brand.Gold)
                 }
                 if (p.category.isNotBlank()) Text(p.category.uppercase(), style = Type.Label, color = Brand.Gold, modifier = Modifier.padding(top = 2.dp))
                 Spacer(Modifier.height(8.dp))

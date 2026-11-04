@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Image
@@ -97,18 +98,13 @@ fun AdminBranchesPane() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         GoldButton("Add a branch") { editing = AdminBranch() }
         ErrorNote(error)
-        if (branches.isEmpty()) Text("No branches yet.", style = Type.Meta, color = Brand.Text2)
+        StatStrip(listOf(Stat("${branches.size}", "Branches"), Stat("${branches.count { it.phone.isNotBlank() }}", "With a phone", KitGreen)))
+        if (branches.isEmpty()) EmptyState(Icons.Rounded.Church, "No branches yet", "Add each place the church meets.")
         branches.forEach { b ->
-            Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.85f).pressable { editing = b }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                FadeImage(b.imageUrl, Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)), label = "BRANCH")
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(b.name, style = Type.CardTitle, color = Brand.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(b.address, style = Type.Meta, color = Brand.Text2, maxLines = 1)
-                    Text(b.phone, style = Type.Meta, color = Brand.GoldLight)
-                }
-                Text("Edit", color = Brand.GoldLight, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            }
+            KitRow(b.name, line1 = b.address, line2 = b.phone,
+                leading = { FadeImage(b.imageUrl, Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)), label = "BRANCH") },
+                trailing = { Icon(Icons.Rounded.Edit, "Edit", tint = Brand.GoldLight, modifier = Modifier.size(20.dp)) },
+                onClick = { editing = b })
         }
     }
 }
@@ -218,13 +214,8 @@ fun AdminServePane() {
     val e = editing
     if (e != null) { TeamEditor(e, onBack = { editing = null }) { editing = null; reload++ }; return }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("requests" to "Requests (${requests.count { it.status == "new" }} new)", "teams" to "Teams & leaders").forEach { (k, label) ->
-                val on = view == k
-                Text(label, color = if (on) Brand.Black else Brand.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-                    modifier = (if (on) Modifier.clip(RoundedCornerShape(50)).background(Brand.GoldGradient) else Modifier.glass()).clickable { view = k }.padding(horizontal = 14.dp, vertical = 8.dp))
-            }
-        }
+        StatStrip(listOf(Stat("${requests.count { it.status == "new" }}", "New requests", Brand.Gold), Stat("${requests.count { it.status == "placed" }}", "On a team", KitGreen), Stat("${teams.size}", "Teams", KitBlue)))
+        FilterPills(listOf("requests" to "Requests", "teams" to "Teams & leaders"), view) { view = it }
         if (!emailReady) Text("Emails aren't set up on the server yet, so leaders won't get them. Requests are still all listed here.",
             style = Type.Meta, color = Brand.GoldLight, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x22D4AF37)).padding(12.dp))
         ErrorNote(error)
@@ -234,12 +225,14 @@ fun AdminServePane() {
             requests.forEach { r ->
                 Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.85f).padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        PersonAvatar(r.name, r.id, 42)
+                        Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(r.name, style = Type.CardTitle, color = Brand.White)
                             Text("${r.team} · ${r.phone}", style = Type.Meta, color = Brand.GoldLight)
                             Text(r.email, style = Type.Meta, color = Brand.Text2)
                         }
-                        Text(if (r.emailed) "Emailed" else "", style = Type.Meta, color = Color(0xFF4ADE80))
+                        Badge(when (r.status) { "contacted" -> "CONTACTED"; "placed" -> "ON TEAM"; "declined" -> "NOT NOW"; else -> "NEW" }, when (r.status) { "placed" -> KitGreen; "declined" -> Brand.Text2; "contacted" -> KitBlue; else -> Brand.Gold })
                     }
                     if (r.availability.isNotBlank()) Text("Available: ${r.availability}", style = Type.Meta.copy(fontSize = 13.sp), color = Color(0xFFDADADF), modifier = Modifier.padding(top = 6.dp))
                     if (r.message.isNotBlank()) Text(r.message, style = Type.Body.copy(fontSize = 14.sp), color = Color(0xFFDADADF), modifier = Modifier.padding(top = 4.dp))
@@ -269,14 +262,10 @@ fun AdminServePane() {
             }
             GoldButton("Add a team") { editing = AdminTeam(sortOrder = teams.size) }
             teams.forEach { t ->
-                Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.85f).pressable { editing = t }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(t.name + if (!t.isActive) " (hidden)" else "", style = Type.CardTitle, color = Brand.White)
-                        Text(if (t.leaderName.isNotBlank()) "Leader: ${t.leaderName}" else "No leader set", style = Type.Meta, color = if (t.leaderName.isNotBlank()) Brand.GoldLight else Brand.Muted)
-                        Text(t.leaderEmail.ifBlank { "Requests go to the coordinator" }, style = Type.Meta, color = Brand.Text2)
-                    }
-                    Text("Edit", color = Brand.GoldLight, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                }
+                KitRow(t.name, line1 = if (t.leaderName.isNotBlank()) "Leader: ${t.leaderName}" else "No leader set", line2 = t.leaderEmail.ifBlank { "Requests go to the coordinator" },
+                    leading = { IconTile(Icons.Rounded.VolunteerActivism, if (t.isActive) Brand.Gold else Brand.Muted) },
+                    trailing = { if (!t.isActive) Badge("HIDDEN", KitRed) else Icon(Icons.Rounded.Edit, "Edit", tint = Brand.GoldLight, modifier = Modifier.size(20.dp)) },
+                    onClick = { editing = t })
             }
         }
     }

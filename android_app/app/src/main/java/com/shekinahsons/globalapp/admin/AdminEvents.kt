@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
@@ -109,16 +110,21 @@ fun AdminEventsPane() {
         BatchPublishingPane("event")
             GoldButton("New event") { creating = true }
             ErrorNote(error)
-            events.forEach { ev ->
-                Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.85f).pressable { editing = ev }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FadeImage(ev.imageUrl, Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)), label = "EVENT")
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(ev.title, style = Type.CardTitle, color = Brand.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(listOf(ev.eventDate, ev.eventTime).filter { it.isNotBlank() }.joinToString(" · "), style = Type.Meta, color = Brand.Text2)
-                    }
-                    Text("Manage", color = Brand.GoldLight, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                }
+            val today = java.time.LocalDate.now().toString()
+            val upcoming = events.filter { it.eventDate >= today }
+            StatStrip(listOf(Stat("${events.size}", "Events"), Stat("${upcoming.size}", "Coming up", KitGreen), Stat("${events.size - upcoming.size}", "Past", Brand.Text2)))
+            var filter by remember { mutableStateOf("upcoming") }
+            FilterPills(listOf("upcoming" to "Coming up", "past" to "Past", "all" to "All"), filter) { filter = it }
+            val shown = when (filter) { "upcoming" -> upcoming.sortedBy { it.eventDate }; "past" -> events.filter { it.eventDate < today }; else -> events }
+            if (shown.isEmpty()) EmptyState(Icons.Rounded.Event, "No events here", "Create one with New event.")
+            shown.forEach { ev ->
+                val d = runCatching { java.time.LocalDate.parse(ev.eventDate.take(10)) }.getOrNull()
+                val days = d?.let { java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), it) }
+                KitRow(ev.title, line1 = listOf(d?.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM yyyy")) ?: ev.eventDate, ev.eventTime).filter { it.isNotBlank() }.joinToString(" \u00B7 "),
+                    line2 = when { days == null -> ""; days == 0L -> "Today"; days == 1L -> "Tomorrow"; days > 1 -> "In $days days"; else -> "Finished" },
+                    leading = { FadeImage(ev.imageUrl, Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)), label = "EVENT") },
+                    trailing = { Badge(when { days == null -> "EVENT"; days < 0 -> "PAST"; days == 0L -> "TODAY"; else -> "UPCOMING" }, when { days == null -> Brand.Gold; days < 0 -> Brand.Text2; days == 0L -> KitRed; else -> KitGreen }) },
+                    onClick = { editing = ev })
             }
         }
     }
