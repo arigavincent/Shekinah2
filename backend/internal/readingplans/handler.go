@@ -47,6 +47,14 @@ type Plan struct {
 	TodayDay  int    `json:"todayDay,omitempty"`
 }
 
+var nairobi = func() *time.Location {
+	l, err := time.LoadLocation("Africa/Nairobi")
+	if err != nil {
+		return time.FixedZone("EAT", 3*3600)
+	}
+	return l
+}()
+
 // enrollment fills in when the member started the plan and today's day.
 func (h Handler) enrollment(ctx context.Context, userID string, p *Plan) {
 	var started time.Time
@@ -54,7 +62,8 @@ func (h Handler) enrollment(ctx context.Context, userID string, p *Plan) {
 		return
 	}
 	p.StartedOn = started.Format("2006-01-02")
-	now := time.Now()
+	// Days turn over at midnight in Kenya, the same calendar the start date uses.
+	now := time.Now().In(nairobi)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	day := int(today.Sub(time.Date(started.Year(), started.Month(), started.Day(), 0, 0, 0, 0, time.UTC)).Hours()/24) + 1
 	if day > p.DurationDays {
@@ -79,8 +88,8 @@ func (h Handler) Start(c *gin.Context) {
 	if req.Restart {
 		_, _ = h.db.Exec(ctx, `DELETE FROM reading_plan_progress WHERE plan_id = $1 AND user_id::text = $2`, planID, userID)
 	}
-	if _, err := h.db.Exec(ctx, `INSERT INTO reading_plan_enrollments (plan_id, user_id, started_on) VALUES ($1, $2, CURRENT_DATE)
-		ON CONFLICT (plan_id, user_id) DO UPDATE SET started_on = CASE WHEN $3 THEN CURRENT_DATE ELSE reading_plan_enrollments.started_on END`, planID, userID, req.Restart); err != nil {
+	if _, err := h.db.Exec(ctx, `INSERT INTO reading_plan_enrollments (plan_id, user_id, started_on) VALUES ($1, $2, (now() AT TIME ZONE 'Africa/Nairobi')::date)
+		ON CONFLICT (plan_id, user_id) DO UPDATE SET started_on = CASE WHEN $3 THEN (now() AT TIME ZONE 'Africa/Nairobi')::date ELSE reading_plan_enrollments.started_on END`, planID, userID, req.Restart); err != nil {
 		httpx.Error(c, http.StatusNotFound, "reading_plan_not_found", "reading plan not found")
 		return
 	}
