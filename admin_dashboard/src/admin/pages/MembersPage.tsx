@@ -87,7 +87,7 @@ export function MembersPage() {
     } catch (e: any) { setError(e.message); }
   }
 
-  const filtered = members.filter(m => !query || m.name.toLowerCase().includes(query.toLowerCase()) || m.email.toLowerCase().includes(query.toLowerCase()));
+  const filtered = members.filter(m => !query || m.name.toLowerCase().includes(query.toLowerCase()) || m.email.toLowerCase().includes(query.toLowerCase()) || (query.replace(/\D/g, "").length >= 3 && (m.phone || "").replace(/\D/g, "").includes(query.replace(/\D/g, "").replace(/^0/, ""))));
 
   return (
     <div className="admin-page">
@@ -102,9 +102,15 @@ export function MembersPage() {
           <button className="btn primary" onClick={doMerge} disabled={!mergeId || !mergeInto}>Merge</button>
         </div>
       </div>
+      <div className="stats-grid" style={{ marginBottom: 12 }}>
+        <article className="stat-card"><span>People</span><strong className="metric-value">{members.length}</strong></article>
+        <article className="stat-card"><span>Staff</span><strong className="metric-value">{members.filter(m => m.role !== "member").length}</strong></article>
+        <article className="stat-card"><span>With a phone</span><strong className="metric-value">{members.filter(m => m.phone).length}</strong></article>
+        <article className="stat-card"><span>Suspended</span><strong className="metric-value">{members.filter(m => m.isActive === false).length}</strong></article>
+      </div>
       <div className="search-bar" style={{ marginBottom: 12 }}>
         <Search size={16} />
-        <input placeholder="Search members…" value={query} onChange={e => setQuery(e.target.value)} />
+        <input placeholder="Search name, email or phone…" value={query} onChange={e => setQuery(e.target.value)} />
       </div>
       {loading ? <div className="loading-spinner" /> : (
         <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 1fr" : "1fr", gap: 16 }}>

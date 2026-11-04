@@ -64,7 +64,12 @@
 :root[data-palette="shekinah"][data-theme="dark"] .stats-grid > :nth-child(5n+5) { --tile: var(--kit-red); }
 
 /* Buttons: gold pills, glassy secondary, red danger */
-:root[data-palette="shekinah"][data-theme="dark"] button:not(.nav-link):not(.sidebar-collapse-btn):not(.theme-toggle-float):not(.sidebar-toggle-float):not(.sidebar-backdrop):not([role="tab"]),
+:root[data-palette="shekinah"][data-theme="dark"] button:not([class]),
+:root[data-palette="shekinah"][data-theme="dark"] button.primary,
+:root[data-palette="shekinah"][data-theme="dark"] button.secondary,
+:root[data-palette="shekinah"][data-theme="dark"] button.danger,
+:root[data-palette="shekinah"][data-theme="dark"] button.compact,
+:root[data-palette="shekinah"][data-theme="dark"] button[type="submit"],
 :root[data-palette="shekinah"][data-theme="dark"] .btn {
   border-radius: 999px;
 }
@@ -151,3 +156,167 @@
 /* Action cells styled as flex boxes would break the row's rounded border. */
 :root[data-palette="shekinah"][data-theme="dark"] .data-table tbody td[style*="flex"] { display: table-cell !important; white-space: nowrap; }
 :root[data-palette="shekinah"][data-theme="dark"] .data-table tbody td[style*="flex"] > * { margin-right: 4px; vertical-align: middle; }
+
+/* ───────────── Glass, glow and motion ───────────── */
+@property --fx-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes fx-spin-border { to { --fx-angle: 360deg; } }
+@keyframes fx-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes fx-float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+@keyframes fx-breathe { 0%, 100% { opacity: .55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+@keyframes fx-aurora { 0% { transform: translate(0, 0) scale(1); } 50% { transform: translate(6%, 4%) scale(1.15); } 100% { transform: translate(0, 0) scale(1); } }
+@keyframes fx-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 90, 78, .55); } 70% { box-shadow: 0 0 0 18px rgba(255, 90, 78, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 90, 78, 0); } }
+@keyframes fx-shine { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+@keyframes fx-rotate { to { transform: rotate(360deg); } }
+
+:root[data-palette="shekinah"][data-theme="dark"] {
+  --glass: rgba(22, 22, 28, 0.55);
+  --glass-strong: rgba(18, 18, 22, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glow-gold: 0 0 0 1px rgba(212, 175, 55, .35), 0 10px 40px rgba(212, 175, 55, .18);
+}
+
+/* A slow aurora behind everything, so the glass has light to blur. */
+:root[data-palette="shekinah"][data-theme="dark"] .workspace { position: relative; isolation: isolate; }
+:root[data-palette="shekinah"][data-theme="dark"] .workspace::before,
+:root[data-palette="shekinah"][data-theme="dark"] .workspace::after {
+  content: ""; position: fixed; z-index: -1; pointer-events: none; border-radius: 50%; filter: blur(80px);
+}
+:root[data-palette="shekinah"][data-theme="dark"] .workspace::before {
+  width: 46vw; height: 46vw; top: -18vw; left: 18vw; background: radial-gradient(circle, rgba(212, 175, 55, .22), transparent 65%);
+  animation: fx-aurora 26s ease-in-out infinite;
+}
+:root[data-palette="shekinah"][data-theme="dark"] .workspace::after {
+  width: 38vw; height: 38vw; bottom: -16vw; right: -8vw; background: radial-gradient(circle, rgba(74, 139, 255, .16), transparent 65%);
+  animation: fx-aurora 32s ease-in-out infinite reverse;
+}
+
+/* Every page eases in. */
+:root[data-palette="shekinah"][data-theme="dark"] .workspace > * { animation: fx-rise .45s ease-out both; }
+
+/* Glass cards everywhere. */
+:root[data-palette="shekinah"][data-theme="dark"] .card,
+:root[data-palette="shekinah"][data-theme="dark"] .list-card,
+:root[data-palette="shekinah"][data-theme="dark"] .editor-card,
+:root[data-palette="shekinah"][data-theme="dark"] .integration-card,
+:root[data-palette="shekinah"][data-theme="dark"] .media-preview-card,
+:root[data-palette="shekinah"][data-theme="dark"] .item-row,
+:root[data-palette="shekinah"][data-theme="dark"] .sermon-row {
+  background: var(--glass);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), 0 18px 40px rgba(0, 0, 0, .35);
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+}
+:root[data-palette="shekinah"][data-theme="dark"] .item-row:hover,
+:root[data-palette="shekinah"][data-theme="dark"] .sermon-row:hover {
+  border-color: rgba(212, 175, 55, .35); box-shadow: var(--glass-highlight), var(--glow-gold); transform: translateY(-1px);
+}
+:root[data-palette="shekinah"][data-theme="dark"] .sidebar {
+  background: rgba(8, 8, 10, .72); backdrop-filter: blur(22px) saturate(150%); -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+/* Stat tiles glow on hover. */
+:root[data-palette="shekinah"][data-theme="dark"] .stat-card { backdrop-filter: blur(14px); transition: transform .2s, box-shadow .2s; }
+:root[data-palette="shekinah"][data-theme="dark"] .stat-card:hover { transform: translateY(-3px); box-shadow: 0 0 0 1px color-mix(in oklab, var(--tile, #d4af37) 45%, transparent), 0 16px 38px color-mix(in oklab, var(--tile, #d4af37) 22%, transparent); }
+
+/* Gold buttons shimmer when you point at them. */
+:root[data-palette="shekinah"][data-theme="dark"] button.primary,
+:root[data-palette="shekinah"][data-theme="dark"] .btn.primary,
+:root[data-palette="shekinah"][data-theme="dark"] button[type="submit"]:not(.secondary):not(.danger) {
+  background-image: linear-gradient(110deg, #a8861f 0%, #d4af37 30%, #f8e7a8 50%, #d4af37 70%, #a8861f 100%);
+  background-size: 200% 100%; background-position: 100% 0; transition: background-position .6s, box-shadow .2s, transform .15s;
+}
+:root[data-palette="shekinah"][data-theme="dark"] button.primary:hover,
+:root[data-palette="shekinah"][data-theme="dark"] .btn.primary:hover,
+:root[data-palette="shekinah"][data-theme="dark"] button[type="submit"]:not(.secondary):not(.danger):hover {
+  background-position: 0 0; box-shadow: 0 10px 30px rgba(212, 175, 55, .4); transform: translateY(-1px);
+}
+:root[data-palette="shekinah"][data-theme="dark"] button.secondary { backdrop-filter: blur(10px); }
+
+/* Hub cards: glass, a glowing edge in their colour, lift on hover. */
+:root[data-palette="shekinah"][data-theme="dark"] .kit-hub-card {
+  position: relative; background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in oklab, var(--tile, #d4af37) 28%, rgba(255, 255, 255, .06));
+  box-shadow: var(--glass-highlight);
+  overflow: hidden;
+}
+:root[data-palette="shekinah"][data-theme="dark"] .kit-hub-card::after {
+  content: ""; position: absolute; inset: -40% -40% auto auto; width: 70%; height: 90%; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in oklab, var(--tile, #d4af37) 30%, transparent), transparent 70%);
+  opacity: .35; transition: opacity .25s; pointer-events: none;
+}
+:root[data-palette="shekinah"][data-theme="dark"] .kit-hub-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--tile, #d4af37) 50%, transparent), 0 18px 44px color-mix(in oklab, var(--tile, #d4af37) 22%, transparent);
+}
+:root[data-palette="shekinah"][data-theme="dark"] .kit-hub-card:hover::after { opacity: .9; }
+.kit-hub-card .kit-icon-tile { transition: transform .25s; }
+.kit-hub-card:hover .kit-icon-tile { transform: scale(1.08) rotate(-3deg); }
+
+/* ── Overview ── */
+.fx-page { display: flex; flex-direction: column; gap: 18px; }
+.fx-hero {
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px; padding: 26px 28px; border-radius: 28px;
+  background: linear-gradient(135deg, rgba(42, 32, 9, .75), rgba(14, 14, 20, .7) 55%, rgba(11, 22, 48, .7));
+  border: 1px solid rgba(212, 175, 55, .25); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 20px 50px rgba(0, 0, 0, .4);
+}
+.fx-hero h1 { margin: 2px 0 4px; }
+.fx-hero-text { flex: 1; position: relative; }
+.fx-hero-glow { position: absolute; width: 380px; height: 380px; left: -90px; top: -160px; border-radius: 50%; background: radial-gradient(circle, rgba(212, 175, 55, .45), transparent 65%); animation: fx-breathe 6s ease-in-out infinite; pointer-events: none; }
+.fx-hero-dove { position: relative; width: 84px; height: 84px; filter: drop-shadow(0 8px 24px rgba(212, 175, 55, .55)); animation: fx-float 7s ease-in-out infinite; }
+.fx-refresh { position: relative; display: inline-flex; align-items: center; gap: 8px; }
+.fx-spin { animation: fx-rotate 1s linear infinite; }
+
+.fx-live {
+  display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 24px; text-decoration: none; color: #fff;
+  background: linear-gradient(120deg, rgba(58, 13, 18, .8), rgba(22, 9, 11, .7)); border: 1px solid rgba(255, 107, 107, .35);
+  backdrop-filter: blur(16px); transition: transform .2s, box-shadow .2s;
+}
+.fx-live:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(215, 38, 61, .25); }
+.fx-live-icon { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 90, 78, .16); color: #ff6b6b; flex: none; }
+.fx-live.is-live .fx-live-icon { background: #ff5a4e; color: #fff; animation: fx-pulse 1.8s infinite; }
+.fx-live-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.fx-live-text small { color: #ff8a80; font-weight: 800; letter-spacing: .14em; font-size: .7rem; }
+.fx-live-text strong { font-size: 1.1rem; }
+.fx-live-text span { color: #c9c9d1; font-size: .88rem; }
+.fx-live-cta { padding: 12px 22px; border-radius: 999px; font-weight: 800; color: #fff; background: linear-gradient(90deg, #ff5a4e, #d7263d); box-shadow: 0 10px 26px rgba(215, 38, 61, .35); }
+
+.fx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.fx-tile {
+  position: relative; display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: 22px; text-decoration: none; color: #fff;
+  background: var(--glass, rgba(22, 22, 28, .55)); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, .08); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05);
+  transition: transform .2s, box-shadow .2s;
+}
+.fx-tile strong { font-size: 1.9rem; line-height: 1.1; margin-top: 8px; }
+.fx-tile-label { font-weight: 700; }
+.fx-tile small { color: #a9a9b2; }
+.fx-tile:hover { transform: translateY(-4px); box-shadow: 0 0 0 1px color-mix(in oklab, var(--tile) 45%, transparent), 0 18px 40px color-mix(in oklab, var(--tile) 22%, transparent); }
+/* Something waiting: a slowly turning gold ring. */
+.fx-tile.attention { border-color: transparent; }
+.fx-tile.attention::before {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
+  background: conic-gradient(from var(--fx-angle), rgba(212, 175, 55, .15), #f5de8a, #d4af37, rgba(212, 175, 55, .15) 40%, rgba(212, 175, 55, .15));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: fx-spin-border 4s linear infinite;
+}
+.fx-tile.attention .fx-tile-label { color: #f0d27a; }
+
+/* Page headers get the same soft light as the Overview. */
+:root[data-palette="shekinah"][data-theme="dark"] .page-header { position: relative; }
+:root[data-palette="shekinah"][data-theme="dark"] .page-header::before {
+  content: ""; position: absolute; left: -60px; top: -90px; width: 320px; height: 240px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(212, 175, 55, .16), transparent 70%); z-index: -1;
+}
+
+@media (max-width: 720px) {
+  .fx-hero { flex-wrap: wrap; padding: 20px; }
+  .fx-hero-dove { width: 60px; height: 60px; }
+  .fx-live { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

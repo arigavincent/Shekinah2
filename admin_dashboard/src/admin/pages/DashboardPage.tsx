@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { BookOpen, CalendarDays, ClipboardCheck, HandHeart, MessagesSquare, Mic2, Radio, RefreshCw, Settings, Users, Wallet, Coins, type LucideIcon } from "lucide-react";
 import { apiRequest } from "../api/client";
 import { getToken, getUser } from "../auth/session";
+import { ToolHub } from "../components/kit/Kit";
+import dove from "../assets/dove.png";
+
 type Overview = {
   members: number;
   newMembersWeek: number;
@@ -15,6 +19,16 @@ type Overview = {
   liveTitle: string;
   liveStatus: string;
 };
+
+type Tile = { label: string; value: string | number; detail: string; to: string; icon: LucideIcon; tint: string; attention?: boolean };
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
+
+// The admin home, laid out like the phone's Overview: a glowing greeting, the
+// live card, what needs attention, and quick actions as cards.
 export function DashboardPage() {
   const [data, setData] = useState<Overview | null>(null),
     [error, setError] = useState(""),
@@ -33,96 +47,70 @@ export function DashboardPage() {
   useEffect(() => {
     void load();
   }, []);
+  const name = (getUser()?.name || "").split(" ")[0];
+  const live = data?.liveStatus === "live";
+  const tiles: Tile[] = data
+    ? [
+        { label: "Payments to check", value: data.pendingPayments, detail: `KSh ${data.pendingAmount.toLocaleString()} waiting`, to: "/giving", icon: Wallet, tint: "#d4af37", attention: data.pendingPayments > 0 },
+        { label: "Given this month", value: `KSh ${data.givenThisMonth.toLocaleString()}`, detail: "Confirmed gifts", to: "/monetization", icon: Coins, tint: "#4ade80" },
+        { label: "Members", value: data.members, detail: `+${data.newMembersWeek} this week`, to: "/sa/members", icon: Users, tint: "#6ea8ff" },
+        { label: "Book sales", value: data.bookSalesMonth, detail: `${data.books} titles on the shelf`, to: "/library", icon: BookOpen, tint: "#b79cff" },
+        { label: "Prayer requests", value: data.newPrayers, detail: "New to read", to: "/prayers", icon: HandHeart, tint: "#ff8fa3", attention: data.newPrayers > 0 },
+        { label: "Chat today", value: data.chatToday, detail: "Community messages", to: "/community", icon: MessagesSquare, tint: "#6ea8ff" },
+      ]
+    : [];
   return (
-    <main>
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Shekinah Sons Global · Admin Console</p>
-          <h1>Ministry overview</h1>
-          <p className="muted">Welcome, {getUser()?.name}. Here’s what needs attention today.</p>
+    <main className="fx-page">
+      <header className="fx-hero">
+        <div className="fx-hero-glow" aria-hidden="true" />
+        <img className="fx-hero-dove" src={dove} alt="" />
+        <div className="fx-hero-text">
+          <p className="eyebrow">Shekinah Sons Global · Admin console</p>
+          <h1>{greeting()}{name ? `, ${name}` : ""}</h1>
+          <p className="muted">Here's what needs attention today.</p>
         </div>
-        <button className="secondary" disabled={busy} onClick={() => void load()}>
-          Refresh
+        <button className="secondary fx-refresh" disabled={busy} onClick={() => void load()} aria-label="Refresh">
+          <RefreshCw size={16} className={busy ? "fx-spin" : ""} /> Refresh
         </button>
       </header>
-      {error && <p role="alert">{error}</p>}
+
+      {error && <p role="alert" className="alert alert-error">{error}</p>}
       {!data ? (
-        <p role="status">{busy ? "Loading overview…" : "Overview unavailable."}</p>
+        <p role="status" className="muted">{busy ? "Loading overview…" : "Overview unavailable."}</p>
       ) : (
         <>
-          <div className="stats-grid">
-            {[
-              ["Members", data.members, `${data.newMembersWeek} joined this week`, "/users"],
-              [
-                "Payments to review",
-                data.pendingPayments,
-                `KSh ${data.pendingAmount.toLocaleString()} awaiting verification`,
-                "/giving",
-              ],
-              [
-                "Donations this month",
-                `KSh ${data.givenThisMonth.toLocaleString()}`,
-                "Confirmed donations · purchases reported separately",
-                "/monetization",
-              ],
-              [
-                "Book sales this month",
-                data.bookSalesMonth,
-                `${data.books} published materials`,
-                "/library",
-              ],
-              ["New prayers", data.newPrayers, "Requests awaiting care", "/prayers"],
-              ["Community today", data.chatToday, "Messages received today", "/community"],
-            ].map(([label, value, detail, to]) => (
-              <article className="stat-card" key={label}>
-                <span>{label}</span>
-                <strong className="metric-value">{value}</strong>
-                <p className="small-muted">{detail}</p>
-                <Link className="text-link" to={String(to)}>
-                  View details →
+          <Link to="/live" className={`fx-live ${live ? "is-live" : ""}`}>
+            <span className="fx-live-icon"><Radio size={26} /></span>
+            <span className="fx-live-text">
+              <small>{live ? "LIVE NOW" : "NOT LIVE"}</small>
+              <strong>{live ? data.liveTitle || "Live service" : "Ready for your next service"}</strong>
+              <span>{live ? "Watch, moderate chat and see viewers" : "Cameras, OBS, YouTube forwarding and replays"}</span>
+            </span>
+            <span className="fx-live-cta">{live ? "Open live" : "Go live"}</span>
+          </Link>
+
+          <div className="fx-tiles">
+            {tiles.map((t) => {
+              const Icon = t.icon;
+              return (
+                <Link key={t.label} to={t.to} className={`fx-tile ${t.attention ? "attention" : ""}`} style={{ ["--tile" as string]: t.tint }}>
+                  <span className="kit-icon-tile"><Icon size={22} /></span>
+                  <strong>{t.value}</strong>
+                  <span className="fx-tile-label">{t.label}</span>
+                  <small>{t.detail}</small>
                 </Link>
-              </article>
-            ))}
+              );
+            })}
           </div>
-          <section className="list-card">
-            <div className="section-title-row">
-              <div>
-                <p className="eyebrow">Broadcast</p>
-                <h2>{data.liveTitle || "Ready for your next service"}</h2>
-              </div>
-              <span className={`status-chip ${data.liveStatus === "live" ? "success" : "neutral"}`}>
-                {data.liveStatus || "Offline"}
-              </span>
-            </div>
-            <p className="muted">
-              Manage free and paid live access, chat moderation and automatic replays.
-            </p>
-            <Link className="text-link" to="/live">
-              Open Live & replays →
-            </Link>
-          </section>
-          <section className="list-card">
-            <h2>Quick actions</h2>
-            <div className="permission-grid">
-              {[
-                ["Publish sermons", "Single or batch audio and video uploads", "/sermons"],
-                ["Publish materials", "Free or paid books with automatic covers", "/library"],
-                ["Create events", "Custom questions, tickets and release dates", "/events"],
-                ["Manage Users", "Profiles and staff permissions", "/users"],
-                ["Serve Teams", "Leaders, member requests and placements", "/serve-settings"],
-                ["Monetization", "Income by source, item reports and CSV", "/monetization"],
-                ["Check-in", "Member codes, event tickets and attendance", "/checkins"],
-                ["Settings", "Ministry details, RSS, email and production links", "/settings"],
-              ].map(([title, description, to]) => (
-                <Link className="permission-option" key={to} to={to}>
-                  <span>
-                    <strong>{title}</strong>
-                    <small>{description}</small>
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </section>
+
+          <ToolHub groups={[["Quick actions", [
+            { to: "/sermons", label: "Publish sermons", sub: "Audio, video, notes, YouTube links", icon: Mic2, tint: "#d4af37" },
+            { to: "/events", label: "Create an event", sub: "Questions, tickets, release dates", icon: CalendarDays, tint: "#6ea8ff" },
+            { to: "/checkins", label: "Check-in", sub: "Member codes and event tickets", icon: ClipboardCheck, tint: "#4ade80" },
+            { to: "/notifications", label: "Send notification", sub: "Reach every phone at once", icon: MessagesSquare, tint: "#ff8fa3" },
+            { to: "/library", label: "Publish books", sub: "Free or paid, automatic covers", icon: BookOpen, tint: "#b79cff" },
+            { to: "/settings", label: "Ministry settings", sub: "Service times, contacts, email", icon: Settings, tint: "#d4af37" },
+          ]]]} />
         </>
       )}
     </main>
