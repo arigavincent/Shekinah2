@@ -1,6 +1,6 @@
 # Shekinah Sons Global: Google Play submission pack
 
-Upload file: `release/artifacts/shekinah-2.4.4-play.aab` (version 2.4.4, code 35, Play build).
+Upload file: `release/artifacts/shekinah-2.4.8-play.aab` (version 2.4.8, code 40, Play build).
 The Play build has no in-app purchase of digital content (paid books, paid recordings, paid lives); Google requires its own billing for those. Giving and event tickets work as normal. Items members already own still open.
 
 ## 1. Store listing
@@ -51,8 +51,8 @@ Your account is protected and you can delete it at any time from your profile.
 (After the move to Oracle: `https://<app domain>/privacy`.)
 
 **Graphics needed**
-- App icon 512×512 PNG (from the dove logo).
-- Feature graphic 1024×500 PNG.
+- App icon 512×512 PNG: `release/playstore/graphics/play-icon-512.png` (ready).
+- Feature graphic 1024×500 PNG: `release/playstore/graphics/play-feature-1024x500.png` (ready).
 - Phone screenshots, 2–8, e.g. Home, Sermons, a sermon with notes, Bible, Reading plan, Live, Events, Prayer wall.
 
 ## 2. App content forms (Play Console → Policy → App content)
