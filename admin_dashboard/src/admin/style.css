@@ -2958,3 +2958,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .page-tabs-bar::-webkit-scrollbar { display: none; }
   .page-tab { flex: 0 0 auto; white-space: nowrap; }
 }
+
+/* Theme button sits in the sidebar's top row on desktop; the floating one is
+   only for phones, where the sidebar is a drawer. */
+.sidebar-top-actions { display: flex; align-items: center; gap: 0.25rem; }
+.sidebar.collapsed .sidebar-top-actions { flex-direction: column; }
+.theme-toggle-float { display: none; }
+@media (max-width: 980px) {
+  .theme-toggle-float { display: grid; }
+  .sidebar-theme-btn { display: none !important; }
+}

@@ -160,10 +160,20 @@ export function AdminLayout() {
             <div className="brand-mark" aria-hidden="true"><img src={dove} alt="" /></div>
             <div className="brand-text">
               <strong>SHEKINAH</strong>
-              <span>Sons Global · Admin</span>
+              <span>Sons Global</span>
             </div>
           </div>
 
+          <div className="sidebar-top-actions">
+          <button
+            type="button"
+            className="sidebar-collapse-btn sidebar-theme-btn"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${mode === "light" ? "dark" : "light"} theme`}
+            title={mode === "light" ? "Dark mode" : "Light mode"}
+          >
+            {mode === "light" ? <Moon size={17} aria-hidden="true" /> : <Sun size={17} aria-hidden="true" />}
+          </button>
           <button
             type="button"
             className="sidebar-collapse-btn"
@@ -173,6 +183,7 @@ export function AdminLayout() {
           >
             {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           </button>
+          </div>
         </div>
 
         <nav className="sidebar-nav" aria-label="Sections">
