@@ -114,7 +114,8 @@ fun Greeting(name: String, onProfile: () -> Unit) {
     val (line, ref) = verse?.let { it.text to it.reference } ?: blessings.getValue(part).let { it[(verseDay % it.size).toInt()] }
     Column(Modifier.padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 12.dp)) {
         Text(if (name.isNotBlank()) "$hello, $name" else hello, fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-0.4).sp, color = Brand.White)
-        Text("$line · $ref", style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.GoldLight, maxLines = 2)
+        Text(line, style = Type.Meta.copy(fontSize = 13.5.sp), color = Brand.GoldLight, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Text(ref, style = Type.Meta.copy(fontSize = 12.5.sp), color = Brand.Text2, modifier = Modifier.padding(top = 2.dp))
         if (name.isBlank()) {
             Text("Sign in so we can greet you by name", color = Brand.BlueText, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 13.sp,
                 modifier = Modifier.padding(top = 4.dp).clickable(onClick = onProfile))
