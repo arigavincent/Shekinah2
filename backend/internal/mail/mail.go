@@ -9,7 +9,6 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
-	"html"
 	"log"
 	"mime"
 	"net"
@@ -33,6 +32,12 @@ type Message struct {
 	// Big, centred text such as a reset code.
 	Highlight string
 	Footer    string
+	// Small gold label above the heading, e.g. "Account security".
+	Eyebrow string
+	// Preview text shown next to the subject in the inbox list.
+	Preheader string
+	// Optional gold button.
+	Button *Button
 }
 
 func env(key string) string { return strings.TrimSpace(os.Getenv(key)) }
@@ -70,82 +75,30 @@ func SendWithConfig(config Config, m Message) error {
 	if len(to) == 0 {
 		return fmt.Errorf("no recipients")
 	}
-	text := plain(m)
 	if !config.Configured() {
 		log.Printf("email not sent (SMTP disabled or not configured) subject=%q", m.Subject)
 		return nil
 	}
 	from := config.From
 
-	boundary := randomHex(12)
+	contentType, mimeText := mimeBody(m)
 	headers := []string{
 		"From: " + from,
 		"To: " + strings.Join(to, ", "),
 		"Subject: " + mime.QEncoding.Encode("utf-8", m.Subject),
 		"Date: " + time.Now().Format(time.RFC1123Z),
 		"MIME-Version: 1.0",
-		`Content-Type: multipart/alternative; boundary="` + boundary + `"`,
+		"Content-Type: " + contentType,
 	}
 	if m.ReplyTo != "" {
 		headers = append(headers, "Reply-To: "+m.ReplyTo)
 	}
-	body := strings.Join(headers, "\r\n") + "\r\n\r\n" +
-		"--" + boundary + "\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + text + "\r\n" +
-		"--" + boundary + "\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" + htmlBody(m) + "\r\n" +
-		"--" + boundary + "--\r\n"
+	body := strings.Join(headers, "\r\n") + "\r\n\r\n" + mimeText
 	if err := sendConfigured(config, from, to, []byte(body)); err != nil {
 		log.Printf("email send failed to=%s subject=%q error=%v", strings.Join(to, ","), m.Subject, err)
 		return err
 	}
 	return nil
-}
-
-func plain(m Message) string {
-	var b strings.Builder
-	b.WriteString(m.Heading + "\n\n")
-	if m.Intro != "" {
-		b.WriteString(m.Intro + "\n\n")
-	}
-	if m.Highlight != "" {
-		b.WriteString("    " + m.Highlight + "\n\n")
-	}
-	for _, r := range m.Rows {
-		b.WriteString(r.Label + ": " + r.Value + "\n")
-	}
-	if m.Footer != "" {
-		b.WriteString("\n" + m.Footer + "\n")
-	}
-	b.WriteString("\nShekinah Sons Global\n")
-	return b.String()
-}
-
-func htmlBody(m Message) string {
-	e := html.EscapeString
-	var rows strings.Builder
-	for _, r := range m.Rows {
-		rows.WriteString(`<tr><td style="padding:8px 0;color:#8a8a90;font-size:13px;width:38%;vertical-align:top">` + e(r.Label) +
-			`</td><td style="padding:8px 0;color:#f2f2f4;font-size:15px">` + strings.ReplaceAll(e(r.Value), "\n", "<br>") + `</td></tr>`)
-	}
-	highlight := ""
-	if m.Highlight != "" {
-		highlight = `<div style="margin:22px 0;padding:18px;border-radius:14px;background:#1e1a10;border:1px solid #6b5310;text-align:center;font-size:32px;letter-spacing:8px;font-weight:700;color:#f0d27a">` + e(m.Highlight) + `</div>`
-	}
-	footer := ""
-	if m.Footer != "" {
-		footer = `<p style="color:#8a8a90;font-size:13px;line-height:20px;margin:22px 0 0">` + e(m.Footer) + `</p>`
-	}
-	table := ""
-	if rows.Len() > 0 {
-		table = `<table style="width:100%;border-collapse:collapse;margin-top:14px;border-top:1px solid #2a2a2e">` + rows.String() + `</table>`
-	}
-	return `<!doctype html><html><body style="margin:0;background:#0b0b0d;font-family:Helvetica,Arial,sans-serif">
-<div style="max-width:560px;margin:0 auto;padding:28px 18px">
-<div style="text-align:center;padding-bottom:18px"><span style="font-size:20px;letter-spacing:4px;font-weight:700;color:#d4af37">SHEKINAH</span><br><span style="font-size:10px;letter-spacing:4px;color:#b8b8bd">SONS GLOBAL</span></div>
-<div style="background:#151517;border:1px solid #2a2a2e;border-radius:20px;padding:26px">
-<div style="height:4px;width:48px;border-radius:2px;background:linear-gradient(90deg,#f0d27a,#a8841f);margin-bottom:16px"></div>
-<h1 style="margin:0 0 10px;color:#ffffff;font-size:22px">` + e(m.Heading) + `</h1>
-<p style="margin:0;color:#c9c9ce;font-size:15px;line-height:23px">` + strings.ReplaceAll(e(m.Intro), "\n", "<br>") + `</p>` + highlight + table + footer + `
-</div><p style="text-align:center;color:#5c5c62;font-size:12px;margin-top:18px">Sent by the Shekinah Sons Global app</p></div></body></html>`
 }
 
 func randomHex(n int) string {

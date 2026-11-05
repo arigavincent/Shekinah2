@@ -162,7 +162,7 @@ func (h *Handler) emailAudience(id string, ids []string, title, body string) {
 	sent := 0
 	for _, e := range emails {
 		// One message per person, so addresses are never shared.
-		if err := mailer.SendWithConfig(config, mailer.Message{To: []string{e}, Subject: title, Heading: title, Intro: body, Footer: "Sent by Shekinah Sons Global."}); err != nil {
+		if err := mailer.SendWithConfig(config, mailer.Message{To: []string{e}, Subject: title, Heading: title, Intro: body, Eyebrow: "A message from Shekinah Sons Global", Footer: "You received this because you are a member of Shekinah Sons Global."}); err != nil {
 			log.Printf("message %s: email failed: %v", id, err)
 			continue
 		}

@@ -23,9 +23,11 @@ func (m passwordResetMailer) Send(email string, code string) error {
 		To:        []string{email},
 		Subject:   "Your Shekinah password reset code",
 		Heading:   "Reset your password",
-		Intro:     "Use this code in the Shekinah Sons Global app (or the admin dashboard) to choose a new password.",
+		Intro:     "We received a request to reset your password. Enter this code in the Shekinah Sons Global app (or the admin dashboard) to choose a new one.",
 		Highlight: code,
-		Footer:    "The code expires in 15 minutes. If you didn't ask to reset your password, you can ignore this email; your password stays the same.",
+		Eyebrow:   "Account security",
+		Preheader: "Your code is " + code + ". It expires in 15 minutes.",
+		Footer:    "The code expires in 15 minutes. If you didn't ask to reset your password, you can ignore this email; your password stays the same.\n\nFor your safety, the Shekinah team will never ask you for this code.",
 	})
 }
 

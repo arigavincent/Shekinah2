@@ -159,7 +159,10 @@ func (t Teams) Request(c *gin.Context) {
 				{Label: "Team", Value: team.Name}, {Label: "Available", Value: orDash(availability)}, {Label: "Message", Value: orDash(message)},
 				{Label: "Sent", Value: time.Now().Format("Mon 2 Jan 2006, 3:04 PM")},
 			},
-			Footer: "You can see every request and mark it as contacted in the admin console under More > Serve.",
+			Eyebrow:   "Serve request",
+			Preheader: name + " would like to join " + team.Name + ".",
+			Button:    replyButton(name, email),
+			Footer:    "You can see every request and mark it as contacted in the admin console under More > Serve.",
 		})
 		if err == nil && config.Configured() {
 			_, _ = t.db.Exec(context.Background(), `UPDATE serve_requests SET emailed = TRUE WHERE id = $1`, id)
@@ -168,6 +171,20 @@ func (t Teams) Request(c *gin.Context) {
 		}
 	}()
 	c.JSON(http.StatusCreated, gin.H{"id": id, "team": team.Name, "leader": team.LeaderName})
+}
+
+func replyButton(name, email string) *mailer.Button {
+	if email == "" {
+		return nil
+	}
+	return &mailer.Button{Label: "Reply to " + firstName(name), URL: "mailto:" + email}
+}
+
+func firstName(name string) string {
+	if f := strings.Fields(name); len(f) > 0 {
+		return f[0]
+	}
+	return "them"
 }
 
 func orDash(s string) string {

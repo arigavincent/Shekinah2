@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/ariga/shekinah-backend/internal/notifications"
 	"io"
 	"net"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	netmail "net/mail"
 	"net/textproto"
 	"os"
 	"path/filepath"
@@ -469,11 +473,46 @@ func receiveMail(t *testing.T, mailbox <-chan string) string {
 	t.Helper()
 	select {
 	case message := <-mailbox:
-		return message
+		return decodedMail(message)
 	case <-time.After(5 * time.Second):
 		t.Fatal("email did not reach local SMTP sink")
 		return ""
 	}
+}
+
+// decodedMail returns the raw message followed by every text part decoded,
+// so tests can look for content the way a mail app would show it.
+func decodedMail(raw string) string {
+	msg, err := netmail.ReadMessage(strings.NewReader(raw))
+	if err != nil {
+		return raw
+	}
+	var out strings.Builder
+	out.WriteString(raw)
+	var walk func(contentType, encoding string, body io.Reader)
+	walk = func(contentType, encoding string, body io.Reader) {
+		mediaType, params, _ := mime.ParseMediaType(contentType)
+		if strings.HasPrefix(mediaType, "multipart/") {
+			r := multipart.NewReader(body, params["boundary"])
+			for {
+				part, err := r.NextPart()
+				if err != nil {
+					return
+				}
+				walk(part.Header.Get("Content-Type"), part.Header.Get("Content-Transfer-Encoding"), part)
+			}
+		}
+		if !strings.HasPrefix(mediaType, "text/") {
+			return
+		}
+		if strings.EqualFold(encoding, "base64") {
+			body = base64.NewDecoder(base64.StdEncoding, body)
+		}
+		b, _ := io.ReadAll(body)
+		out.WriteString("\n" + string(b))
+	}
+	walk(msg.Header.Get("Content-Type"), msg.Header.Get("Content-Transfer-Encoding"), msg.Body)
+	return out.String()
 }
 
 func localMailSink(t *testing.T) <-chan string {
