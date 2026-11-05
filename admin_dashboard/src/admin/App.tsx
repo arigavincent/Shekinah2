@@ -1,3 +1,4 @@
+import { MoreHubPage } from "./pages/MoreHubPage";
 import { SaHubPage } from "./pages/SaHubPage";
 import { FamiliesPage } from "./pages/FamiliesPage";
 import { MessagesPage } from "./pages/MessagesPage";
@@ -110,6 +111,7 @@ export default function App() {
         <Route path="account-security" element={<AccountSecurityPage />} />
 
         {/* Super Admin routes */}
+        <Route path="more" element={<MoreHubPage />} />
         <Route path="sa" element={<SuperAdminRoute><SaHubPage /></SuperAdminRoute>} />
         <Route path="sa/members" element={<SuperAdminRoute><MembersPage /></SuperAdminRoute>} />
         <Route path="sa/roles" element={<SuperAdminRoute><RolesPage /></SuperAdminRoute>} />

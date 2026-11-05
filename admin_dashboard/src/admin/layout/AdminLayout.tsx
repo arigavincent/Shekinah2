@@ -42,49 +42,19 @@ import dove from "../assets/dove.png";
 type NavItem = { label: string; to: string; icon: LucideIcon };
 type NavSection = { label: string; items: NavItem[] };
 
+// Laid out like the phone's admin console: a few main places, with every
+// other tool on the More page (and Super Admin tools on SA Tools).
 const navSections: NavSection[] = [
   {
-    label: "Home",
+    label: "Admin console",
     items: [
       { label: "Overview", to: "/", icon: LayoutDashboard },
       { label: "Live", to: "/live", icon: Radio },
-      { label: "Check-In", to: "/checkins", icon: ClipboardCheck },
-    ]
-  },
-  {
-    label: "Content",
-    items: [
-      { label: "Sermons", to: "/sermons", icon: Mic2 },
-      { label: "Books", to: "/library", icon: BookOpen },
-      { label: "Devotions", to: "/devotions", icon: Sunrise },
-      { label: "Reading Plans", to: "/reading-plans", icon: CalendarRange },
-      { label: "Updates", to: "/updates", icon: Megaphone },
-    ]
-  },
-  {
-    label: "Church life",
-    items: [
-      { label: "Events", to: "/events", icon: CalendarDays },
-      { label: "Serve Teams", to: "/serve-settings", icon: HandHeart },
-      { label: "Branches", to: "/branches", icon: Building2 },
-      { label: "Ministry settings", to: "/settings", icon: ShieldCheck },
-    ]
-  },
-  {
-    label: "Care and community",
-    items: [
-      { label: "Prayer requests", to: "/prayers", icon: HandHeart },
-      { label: "Testimonies", to: "/testimonies", icon: Sparkles },
-      { label: "Community chat", to: "/community", icon: MessagesSquare },
-      { label: "Send notification", to: "/notifications", icon: BellRing },
-    ]
-  },
-  {
-    label: "Income",
-    items: [
+      { label: "Check-in", to: "/checkins", icon: ClipboardCheck },
       { label: "Payments", to: "/giving", icon: Wallet },
-      { label: "Monetization", to: "/monetization", icon: DollarSign },
       { label: "Users", to: "/users", icon: Users },
+      { label: "Books", to: "/library", icon: BookOpen },
+      { label: "More", to: "/more", icon: Sparkles },
     ]
   },
   {
@@ -100,14 +70,16 @@ const superAdminNavSection: NavSection = {
   label: "Super Admin",
   items: [
     { label: "SA Tools", to: "/sa", icon: ShieldAlert },
-    { label: "Members", to: "/sa/members", icon: Users },
-    { label: "Roles", to: "/sa/roles", icon: BadgeCheck },
-    { label: "Groups", to: "/sa/groups", icon: UsersRound },
-    { label: "Attendance", to: "/sa/attendance", icon: CalendarCheck },
-    { label: "Messages", to: "/sa/messages", icon: Send },
-    { label: "Finance & Funds", to: "/sa/finance", icon: DollarSign },
   ]
 };
+
+// Pages reached from More (or SA Tools) keep that tab lit, like the phone.
+const morePaths = ["/sermons", "/devotions", "/reading-plans", "/updates", "/events", "/serve-settings", "/branches", "/settings", "/prayers", "/testimonies", "/community", "/notifications", "/monetization"];
+function tabActive(to: string, path: string, isActive: boolean) {
+  if (to === "/more") return isActive || morePaths.some((p) => path === p || path.startsWith(p + "/"));
+  if (to === "/sa") return path === "/sa" || path.startsWith("/sa/");
+  return isActive;
+}
 
 const COLLAPSED_KEY = "shekinah-admin-sidebar-collapsed";
 const SIDEBAR_DRAWER_QUERY = "(max-width: 1180px)";
@@ -121,9 +93,9 @@ export function AdminLayout() {
   const [permissions,setPermissions]=useState<string[]|null>(null);
   const scopes:Record<string,string>={"/sermons":"sermons:manage","/library":"books:publish","/events":"events:manage","/devotions":"content:manage","/updates":"content:manage","/reading-plans":"content:manage","/community":"community:moderate","/testimonies":"community:moderate","/giving":"finance:manage","/monetization":"finance:manage","/checkins":"checkin:scan"};
   const isSuperAdmin = user?.role === "super_admin";
-  const allowed=(path:string)=>admin||(path==="/live"&&Boolean(permissions?.some(p=>["live:broadcast","live:moderate"].includes(p))))||path==="/appearance"||Boolean(scopes[path]&&permissions?.includes(scopes[path]))||path==="/sa"||path.startsWith("/sa/");
+  const allowed=(path:string)=>admin||(path==="/more"&&Boolean(permissions?.length))||(path==="/live"&&Boolean(permissions?.some(p=>["live:broadcast","live:moderate"].includes(p))))||path==="/appearance"||Boolean(scopes[path]&&permissions?.includes(scopes[path]))||path==="/sa"||path.startsWith("/sa/");
   const baseSections = navSections.map(s=>({...s,items:s.items.filter(i=>allowed(i.to))})).filter(s=>s.items.length);
-  const visibleSections = isSuperAdmin ? [...baseSections, superAdminNavSection] : baseSections;
+  const visibleSections = isSuperAdmin ? [baseSections[0], superAdminNavSection, ...baseSections.slice(1)].filter(Boolean) : baseSections;
   useEffect(()=>{void apiRequest<{permissions:string[]}>("/api/v1/permissions/me",{token:getToken()}).then(r=>setPermissions(r.permissions)).catch(()=>setPermissions([]));},[user?.id]);
   useEffect(()=>{if(permissions!==null&&!allowed(location.pathname))navigate(visibleSections[0]?.items[0]?.to||"/appearance",{replace:true});},[permissions,location.pathname]);
 
@@ -216,7 +188,7 @@ export function AdminLayout() {
                     to={item.to}
                     end={item.to === "/" || item.to === "/sa"}
                     className={({ isActive }) =>
-                      isActive ? "nav-link active" : "nav-link"
+                      tabActive(item.to, location.pathname, isActive) ? "nav-link active" : "nav-link"
                     }
                     title={item.label}
                     aria-label={item.label}

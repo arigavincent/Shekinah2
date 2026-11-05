@@ -284,7 +284,10 @@ func (h Handler) Create(c *gin.Context) {
 
 	name := userName
 	if anonymous {
+		// Anonymous means anonymous to everyone, staff included: the email is
+		// not even stored. The private owner id only powers "my requests".
 		name = "Anonymous"
+		userEmail = ""
 	}
 
 	id := fmt.Sprintf("pr-%d", time.Now().UnixNano())

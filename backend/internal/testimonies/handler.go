@@ -335,8 +335,8 @@ func (h Handler) AdminList(c *gin.Context) {
 			t.status,
 			t.featured,
 			t.like_count,
-			COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') || CASE WHEN t.is_anonymous THEN ' (anonymous)' ELSE '' END AS display_name,
-			u.email,
+			CASE WHEN t.is_anonymous THEN 'Anonymous' ELSE COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') END AS display_name,
+			CASE WHEN t.is_anonymous THEN '' ELSE u.email END,
 			t.created_at,
 			t.updated_at
 		FROM testimonies t
@@ -414,8 +414,8 @@ func (h Handler) AdminUpdate(c *gin.Context) {
 					t.status,
 					t.featured,
 					t.like_count,
-					COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') || CASE WHEN t.is_anonymous THEN ' (anonymous)' ELSE '' END AS display_name,
-					u.email,
+					CASE WHEN t.is_anonymous THEN 'Anonymous' ELSE COALESCE(NULLIF(TRIM(u.name), ''), 'Shekinah Member') END AS display_name,
+					CASE WHEN t.is_anonymous THEN '' ELSE u.email END,
 					t.created_at,
 					t.updated_at
 			`,
