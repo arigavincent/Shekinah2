@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { BellRing, Inbox, Users } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../api/client";
@@ -51,6 +53,9 @@ export function ServeSettingsPage() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
+  const [tab, setTab] = useState<string>();
+  // Opening the team editor (also from "New team" in the header) shows the Teams tab.
+  useEffect(() => { if (edit) setTab("teams"); }, [edit]);
   const { confirm } = useAdminFeedback();
   async function load() {
     setError("");
@@ -137,37 +142,84 @@ export function ServeSettingsPage() {
         <p role="status">Loading teams…</p>
       ) : (
         <>
+          <PageTabs active={tab} onChange={setTab} tabs={[
+            { id: "requests", label: "Requests to serve", icon: Inbox, content: (<>
           <section className="list-card">
-            <h2>Request notifications</h2>
-            <p className="muted">
-              Requests stay in this dashboard even when email is unavailable.{" "}
-              {data.emailReady ? "Email is configured." : "Outgoing email is not configured yet."}{" "}
-              <Link className="text-link" to="/settings">
-                Email settings →
-              </Link>
-            </p>
-            <label>
-              Coordinator email (fallback when a team has no leader email)
-              <input type="email" value={contact} onChange={(e) => setContact(e.target.value)} />
-            </label>
-            <button
-              className="secondary"
-              disabled={busy}
-              onClick={() =>
-                void act(
-                  () =>
-                    apiRequest("/api/v1/admin/serve/contact", {
-                      method: "PUT",
-                      token: getToken(),
-                      body: { email: contact },
-                    }),
-                  "Coordinator email saved.",
-                )
-              }
-            >
-              Save coordinator
-            </button>
+            <h2>Requests to serve</h2>
+            <div className="review-grid">
+              <label>
+                Search
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Name, email, phone or team"
+                />
+              </label>
+              <label>
+                Status
+                <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="all">All statuses</option>
+                  {["new", "contacted", "placed", "declined"].map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Team
+                <select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+                  <option value="all">All teams</option>
+                  {data.teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {!requests.length && <p className="muted">No matching requests.</p>}
+            {requests.map((r) => (
+              <article className="item-row" key={r.id}>
+                <div>
+                  <h3>
+                    {r.name} · {r.team}
+                  </h3>
+                  <p>
+                    {r.email} · {r.phone}
+                  </p>
+                  <p>{r.availability}</p>
+                  <p>{r.message}</p>
+                  <p className="small-muted">
+                    {new Date(r.createdAt).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}{" "}
+                    · {r.emailed ? "Leader emailed" : "Email not sent"}
+                  </p>
+                </div>
+                <label>
+                  Status
+                  <select
+                    disabled={busy}
+                    value={r.status}
+                    onChange={(e) =>
+                      void act(
+                        () =>
+                          apiRequest(`/api/v1/admin/serve/requests/${r.id}`, {
+                            method: "PATCH",
+                            token: getToken(),
+                            body: { status: e.target.value },
+                          }),
+                        "Request updated.",
+                      )
+                    }
+                  >
+                    {["new", "contacted", "placed", "declined"].map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                </label>
+              </article>
+            ))}
           </section>
+            </>) },
+            { id: "teams", label: "Teams", icon: Users, content: (<>
           {edit && (
             <form className="editor-card" onSubmit={save}>
               <h2>{edit.id === "new" ? "Create team" : "Edit team"}</h2>
@@ -249,80 +301,41 @@ export function ServeSettingsPage() {
               </article>
             ))}
           </section>
+            </>) },
+            { id: "alerts", label: "Request alerts", icon: BellRing, content: (<>
           <section className="list-card">
-            <h2>Requests to serve</h2>
-            <div className="review-grid">
-              <label>
-                Search
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Name, email, phone or team"
-                />
-              </label>
-              <label>
-                Status
-                <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="all">All statuses</option>
-                  {["new", "contacted", "placed", "declined"].map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Team
-                <select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-                  <option value="all">All teams</option>
-                  {data.teams.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {!requests.length && <p className="muted">No matching requests.</p>}
-            {requests.map((r) => (
-              <article className="item-row" key={r.id}>
-                <div>
-                  <h3>
-                    {r.name} · {r.team}
-                  </h3>
-                  <p>
-                    {r.email} · {r.phone}
-                  </p>
-                  <p>{r.availability}</p>
-                  <p>{r.message}</p>
-                  <p className="small-muted">
-                    {new Date(r.createdAt).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}{" "}
-                    · {r.emailed ? "Leader emailed" : "Email not sent"}
-                  </p>
-                </div>
-                <label>
-                  Status
-                  <select
-                    disabled={busy}
-                    value={r.status}
-                    onChange={(e) =>
-                      void act(
-                        () =>
-                          apiRequest(`/api/v1/admin/serve/requests/${r.id}`, {
-                            method: "PATCH",
-                            token: getToken(),
-                            body: { status: e.target.value },
-                          }),
-                        "Request updated.",
-                      )
-                    }
-                  >
-                    {["new", "contacted", "placed", "declined"].map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </select>
-                </label>
-              </article>
-            ))}
+            <h2>Request notifications</h2>
+            <p className="muted">
+              Requests stay in this dashboard even when email is unavailable.{" "}
+              {data.emailReady ? "Email is configured." : "Outgoing email is not configured yet."}{" "}
+              <Link className="text-link" to="/settings">
+                Email settings →
+              </Link>
+            </p>
+            <label>
+              Coordinator email (fallback when a team has no leader email)
+              <input type="email" value={contact} onChange={(e) => setContact(e.target.value)} />
+            </label>
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() =>
+                void act(
+                  () =>
+                    apiRequest("/api/v1/admin/serve/contact", {
+                      method: "PUT",
+                      token: getToken(),
+                      body: { email: contact },
+                    }),
+                  "Coordinator email saved.",
+                )
+              }
+            >
+              Save coordinator
+            </button>
           </section>
+            </>) },
+          ]} />
         </>
       )}
     </main>

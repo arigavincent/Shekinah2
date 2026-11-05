@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { Building2, Pencil, Plus } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -65,6 +67,7 @@ export function BranchesPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [form, setForm] = useState<BranchForm>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "newest" | "oldest">("name");
   const [loading, setLoading] = useState(true);
@@ -122,11 +125,13 @@ export function BranchesPage() {
 
   function resetForm() {
     setEditingId(null);
+    setTab("list");
     setForm({ ...emptyForm });
   }
 
   function startEdit(branch: Branch) {
     setEditingId(branch.id);
+    setTab("editor");
     setForm(toForm(branch));
   }
 
@@ -255,7 +260,86 @@ export function BranchesPage() {
 
       {error ? <InlineAlert title="Branches could not be updated" message={error} /> : null}
 
-      <section className="content-grid">
+      <PageTabs active={tab} onChange={setTab} tabs={[
+        { id: "list", label: "Branches", icon: Building2, content: (<>
+        <section className="list-card">
+          <div className="section-title-row">
+            <h2>Existing Branches</h2>
+            <span className="count-pill">{filtered.length}</span>
+          </div>
+
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search branches..."
+            />
+
+            <div className="filters-row">
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "name" | "newest" | "oldest")}>
+                <option value="name">Name A-Z</option>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+              </select>
+
+              {(query || sortBy !== "name") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setSortBy("name");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="muted">Loading branches...</p>
+          ) : filtered.length === 0 ? (
+            <p className="muted">No branches found.</p>
+          ) : (
+            <div className="sermon-list">
+              {pagedItems.map(branch => (
+                <article key={branch.id} className="sermon-row">
+                  <div>
+                    <h3>{branch.name}</h3>
+                    <p>{branch.address}</p>
+                    <p className="small-muted">{branch.services}</p>
+                    <p className="small-muted">
+                      {branch.phone} · {branch.latitude}, {branch.longitude}
+                    </p>
+                  </div>
+
+                  <div className="row-actions">
+                    <button type="button" className="secondary compact" onClick={() => startEdit(branch)}>
+                      Edit
+                    </button>
+
+                    <button type="button" className="danger compact" onClick={() => remove(branch)}>
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="branches"
+            onPageChange={setPage}
+          />
+        </section>
+        </>) },
+        { id: "editor", label: editingId ? "Edit branch" : "New branch", icon: editingId ? Pencil : Plus, content: (<>
         <form className="editor-card" onSubmit={submit}>
           <div className="section-title-row">
             <h2>{editingId ? "Edit Branch" : "Create Branch"}</h2>
@@ -366,84 +450,8 @@ export function BranchesPage() {
             {saving ? "Saving..." : editingId ? "Update Branch" : "Create Branch"}
           </button>
         </form>
-
-        <section className="list-card">
-          <div className="section-title-row">
-            <h2>Existing Branches</h2>
-            <span className="count-pill">{filtered.length}</span>
-          </div>
-
-          <div className="list-controls">
-            <input
-              className="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search branches..."
-            />
-
-            <div className="filters-row">
-              <select value={sortBy} onChange={event => setSortBy(event.target.value as "name" | "newest" | "oldest")}>
-                <option value="name">Name A-Z</option>
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-              </select>
-
-              {(query || sortBy !== "name") ? (
-                <button
-                  type="button"
-                  className="secondary compact"
-                  onClick={() => {
-                    setQuery("");
-                    setSortBy("name");
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="muted">Loading branches...</p>
-          ) : filtered.length === 0 ? (
-            <p className="muted">No branches found.</p>
-          ) : (
-            <div className="sermon-list">
-              {pagedItems.map(branch => (
-                <article key={branch.id} className="sermon-row">
-                  <div>
-                    <h3>{branch.name}</h3>
-                    <p>{branch.address}</p>
-                    <p className="small-muted">{branch.services}</p>
-                    <p className="small-muted">
-                      {branch.phone} · {branch.latitude}, {branch.longitude}
-                    </p>
-                  </div>
-
-                  <div className="row-actions">
-                    <button type="button" className="secondary compact" onClick={() => startEdit(branch)}>
-                      Edit
-                    </button>
-
-                    <button type="button" className="danger compact" onClick={() => remove(branch)}>
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          <PaginationBar
-            currentPage={page}
-            totalPages={totalPages}
-            pageSize={6}
-            totalItems={filtered.length}
-            itemLabel="branches"
-            onPageChange={setPage}
-          />
-        </section>
-      </section>
+        </>) },
+      ]} />
     </main>
   );
 }

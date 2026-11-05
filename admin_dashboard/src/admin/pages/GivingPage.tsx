@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { Landmark } from "lucide-react";
 import {Link} from "react-router-dom";
 import {getUser} from "../auth/session";
 import { useEffect, useMemo, useState } from "react";
@@ -318,7 +320,8 @@ export function GivingPage() {
 
       {error ? <InlineAlert title="Giving data could not be loaded" message={error} /> : null}
 
-      {["admin","super_admin"].includes(getUser()?.role||"")&&<PaymentDetailsCard />}
+      <PageTabs tabs={[
+        { id: "transactions", label: "Transactions", icon: Receipt, content: (<>
 
       <label>Currency<select value={currency} onChange={e=>setCurrency(e.target.value)}>{Array.from(new Set(["KES",...transactions.map(t=>t.currency||"KES")])).map(c=><option key={c}>{c}</option>)}</select></label>
       <p className="muted">These totals cover the matching transactions in the latest 200 payments, including donations and purchases. <Link className="text-link" to="/monetization">View income by source and item →</Link></p>
@@ -511,6 +514,9 @@ export function GivingPage() {
           onPageChange={setPage}
         />
       </section>
+        </>) },
+        ...(["admin","super_admin"].includes(getUser()?.role||"") ? [{ id: "details", label: "Payment details", icon: Landmark, content: <PaymentDetailsCard /> }] : []),
+      ]} />
     </main>
   );
 }

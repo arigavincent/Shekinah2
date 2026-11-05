@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { CalendarRange, Pencil, Plus } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -66,6 +68,7 @@ export function ReadingPlansPage() {
   const [plans, setPlans] = useState<ReadingPlan[]>([]);
   const [form, setForm] = useState<ReadingPlanPayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [loading, setLoading] = useState(true);
@@ -140,12 +143,14 @@ export function ReadingPlansPage() {
 
   function resetForm() {
     setEditingId(null);
+    setTab("list");
     setUploadedCover(null);
     setForm({ ...emptyForm, days: [emptyDay()] });
   }
 
   function startEdit(plan: ReadingPlan) {
     setEditingId(plan.id);
+    setTab("editor");
     setUploadedCover(null);
     setForm({
       title: plan.title,
@@ -277,7 +282,74 @@ export function ReadingPlansPage() {
 
       {error ? <InlineAlert title="Reading plans could not be updated" message={error} /> : null}
 
-      <section className="content-grid">
+      <PageTabs active={tab} onChange={setTab} tabs={[
+        { id: "list", label: "Reading plans", icon: CalendarRange, content: (<>
+        <section className="list-card">
+          <div className="section-title-row">
+            <h2>Existing Reading Plans</h2>
+            <span className="count-pill">{filtered.length}</span>
+          </div>
+
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search title or description..."
+            />
+            <div className="inline-filters">
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="title">Title A-Z</option>
+              </select>
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="muted">Loading reading plans...</p>
+          ) : pagedItems.length === 0 ? (
+            <p className="muted">No reading plans match the current filters.</p>
+          ) : (
+            <>
+              <div className="item-list">
+                {pagedItems.map(plan => (
+                  <article key={plan.id} className="item-row">
+                    <div>
+                      <div className="item-row-heading">
+                        <h3>{plan.title}</h3>
+                        <span className={plan.isActive ? "status-chip success" : "status-chip neutral"}>
+                          {plan.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <p className="muted">{plan.durationDays} days · {plan.days.length} entries</p>
+                      <p className="muted">{plan.description}</p>
+                    </div>
+
+                    <div className="row-actions">
+                      <button type="button" className="secondary compact" onClick={() => startEdit(plan)}>
+                        Edit
+                      </button>
+                      <button type="button" className="danger compact" onClick={() => remove(plan)}>
+                        Delete
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <PaginationBar
+                currentPage={page}
+                totalPages={totalPages}
+                pageSize={6}
+                totalItems={filtered.length}
+                itemLabel="plans"
+                onPageChange={setPage}
+              />
+            </>
+          )}
+        </section>
+        </>) },
+        { id: "editor", label: editingId ? "Edit plan" : "New plan", icon: editingId ? Pencil : Plus, content: (<>
         <form className="editor-card" onSubmit={submit}>
           <div className="section-title-row">
             <h2>{editingId ? "Edit Reading Plan" : "Create Reading Plan"}</h2>
@@ -421,72 +493,8 @@ export function ReadingPlansPage() {
             {saving ? "Saving..." : editingId ? "Update Reading Plan" : "Create Reading Plan"}
           </button>
         </form>
-
-        <section className="list-card">
-          <div className="section-title-row">
-            <h2>Existing Reading Plans</h2>
-            <span className="count-pill">{filtered.length}</span>
-          </div>
-
-          <div className="list-controls">
-            <input
-              className="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search title or description..."
-            />
-            <div className="inline-filters">
-              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="title">Title A-Z</option>
-              </select>
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="muted">Loading reading plans...</p>
-          ) : pagedItems.length === 0 ? (
-            <p className="muted">No reading plans match the current filters.</p>
-          ) : (
-            <>
-              <div className="item-list">
-                {pagedItems.map(plan => (
-                  <article key={plan.id} className="item-row">
-                    <div>
-                      <div className="item-row-heading">
-                        <h3>{plan.title}</h3>
-                        <span className={plan.isActive ? "status-chip success" : "status-chip neutral"}>
-                          {plan.isActive ? "Active" : "Inactive"}
-                        </span>
-                      </div>
-                      <p className="muted">{plan.durationDays} days · {plan.days.length} entries</p>
-                      <p className="muted">{plan.description}</p>
-                    </div>
-
-                    <div className="row-actions">
-                      <button type="button" className="secondary compact" onClick={() => startEdit(plan)}>
-                        Edit
-                      </button>
-                      <button type="button" className="danger compact" onClick={() => remove(plan)}>
-                        Delete
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-              <PaginationBar
-                currentPage={page}
-                totalPages={totalPages}
-                pageSize={6}
-                totalItems={filtered.length}
-                itemLabel="plans"
-                onPageChange={setPage}
-              />
-            </>
-          )}
-        </section>
-      </section>
+        </>) },
+      ]} />
     </main>
   );
 }

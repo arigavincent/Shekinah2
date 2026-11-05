@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { Church, CreditCard, Globe, Mail, Podcast } from "lucide-react";
 import { IntegrationSettings } from "../components/IntegrationSettings";
 import { MinistryDetails } from "../components/MinistryDetails";
 import { Link } from "react-router-dom";
@@ -111,18 +113,11 @@ export function SettingsPage() {
         <p role="alert">{error}</p>
       ) : (
         <>
-          <nav className="row-actions settings-jumps" aria-label="Settings sections">
-            <a href="#integrations" className="text-link">
-              Payments & integrations
-            </a>
-            <a href="#podcast-settings" className="text-link">
-              Spotify RSS
-            </a>
-            <a href="#smtp-settings" className="text-link">
-              Email
-            </a>
-          </nav>
+          <PageTabs tabs={[
+            { id: "integrations", label: "Payments & integrations", icon: CreditCard, content: (<>
           <IntegrationSettings />
+            </>) },
+            { id: "ministry", label: "Ministry details", icon: Church, content: (<>
           <MinistryDetails />
           <section className="list-card">
             <h2>Giving instructions</h2>
@@ -131,6 +126,8 @@ export function SettingsPage() {
               Open payment settings →
             </Link>
           </section>
+            </>) },
+            { id: "podcast", label: "Podcast", icon: Podcast, content: (<>
           <section className="editor-card" id="podcast-settings" aria-label="Spotify RSS settings">
             <p className="eyebrow">01 · Audio sermons</p>
             <h2>Spotify podcast RSS</h2>
@@ -182,6 +179,8 @@ export function SettingsPage() {
             </div>
             <p role="status">{notice.podcast}</p>
           </section>
+            </>) },
+            { id: "email", label: "Email", icon: Mail, content: (<>
           <section className="editor-card" id="smtp-settings" aria-label="SMTP settings">
             <p className="eyebrow">02 · Outgoing email</p>
             <h2>SMTP</h2>
@@ -325,6 +324,8 @@ export function SettingsPage() {
             </p>
             <p role="status">{notice.smtp}</p>
           </section>
+            </>) },
+            { id: "production", label: "Production links", icon: Globe, content: (<>
           <section className="editor-card" aria-label="Production settings">
             <p className="eyebrow">03 · Production</p>
             <h2>Production links</h2>
@@ -382,6 +383,8 @@ export function SettingsPage() {
             </p>
             <p role="status">{notice.production}</p>
           </section>
+            </>) },
+          ]} />
         </>
       )}
     </main>

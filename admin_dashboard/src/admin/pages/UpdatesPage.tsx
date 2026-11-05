@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { Megaphone, Pencil, Plus } from "lucide-react";
 import {DateField,TimeField} from "../components/DateTimeFields";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -29,6 +31,7 @@ export function UpdatesPage() {
   const [updates, setUpdates] = useState<UpdateItem[]>([]);
   const [form, setForm] = useState<UpdatePayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [loading, setLoading] = useState(true);
@@ -89,11 +92,13 @@ export function UpdatesPage() {
 
   function resetForm() {
     setEditingId(null);
+    setTab("list");
     setForm({ ...emptyForm });
   }
 
   function startEdit(update: UpdateItem) {
     setEditingId(update.id);
+    setTab("editor");
     setForm({
       title: update.title,
       excerpt: update.excerpt,
@@ -214,7 +219,83 @@ export function UpdatesPage() {
 
       {error ? <InlineAlert title="Updates could not be updated" message={error} /> : null}
 
-      <section className="content-grid">
+      <PageTabs active={tab} onChange={setTab} tabs={[
+        { id: "list", label: "Updates", icon: Megaphone, content: (<>
+        <section className="list-card">
+          <div className="section-title-row">
+            <h2>Existing Updates</h2>
+            <span className="count-pill">{filtered.length}</span>
+          </div>
+
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search updates..."
+            />
+
+            <div className="filters-row">
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title A-Z</option>
+              </select>
+
+              {(query || sortBy !== "newest") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setSortBy("newest");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="muted">Loading updates...</p>
+          ) : filtered.length === 0 ? (
+            <p className="muted">No updates found.</p>
+          ) : (
+            <div className="sermon-list">
+              {pagedItems.map(update => (
+                <article key={update.id} className="sermon-row">
+                  <div>
+                    <h3>{update.title}</h3>
+                    <p>{update.updateDate}</p>
+                    <p className="small-muted">{update.excerpt}</p>
+                  </div>
+
+                  <div className="row-actions">
+                    <button type="button" className="secondary compact" onClick={() => startEdit(update)}>
+                      Edit
+                    </button>
+
+                    <button type="button" className="danger compact" onClick={() => remove(update)}>
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="announcements"
+            onPageChange={setPage}
+          />
+        </section>
+        </>) },
+        { id: "editor", label: editingId ? "Edit update" : "New update", icon: editingId ? Pencil : Plus, content: (<>
         <form className="editor-card" onSubmit={submit}>
           <div className="section-title-row">
             <h2>{editingId ? "Edit Update" : "Create Update"}</h2>
@@ -289,81 +370,8 @@ export function UpdatesPage() {
             {saving ? "Saving..." : editingId ? "Update Announcement" : "Create Announcement"}
           </button>
         </form>
-
-        <section className="list-card">
-          <div className="section-title-row">
-            <h2>Existing Updates</h2>
-            <span className="count-pill">{filtered.length}</span>
-          </div>
-
-          <div className="list-controls">
-            <input
-              className="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search updates..."
-            />
-
-            <div className="filters-row">
-              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="title">Title A-Z</option>
-              </select>
-
-              {(query || sortBy !== "newest") ? (
-                <button
-                  type="button"
-                  className="secondary compact"
-                  onClick={() => {
-                    setQuery("");
-                    setSortBy("newest");
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="muted">Loading updates...</p>
-          ) : filtered.length === 0 ? (
-            <p className="muted">No updates found.</p>
-          ) : (
-            <div className="sermon-list">
-              {pagedItems.map(update => (
-                <article key={update.id} className="sermon-row">
-                  <div>
-                    <h3>{update.title}</h3>
-                    <p>{update.updateDate}</p>
-                    <p className="small-muted">{update.excerpt}</p>
-                  </div>
-
-                  <div className="row-actions">
-                    <button type="button" className="secondary compact" onClick={() => startEdit(update)}>
-                      Edit
-                    </button>
-
-                    <button type="button" className="danger compact" onClick={() => remove(update)}>
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          <PaginationBar
-            currentPage={page}
-            totalPages={totalPages}
-            pageSize={6}
-            totalItems={filtered.length}
-            itemLabel="announcements"
-            onPageChange={setPage}
-          />
-        </section>
-      </section>
+        </>) },
+      ]} />
     </main>
   );
 }

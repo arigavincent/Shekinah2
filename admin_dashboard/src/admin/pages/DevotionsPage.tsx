@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { BookOpen, Pencil, Plus, Sunrise } from "lucide-react";
 import {DateTimeField} from "../components/DateTimeFields";
 import {DateField,TimeField} from "../components/DateTimeFields";
 import {publishInputValue} from "../lib/publish";
@@ -70,6 +72,7 @@ export function DevotionsPage() {
   const [devotions, setDevotions] = useState<Devotion[]>([]);
   const [form, setForm] = useState<DevotionPayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [loading, setLoading] = useState(true);
@@ -316,11 +319,13 @@ export function DevotionsPage() {
 
   function resetForm() {
     setEditingId(null);
+    setTab("list");
     setForm({ ...emptyForm });
   }
 
   function startEdit(devotion: Devotion) {
     setEditingId(devotion.id);
+    setTab("editor");
     setForm({
       externalId: devotion.externalId || "",
       title: devotion.title,
@@ -533,11 +538,90 @@ export function DevotionsPage() {
         </div>
       </header>
 
-      <VerseTopicsCard />
 
       {error ? <InlineAlert title="Devotions could not be updated" message={error} /> : null}
 
-      <section className="content-grid">
+      <PageTabs active={tab} onChange={setTab} tabs={[
+        { id: "list", label: "Devotions", icon: Sunrise, content: (<>
+        <section className="list-card">
+          <div className="section-title-row">
+            <h2>Existing Devotions</h2>
+            <span className="count-pill">{filtered.length}</span>
+          </div>
+
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search devotions..."
+            />
+            <div className="filters-row">
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title A-Z</option>
+              </select>
+              {(query || sortBy !== "newest") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setSortBy("newest");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="muted">Loading devotions...</p>
+          ) : filtered.length === 0 ? (
+            <p className="muted">No devotions found.</p>
+          ) : (
+            <div className="sermon-list">
+              {pagedItems.map(devotion => (
+                <article key={devotion.id} className="sermon-row">
+                  <div>
+                    <div className="section-title-row compact">
+                      <h3>{devotion.title}</h3>
+                      <span className={`status-chip ${getPublishState(devotion.publishedAt).tone}`}>
+                        {getPublishState(devotion.publishedAt).label}
+                      </span>
+                    </div>
+                    <p>{devotion.devotionDate}</p>
+                    <p className="small-muted">Publishes {formatPublishAt(devotion.publishedAt)}</p>
+                    <p className="small-muted">{devotion.excerpt}</p>
+                  </div>
+
+                  <div className="row-actions">
+                    <button type="button" className="secondary compact" onClick={() => startEdit(devotion)}>
+                      Edit
+                    </button>
+
+                    <button type="button" className="danger compact" onClick={() => remove(devotion)}>
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="devotions"
+            onPageChange={setPage}
+          />
+        </section>
+        </>) },
+        { id: "editor", label: editingId ? "Edit devotion" : "New devotion", icon: editingId ? Pencil : Plus, content: (<>
         <form className="editor-card" onSubmit={submit}>
           <div className="section-title-row">
             <h2>{editingId ? "Edit Devotion" : "Create Devotion"}</h2>
@@ -695,85 +779,9 @@ export function DevotionsPage() {
             ) : null}
           </BulkCsvImportCard>
         </form>
-
-        <section className="list-card">
-          <div className="section-title-row">
-            <h2>Existing Devotions</h2>
-            <span className="count-pill">{filtered.length}</span>
-          </div>
-
-          <div className="list-controls">
-            <input
-              className="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search devotions..."
-            />
-            <div className="filters-row">
-              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="title">Title A-Z</option>
-              </select>
-              {(query || sortBy !== "newest") ? (
-                <button
-                  type="button"
-                  className="secondary compact"
-                  onClick={() => {
-                    setQuery("");
-                    setSortBy("newest");
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="muted">Loading devotions...</p>
-          ) : filtered.length === 0 ? (
-            <p className="muted">No devotions found.</p>
-          ) : (
-            <div className="sermon-list">
-              {pagedItems.map(devotion => (
-                <article key={devotion.id} className="sermon-row">
-                  <div>
-                    <div className="section-title-row compact">
-                      <h3>{devotion.title}</h3>
-                      <span className={`status-chip ${getPublishState(devotion.publishedAt).tone}`}>
-                        {getPublishState(devotion.publishedAt).label}
-                      </span>
-                    </div>
-                    <p>{devotion.devotionDate}</p>
-                    <p className="small-muted">Publishes {formatPublishAt(devotion.publishedAt)}</p>
-                    <p className="small-muted">{devotion.excerpt}</p>
-                  </div>
-
-                  <div className="row-actions">
-                    <button type="button" className="secondary compact" onClick={() => startEdit(devotion)}>
-                      Edit
-                    </button>
-
-                    <button type="button" className="danger compact" onClick={() => remove(devotion)}>
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          <PaginationBar
-            currentPage={page}
-            totalPages={totalPages}
-            pageSize={6}
-            totalItems={filtered.length}
-            itemLabel="devotions"
-            onPageChange={setPage}
-          />
-        </section>
-      </section>
+        </>) },
+        { id: "topics", label: "Verse topics", icon: BookOpen, content: <VerseTopicsCard /> },
+      ]} />
 
       {wizardOpen ? (
         <div className="modal-backdrop" role="presentation" onClick={resetWizard}>

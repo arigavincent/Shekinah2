@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { Flag, MessagesSquare } from "lucide-react";
 import {CommunityReports} from "../components/CommunityReports";
 import { useEffect, useMemo, useState } from "react";
 
@@ -136,7 +138,8 @@ export function CommunityPage() {
 
       {error ? <InlineAlert title="Chat moderation could not be updated" message={error} /> : null}
 
-      <CommunityReports/>
+      <PageTabs tabs={[
+        { id: "messages", label: "Messages", icon: MessagesSquare, content: (<>
       <section className="list-card" style={{ marginBottom: 18 }}>
         <div className="list-controls">
           <input
@@ -233,6 +236,9 @@ export function CommunityPage() {
           onPageChange={setPage}
         />
       </section>
+        </>) },
+        { id: "reports", label: "Reports", icon: Flag, content: <CommunityReports/> },
+      ]} />
     </main>
   );
 }

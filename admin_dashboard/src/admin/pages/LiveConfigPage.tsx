@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { Clock, ShieldCheck, Video, Youtube } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../api/client";
@@ -309,7 +311,9 @@ export function LiveConfigPage() {
             )}
           </section>
 
-          {canBroadcast && studio ? (
+          <PageTabs tabs={[
+            ...(canBroadcast ? [{ id: "golive", label: "Go live", icon: Video, content: (<>
+            {studio ? (
             <section className="editor-card">
               <h2>Cameras, OBS and video switchers</h2>
               {!studio.camerasWork ? (
@@ -347,9 +351,23 @@ export function LiveConfigPage() {
                 {busy === "studio" ? "Saving…" : "Save"}
               </button>
             </section>
-          ) : null}
-
-          {canBroadcast && studio ? (
+            ) : null}
+            <section className="editor-card">
+              <h2>Go live from this computer</h2>
+              <label>
+                Service title
+                <input maxLength={120} value={browser.title} disabled={!!current} onChange={(e) => setBrowser({ ...browser, title: e.target.value })} />
+              </label>
+              <AccessChoice
+                value={accessOf(browser.membersOnly, browser.price)}
+                price={browser.price}
+                disabled={!!current}
+                onChange={(a, price) => setBrowser({ ...browser, membersOnly: a === "members", price: a === "paid" ? price : 0 })}
+              />
+              <BrowserStudio reserve={reserve} stop={stop} stopVersion={stopVersion} disabled={!!current || !!busy} />
+            </section>
+            </>) }] : []),
+            ...(canBroadcast && studio ? [{ id: "youtube", label: "YouTube", icon: Youtube, content: (<>
             <section className="editor-card">
               <h2>Also stream to YouTube</h2>
               <p className="muted">
@@ -377,26 +395,8 @@ export function LiveConfigPage() {
               </button>
               <p className="small-muted">Changes apply from the next service. Turning it off doesn't affect members watching in the app.</p>
             </section>
-          ) : null}
-
-          {canBroadcast ? (
-            <section className="editor-card">
-              <h2>Go live from this computer</h2>
-              <label>
-                Service title
-                <input maxLength={120} value={browser.title} disabled={!!current} onChange={(e) => setBrowser({ ...browser, title: e.target.value })} />
-              </label>
-              <AccessChoice
-                value={accessOf(browser.membersOnly, browser.price)}
-                price={browser.price}
-                disabled={!!current}
-                onChange={(a, price) => setBrowser({ ...browser, membersOnly: a === "members", price: a === "paid" ? price : 0 })}
-              />
-              <BrowserStudio reserve={reserve} stop={stop} stopVersion={stopVersion} disabled={!!current || !!busy} />
-            </section>
-          ) : null}
-
-          {admin ? (
+            </>) }] : []),
+            ...(admin ? [{ id: "times", label: "Service times", icon: Clock, content: (<>
             <section className="editor-card">
               <h2>Service times</h2>
               <p className="muted">The app's Home and Live screens count down to whichever comes next, in Nairobi time.</p>
@@ -425,9 +425,9 @@ export function LiveConfigPage() {
                 {busy === "services" ? "Saving…" : "Save service times"}
               </button>
             </section>
-          ) : null}
-
-          {canModerate ? <LiveModeration /> : null}
+            </>) }] : []),
+            ...(canModerate ? [{ id: "moderation", label: "Moderation", icon: ShieldCheck, content: <LiveModeration /> }] : []),
+          ]} />
 
           <section className="list-card">
             <h2>Recordings</h2>

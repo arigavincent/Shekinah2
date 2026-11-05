@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { History, Send } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -149,7 +151,8 @@ export function NotificationsPage() {
 
       {error ? <InlineAlert title="Notifications could not be updated" message={error} /> : null}
 
-      <section className="content-grid">
+      <PageTabs tabs={[
+        { id: "send", label: "Send", icon: Send, content: (<>
         <form className="editor-card" onSubmit={submit}>
           <h2>Broadcast Message</h2>
 
@@ -199,7 +202,8 @@ export function NotificationsPage() {
             {sending ? "Sending..." : "Send Notification"}
           </button>
         </form>
-
+        </>) },
+        { id: "sent", label: "Sent", icon: History, content: (<>
         <section className="list-card">
           <div className="section-title-row">
             <h2>Recent Broadcasts</h2>
@@ -246,7 +250,8 @@ export function NotificationsPage() {
             onPageChange={setPage}
           />
         </section>
-      </section>
+        </>) },
+      ]} />
     </main>
   );
 }

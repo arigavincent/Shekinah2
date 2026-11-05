@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { HandHeart, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import {
@@ -245,24 +247,8 @@ export function PrayersPage() {
 
       {error ? <InlineAlert title="Prayer queue could not be updated" message={error} /> : null}
 
-      <section className="list-card" style={{ marginBottom: 18 }}>
-        <div className="section-title-row">
-          <h2>Prayer Wall</h2>
-        </div>
-        <p className="muted">
-          Public requests leave the Prayer Wall after this many days to make room for new ones. Members are reminded two days before and can keep theirs up or mark it answered. Pinned requests stay. Requests are deleted a year after leaving the wall.
-        </p>
-        <div className="filters-row" style={{ alignItems: "flex-end" }}>
-          <label style={{ maxWidth: 220 }}>
-            Days on the wall
-            <input type="number" min={1} max={365} value={wallDaysDraft} onChange={event => setWallDaysDraft(event.target.value)} />
-          </label>
-          <button type="button" onClick={saveDays} disabled={savingDays || wallDaysDraft === String(wallDays)}>
-            {savingDays ? "Saving..." : "Save"}
-          </button>
-        </div>
-      </section>
-
+      <PageTabs tabs={[
+        { id: "requests", label: "Requests", icon: HandHeart, content: (<>
       <section className="content-grid">
         <section className="list-card">
           <div className="section-title-row">
@@ -497,6 +483,27 @@ export function PrayersPage() {
           )}
         </section>
       </section>
+        </>) },
+        { id: "wall", label: "Wall settings", icon: Settings2, content: (<>
+      <section className="list-card" style={{ marginBottom: 18 }}>
+        <div className="section-title-row">
+          <h2>Prayer Wall</h2>
+        </div>
+        <p className="muted">
+          Public requests leave the Prayer Wall after this many days to make room for new ones. Members are reminded two days before and can keep theirs up or mark it answered. Pinned requests stay. Requests are deleted a year after leaving the wall.
+        </p>
+        <div className="filters-row" style={{ alignItems: "flex-end" }}>
+          <label style={{ maxWidth: 220 }}>
+            Days on the wall
+            <input type="number" min={1} max={365} value={wallDaysDraft} onChange={event => setWallDaysDraft(event.target.value)} />
+          </label>
+          <button type="button" onClick={saveDays} disabled={savingDays || wallDaysDraft === String(wallDays)}>
+            {savingDays ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </section>
+        </>) },
+      ]} />
     </main>
   );
 }

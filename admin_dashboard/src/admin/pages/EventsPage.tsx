@@ -1,3 +1,5 @@
+import { PageTabs } from "../components/kit/PageTabs";
+import { CalendarDays, Pencil, Plus } from "lucide-react";
 import {DateField,TimeField} from "../components/DateTimeFields";
 import {EventAccessEditor} from "../components/EventAccessEditor";
 import {PublishingQueue} from "../components/PublishingQueue";
@@ -33,6 +35,7 @@ export function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [form, setForm] = useState<EventPayload>({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>();
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [loading, setLoading] = useState(true);
@@ -93,11 +96,13 @@ export function EventsPage() {
 
   function resetForm() {
     setEditingId(null);
+    setTab("list");
     setForm({ ...emptyForm });
   }
 
   function startEdit(event: EventItem) {
     setEditingId(event.id);
+    setTab("editor");
     setForm({
       title: event.title,
       eventDate: event.eventDate,
@@ -220,12 +225,90 @@ export function EventsPage() {
         </button>
       </header>
 
-      <PublishingQueue section="event" onCompleted={load}/>
       {error ? <InlineAlert title="Events could not be updated" message={error} /> : null}
 
+      <PageTabs active={tab} onChange={setTab} tabs={[
+        { id: "list", label: "Events", icon: CalendarDays, count: events.length, content: (<>
+        <section className="list-card">
+          <div className="section-title-row">
+            <h2>Existing Events</h2>
+            <span className="count-pill">{filtered.length}</span>
+          </div>
+
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search events..."
+            />
+            <div className="filters-row">
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title A-Z</option>
+              </select>
+              {(query || sortBy !== "newest") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setSortBy("newest");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="muted">Loading events...</p>
+          ) : filtered.length === 0 ? (
+            <p className="muted">No events found.</p>
+          ) : (
+            <div className="sermon-list">
+              {pagedItems.map(event => (
+                <article key={event.id} className="sermon-row">
+                  <div>
+                    <h3>{event.title}</h3>
+                    <p>
+                      {event.eventDate} · {event.eventTime} · {event.location}
+                    </p>
+                    <p className="small-muted">{event.description}</p>
+                  </div>
+
+                  <div className="row-actions">
+                    <button type="button" className="secondary compact" onClick={() => startEdit(event)}>
+                      Edit
+                    </button>
+
+                    <button type="button" className="danger compact" onClick={() => remove(event)}>
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="events"
+            onPageChange={setPage}
+          />
+        </section>
+        </>) },
+        { id: "create", label: "Create event", icon: Plus, content: (<>
+      <PublishingQueue section="event" onCompleted={load}/>
+        </>) },
+        ...(editingId ? [{ id: "editor", label: "Edit event", icon: Pencil, content: (<>
       {editingId&&events.find(e=>e.id===editingId)&&<EventAccessEditor key={editingId} id={editingId} publishedAt={events.find(e=>e.id===editingId)!.publishedAt} isPublished={events.find(e=>e.id===editingId)!.isPublished} cancelledAt={events.find(e=>e.id===editingId)!.cancelledAt||""} closesAt={events.find(e=>e.id===editingId)!.registrationClosesAt||""}/>}
-      <section className="catalogue-stack">
-        {editingId && <form className="editor-card" onSubmit={submit}>
+        <form className="editor-card" onSubmit={submit}>
           <div className="section-title-row">
             <h2>{editingId ? "Edit Event" : "Create Event"}</h2>
 
@@ -311,82 +394,9 @@ export function EventsPage() {
           <button disabled={saving}>
             {saving ? "Saving..." : editingId ? "Update Event" : "Create Event"}
           </button>
-        </form>}
-
-        <section className="list-card">
-          <div className="section-title-row">
-            <h2>Existing Events</h2>
-            <span className="count-pill">{filtered.length}</span>
-          </div>
-
-          <div className="list-controls">
-            <input
-              className="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search events..."
-            />
-            <div className="filters-row">
-              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="title">Title A-Z</option>
-              </select>
-              {(query || sortBy !== "newest") ? (
-                <button
-                  type="button"
-                  className="secondary compact"
-                  onClick={() => {
-                    setQuery("");
-                    setSortBy("newest");
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="muted">Loading events...</p>
-          ) : filtered.length === 0 ? (
-            <p className="muted">No events found.</p>
-          ) : (
-            <div className="sermon-list">
-              {pagedItems.map(event => (
-                <article key={event.id} className="sermon-row">
-                  <div>
-                    <h3>{event.title}</h3>
-                    <p>
-                      {event.eventDate} · {event.eventTime} · {event.location}
-                    </p>
-                    <p className="small-muted">{event.description}</p>
-                  </div>
-
-                  <div className="row-actions">
-                    <button type="button" className="secondary compact" onClick={() => startEdit(event)}>
-                      Edit
-                    </button>
-
-                    <button type="button" className="danger compact" onClick={() => remove(event)}>
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          <PaginationBar
-            currentPage={page}
-            totalPages={totalPages}
-            pageSize={6}
-            totalItems={filtered.length}
-            itemLabel="events"
-            onPageChange={setPage}
-          />
-        </section>
-      </section>
+        </form>
+        </>) }] : []),
+      ]} />
     </main>
   );
 }

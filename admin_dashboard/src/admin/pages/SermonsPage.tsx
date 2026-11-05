@@ -2,6 +2,8 @@ import {DateTimeField} from "../components/DateTimeFields";
 import {DateField,TimeField} from "../components/DateTimeFields";
 import {publishInputValue} from "../lib/publish";
 import {PublishingQueue} from "../components/PublishingQueue";
+import { PageTabs } from "../components/kit/PageTabs";
+import { Link2, ListMusic, ListVideo, Pencil, Radio, Settings2, UploadCloud } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -130,6 +132,7 @@ export function SermonsPage() {
   const [sermons, setSermons] = useState<Sermon[]>([]);
   const [form, setForm] = useState<SermonPayload>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>();
   const [notes, setNotes] = useState("");
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "video" | "audio">("all");
@@ -503,6 +506,7 @@ export function SermonsPage() {
 
   function resetForm() {
     setEditingId(null);
+    setTab("list");
     setNotes("");
     setForm(makeEmptyForm());
   }
@@ -640,6 +644,7 @@ export function SermonsPage() {
 
   function startEdit(sermon: Sermon) {
     setEditingId(sermon.id);
+    setTab("editor");
     setNotes("");
     getSermonNotes(sermon.id).then(r => setNotes(r.notes || "")).catch(() => undefined);
     setForm({
@@ -878,44 +883,110 @@ export function SermonsPage() {
 
       {error ? <InlineAlert title="Sermons could not be updated" message={error} /> : null}
 
-      <PublishingQueue section="sermons" onCompleted={load}/>
-      <details className="list-card"><summary>Podcast feed settings</summary>
-      <form className="editor-card podcast-card" onSubmit={savePodcastFeed}>
-        <div className="section-title-row">
-          <div>
-            <h2>Audio sermons from your podcast</h2>
-            <p className="small-muted">
-              Paste the show's RSS feed (Spotify for Creators: Settings → Availability → RSS feed). Episodes are added as
-              audio sermons automatically and play in the app's own player.
-            </p>
+      <PageTabs active={tab} onChange={setTab} tabs={[
+        { id: "list", label: "Sermons", icon: ListVideo, count: filtered.length, content: (<>
+        <section className="list-card">
+          <div className="section-title-row">
+            <h2>Existing Sermons</h2>
+            <span className="count-pill">{filtered.length}</span>
           </div>
-        </div>
-        <div className="podcast-row">
-          <input
-            value={podcastUrl}
-            onChange={event => setPodcastUrl(event.target.value)}
-            placeholder="https://anchor.fm/s/xxxxxxx/podcast/rss"
-            inputMode="url"
+
+          <div className="list-controls">
+            <input
+              className="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search sermons..."
+            />
+
+            <div className="filters-row">
+              <select value={typeFilter} onChange={event => setTypeFilter(event.target.value as "all" | "video" | "audio")}>
+                <option value="all">All Types</option>
+                <option value="video">Video</option>
+                <option value="audio">Audio</option>
+              </select>
+
+              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title A-Z</option>
+              </select>
+
+              {(query || typeFilter !== "all" || sortBy !== "newest") ? (
+                <button
+                  type="button"
+                  className="secondary compact"
+                  onClick={() => {
+                    setQuery("");
+                    setTypeFilter("all");
+                    setSortBy("newest");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="muted">Loading sermons...</p>
+          ) : filtered.length === 0 ? (
+            <p className="muted">No sermons found.</p>
+          ) : (
+            <div className="sermon-list">
+              {pagedItems.map(sermon => (
+                <article key={sermon.id} className="sermon-row">
+                  <div>
+                    <div className="section-title-row compact">
+                      <h3>
+                        {sermon.code ? <span className="sermon-code">{sermon.code}</span> : null}
+                        {sermon.title}
+                      </h3>
+                      {sermon.status === "processing" ? (
+                        <span className="status-chip warning">Processing</span>
+                      ) : sermon.status === "error" ? (
+                        <span className="status-chip danger">Upload failed</span>
+                      ) : (
+                        <span className={`status-chip ${getPublishState(sermon.publishedAt).tone}`}>
+                          {getPublishState(sermon.publishedAt).label}
+                        </span>
+                      )}
+                    </div>
+                    <p>
+                      {sermon.type} · {sermon.sermonDate} · {sermon.category || "No category"} ·{" "}
+                      {SOURCE_LABELS[sermon.source] || "Manual"}
+                    </p>
+                    <p className="small-muted">Publishes {formatPublishAt(sermon.publishedAt)}</p>
+                    <p className="small-muted">{sermon.description}</p>
+                  </div>
+
+                  <div className="row-actions">
+                    <button type="button" className="secondary compact" onClick={() => startEdit(sermon)}>
+                      Edit
+                    </button>
+                    <button type="button" className="danger compact" onClick={() => remove(sermon)}>
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <PaginationBar
+            currentPage={page}
+            totalPages={totalPages}
+            pageSize={6}
+            totalItems={filtered.length}
+            itemLabel="sermons"
+            onPageChange={setPage}
           />
-          <button type="submit" disabled={podcastSaving}>
-            {podcastSaving ? "Checking feed..." : "Save feed"}
-          </button>
-        </div>
-        {podcastNote ? <p className="small-muted">{podcastNote}</p> : null}
-      </form>
-
-      </details>
-      <details className="list-card"><summary>Sermon categories</summary>
-      <SermonCategoriesCard
-        categories={categoryList}
-        canUploadImages={Boolean(storage?.r2)}
-        onChanged={load}
-        onError={setError}
-      />
-
-      </details>
-      <section className="catalogue-stack">
-        <details className="list-card" open={Boolean(editingId)}><summary>{editingId ? "Edit selected sermon" : "Link existing media or import metadata"}</summary>
+        </section>
+        </>) },
+        { id: "uploads", label: "Upload", icon: UploadCloud, content: (<>
+      <PublishingQueue section="sermons" onCompleted={load}/>
+        </>) },
+        { id: "editor", label: editingId ? "Edit sermon" : "Link media", icon: editingId ? Pencil : Link2, content: (<>
         <form className="editor-card" onSubmit={submit}>
           <div className="section-title-row">
             <h2>{editingId ? "Edit Sermon" : "Create Sermon"}</h2>
@@ -1195,106 +1266,41 @@ export function SermonsPage() {
             ) : null}
           </BulkCsvImportCard>
         </form>
-        </details>
-
-        <section className="list-card">
-          <div className="section-title-row">
-            <h2>Existing Sermons</h2>
-            <span className="count-pill">{filtered.length}</span>
+        </>) },
+        { id: "playlists", label: "Playlists", icon: ListMusic, content: <ChurchPlaylists /> },
+        { id: "recordings", label: "Service recordings", icon: Radio, content: <ServiceRecordings /> },
+        { id: "settings", label: "Podcast & categories", icon: Settings2, content: (<>
+      <form className="editor-card podcast-card" onSubmit={savePodcastFeed}>
+        <div className="section-title-row">
+          <div>
+            <h2>Audio sermons from your podcast</h2>
+            <p className="small-muted">
+              Paste the show's RSS feed (Spotify for Creators: Settings → Availability → RSS feed). Episodes are added as
+              audio sermons automatically and play in the app's own player.
+            </p>
           </div>
-
-          <div className="list-controls">
-            <input
-              className="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search sermons..."
-            />
-
-            <div className="filters-row">
-              <select value={typeFilter} onChange={event => setTypeFilter(event.target.value as "all" | "video" | "audio")}>
-                <option value="all">All Types</option>
-                <option value="video">Video</option>
-                <option value="audio">Audio</option>
-              </select>
-
-              <select value={sortBy} onChange={event => setSortBy(event.target.value as "newest" | "oldest" | "title")}>
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="title">Title A-Z</option>
-              </select>
-
-              {(query || typeFilter !== "all" || sortBy !== "newest") ? (
-                <button
-                  type="button"
-                  className="secondary compact"
-                  onClick={() => {
-                    setQuery("");
-                    setTypeFilter("all");
-                    setSortBy("newest");
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="muted">Loading sermons...</p>
-          ) : filtered.length === 0 ? (
-            <p className="muted">No sermons found.</p>
-          ) : (
-            <div className="sermon-list">
-              {pagedItems.map(sermon => (
-                <article key={sermon.id} className="sermon-row">
-                  <div>
-                    <div className="section-title-row compact">
-                      <h3>
-                        {sermon.code ? <span className="sermon-code">{sermon.code}</span> : null}
-                        {sermon.title}
-                      </h3>
-                      {sermon.status === "processing" ? (
-                        <span className="status-chip warning">Processing</span>
-                      ) : sermon.status === "error" ? (
-                        <span className="status-chip danger">Upload failed</span>
-                      ) : (
-                        <span className={`status-chip ${getPublishState(sermon.publishedAt).tone}`}>
-                          {getPublishState(sermon.publishedAt).label}
-                        </span>
-                      )}
-                    </div>
-                    <p>
-                      {sermon.type} · {sermon.sermonDate} · {sermon.category || "No category"} ·{" "}
-                      {SOURCE_LABELS[sermon.source] || "Manual"}
-                    </p>
-                    <p className="small-muted">Publishes {formatPublishAt(sermon.publishedAt)}</p>
-                    <p className="small-muted">{sermon.description}</p>
-                  </div>
-
-                  <div className="row-actions">
-                    <button type="button" className="secondary compact" onClick={() => startEdit(sermon)}>
-                      Edit
-                    </button>
-                    <button type="button" className="danger compact" onClick={() => remove(sermon)}>
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          <PaginationBar
-            currentPage={page}
-            totalPages={totalPages}
-            pageSize={6}
-            totalItems={filtered.length}
-            itemLabel="sermons"
-            onPageChange={setPage}
+        </div>
+        <div className="podcast-row">
+          <input
+            value={podcastUrl}
+            onChange={event => setPodcastUrl(event.target.value)}
+            placeholder="https://anchor.fm/s/xxxxxxx/podcast/rss"
+            inputMode="url"
           />
-        </section>
-      </section>
+          <button type="submit" disabled={podcastSaving}>
+            {podcastSaving ? "Checking feed..." : "Save feed"}
+          </button>
+        </div>
+        {podcastNote ? <p className="small-muted">{podcastNote}</p> : null}
+      </form>
+      <SermonCategoriesCard
+        categories={categoryList}
+        canUploadImages={Boolean(storage?.r2)}
+        onChanged={load}
+        onError={setError}
+      />
+        </>) },
+      ]} />
 
       {wizardOpen ? (
         <div className="modal-backdrop" role="presentation" onClick={resetWizard}>
@@ -1599,9 +1605,6 @@ export function SermonsPage() {
           </section>
         </div>
       ) : null}
-
-      <ChurchPlaylists />
-      <ServiceRecordings />
     </main>
   );
 }
